@@ -16,8 +16,7 @@
     "out/",
     "src/template.html",
     "src/styles.css",
-    "src/types/*.css",
-    "assets/"
+    "src/types/*.css"
   ],
   "scripts": {
     "build": "node build/build.mjs",

@@ -572,7 +572,6 @@ for (const [relPath, sourceFile] of sourceFiles) {
     }
     writeFileSync(join(DIST_DIR, 'styles.css'), css);
   }
-  if (existsSync(enginePath('assets'))) cpSync(enginePath('assets'), join(DIST_DIR, 'assets'), { recursive: true });
   if (staticDir && existsSync(staticDir)) cpSync(staticDir, DIST_DIR, { recursive: true });
   cpSync(requireFromEngine.resolve('marked/marked.min.js'), join(DIST_DIR, 'marked.min.js'));
   cpSync(requireFromEngine.resolve('dompurify/dist/purify.min.js'), join(DIST_DIR, 'purify.min.js'));
