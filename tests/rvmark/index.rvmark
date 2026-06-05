@@ -1,0 +1,168 @@
+{title: Test Fixture; author: test-author; license: Test License}
+
+[AI {color: #9e9bc4ff; tip: AI tip; meta.author: AI Author}]
+[GlobalAI {color: #9e9bc4ff; tip: Global AI tip; meta.author: Global AI Author}]
+[WIP {color: #cc8844}]
+[Internal {color: #888888; internal}]
+[.hidden {node.show-when: &--show-hidden; label: *Hidden*}]
+
+1. {#root; open} Root node with **bold** and *italic*
+  1. {#child-a} Child A
+    1. {#grandchild} Grandchild
+  2. {#child-b} Child B
+    1. Child B first
+    2. Child B second
+  3. {#child-hidden} [.hidden] Hidden child
+  4. {#child-minor; minor} Minor child
+  5. {#child-link; action: link} [External link](https://example.com)
+  6. {#child-open; open} Open by default child
+    1. Child of open
+  7. {#child-tagged} [AI] Tagged with AI
+    1. Child of AI-tagged node
+  8. {#child-wip} [WIP] Tagged WIP
+  9. {#child-internal} [Internal] Internal tag node
+  10. {#child-markdown; = markdown}
+      ```markdown
+      This is **markdown** with `code`.
+
+      | col1 | col2 |
+      |------|------|
+      | a    | b    |
+      ```
+  11. {#child-embed; => #embed-target}
+  12. {#child-math} Inline math: $x = 1$
+  13. {#child-cross-embed; => ./other#other-root}
+  14. {#child-cross-children; => ./other#other-root} cross-children label
+  15. {#child-exhibit; exhibit: ./other#other-root; action: exhibit} Exhibit node
+  16. {#child-remote-embed; => https://test.invalid/remote.rvmark#remote-root} Remote embed
+  17. {#embed-ai-node; => #embed-ai-target} Embed of AI-tagged node
+
+2. {#embed-target} Embed target node
+  1. Embed target child A
+  2. Embed target child B
+
+3. {#embed-ai-target} [AI] Embed target with AI tag
+  1. Child of AI embed target
+
+4. {#nav-a} Nav A
+  1. Nav A child 1
+  2. Nav A child 2
+
+5. {#nav-b} Nav B
+
+6. {#child-global-ai} [GlobalAI] Tagged with global AI tag
+  1. {#child-global-ai-child} Child of global AI-tagged node
+
+7. {#child-transcluded-ai; => ./other#other-container} transcluded-ai label
+8. {#child-tag-inline-color} [AI {color: #ff0000; tip: inline tip}] Inline color override
+9. {#child-tag-inline-anon} [Anon {color: #123456}] Inline-only tag
+10. {#child-tag-inline-label} [WIP {label: W.I.P.}] Custom label tag
+
+11. {#draft-sibling-before} Before draft
+12. {#draft-node; draft} DRAFT_NODE_LABEL
+  1. {#draft-child} DRAFT_CHILD_LABEL
+    1. DRAFT_GRANDCHILD_LABEL
+  2. {#draft-body-node; = markdown}
+     ```markdown
+     DRAFT_BODY_CONTENT
+     ```
+14. {#draft-with-body; draft; = markdown}
+    ```markdown
+    DRAFT_TOP_BODY_CONTENT
+    ```
+15. {#draft-continuation; draft} DRAFT_CONTINUATION_LABEL
+DRAFT_CONTINUATION_TEXT that spans a continuation line
+16. {#draft-nested-parent} Parent of nested draft
+  1. {#draft-nested-sibling-before} Nested sibling before draft
+  2. {#draft-nested; draft} DRAFT_NESTED_LABEL
+    1. DRAFT_NESTED_CHILD_LABEL
+  3. {#draft-nested-sibling-after} Nested sibling after draft
+13. {#draft-sibling-after} After draft
+
+18. {#pass-root; open} State pass fixture root
+  1. {#pass-scope-read; &passvar=0; open} pass-scope-read
+    1. {#pass-host-read; on-action: &passvar<<1; => ./other#pass-read-target; children-pass: passvar} pass-host-read
+  2. {#pass-scope-blocked; &passvar=0; open} pass-scope-blocked
+    1. {#pass-host-blocked; on-action: &passvar<<1; => ./other#pass-blocked-target} pass-host-blocked
+  3. {#pass-scope-rw; &passvar=0; open} pass-scope-rw
+    1. {#pass-host-rw; => ./other#pass-rw-target; children-pass: passvar rw} pass-host-rw
+    2. {#pass-host-rw-indicator; ? &passvar==1} pass-host-rw-written
+  4. {#pass-scope-wo; &passvar=0; open} pass-scope-wo
+    1. {#pass-host-wo; => ./other#pass-wo-target; children-pass: passvar w} pass-host-wo
+    2. {#pass-host-wo-indicator; ? &passvar==1} pass-host-wo-written
+  5. {#pass-scope-rename; &passvar=0; open} pass-scope-rename
+    1. {#pass-host-rename; on-action: &passvar<<1; => ./other#pass-rename-target; children-pass: remotevar=passvar} pass-host-rename
+  6. {#pass-scope-dash; &--dashvar=0; open} pass-scope-dash
+    1. {#pass-host-dash; on-action: &--dashvar<<1; => ./other#pass-dash-target} pass-host-dash
+  7. {#pass-scope-exhibit; &exvar=0; open} pass-scope-exhibit
+    1. {#pass-exhibit-host; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: exvar rw} pass-exhibit-host
+    2. {#pass-exhibit-host-indicator; ? &exvar==1} pass-exhibit-written
+  8. {#pass-scope-exhibit-blocked; &exvar=0; open} pass-scope-exhibit-blocked
+    1. {#pass-exhibit-blocked-host; exhibit: ./other#pass-exhibit-blocked-target; action: exhibit} pass-exhibit-blocked-host
+  9. {#pass-scope-exhibit-ro; &exvar=0; open} pass-scope-exhibit-ro
+    1. {#pass-exhibit-ro-host; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: exvar} pass-exhibit-ro-host
+  10. {#pass-scope-r-write-blocked; &passvar=0; open} pass-scope-r-write-blocked
+    1. {#pass-host-r-write-blocked; => ./other#pass-r-write-blocked-target; children-pass: passvar} pass-host-r-write-blocked
+    2. {#pass-host-r-write-blocked-indicator; ? &passvar==1} pass-r-write-blocked-host-written
+  11. {#pass-scope-reactive; &passvar=0; open} pass-scope-reactive
+    1. {#pass-host-reactive; => ./other#pass-read-target; children-pass: passvar} pass-host-reactive
+    2. {#pass-scope-reactive-trigger; on-action: &passvar<<1} pass-reactive-trigger
+  12. {#pass-scope-multi; &avar=0; &bvar=0; open} pass-scope-multi
+    1. {#pass-host-multi; => ./other#pass-multi-target; children-pass: avar, bvar w} pass-host-multi
+    2. {#pass-host-multi-indicator; ? &bvar==1} pass-multi-host-written
+  13. {#pass-scope-unknown-key; &passvar=0; open} pass-scope-unknown-key
+    1. {#pass-host-unknown-key; => ./other#pass-unknown-key-target; children-pass: passvar} pass-host-unknown-key
+  14. {#pass-scope-exhibit-reactive; &exvar=0; open} pass-scope-exhibit-reactive
+    1. {#pass-exhibit-reactive-host; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: exvar rw} [zero]{&exvar<<0} [one]{&exvar<<1}
+  15. {#pass-scope-exhibit-rename; &exlocal=0; open} pass-scope-exhibit-rename
+    1. {#pass-exhibit-rename-host; exhibit: ./other#pass-exhibit-rename-target; action: exhibit; exhibit-pass: exvar=exlocal rw} pass-exhibit-rename-host
+    2. {#pass-exhibit-rename-indicator; ? &exlocal==1} pass-exhibit-rename-written
+  16. {#pass-scope-exhibit-preroot; open} pass-scope-exhibit-preroot
+    1. {#pass-exhibit-preroot-host; exhibit: ./other#pass-exhibit-preroot-target; action: exhibit} pass-exhibit-preroot-host
+  17. {#pass-scope-exhibit-rewire-a; &exvar=0; open} pass-scope-exhibit-rewire-a
+    1. {#pass-exhibit-rewire-host-a; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: exvar rw} pass-exhibit-rewire-host-a
+    2. {#pass-exhibit-rewire-a-indicator; ? &exvar==1} pass-exhibit-rewire-a-written
+  18. {#pass-scope-exhibit-rewire-b; &exvar=0; open} pass-scope-exhibit-rewire-b
+    1. {#pass-exhibit-rewire-host-b; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: exvar rw} pass-exhibit-rewire-host-b
+    2. {#pass-exhibit-rewire-b-indicator; ? &exvar==1} pass-exhibit-rewire-b-written
+23. {#iframe-pass-root; open} iframe-pass fixture root
+  1. {#iframe-pass-scope-rw; &iframevar=0; open} iframe-pass-scope-rw
+    1. {#iframe-pass-host-rw; = iframe; iframe-pass: iframevar rw} ./iframe-fixture.html
+    2. {#iframe-pass-host-rw-indicator; ? &iframevar==1} iframe-pass-rw-written
+  2. {#iframe-pass-scope-r; &iframevar=0; open} iframe-pass-scope-r
+    1. {#iframe-pass-host-r; = iframe; iframe-pass: iframevar} ./iframe-fixture.html
+    2. {#iframe-pass-host-r-indicator; ? &iframevar==1} iframe-pass-r-written
+  3. {#iframe-pass-scope-reactive; &iframevar=0; open} iframe-pass-scope-reactive
+    1. {#iframe-pass-host-reactive; = iframe; iframe-pass: iframevar rw} ./iframe-fixture.html
+    2. {#iframe-pass-reactive-trigger; on-action: &iframevar<<1} iframe-pass-reactive-trigger
+  4. {#iframe-pass-scope-rename; &iframelocal=0; open} iframe-pass-scope-rename
+    1. {#iframe-pass-host-rename; = iframe; iframe-pass: iframeremote=iframelocal rw} ./iframe-fixture.html
+    2. {#iframe-pass-rename-indicator; ? &iframelocal==1} iframe-pass-rename-written
+
+21. {#table-root; open} table fixture root
+  1. {#table-node; = table} Col A | Col B
+    1. {#table-row-a; = tr} a1 | a2
+    2. {#table-row-b; = tr} b1 | b2
+
+20. {#watch-root; &trigvar=0; open} watchChildren fixture root
+  1. {#watch-trigger; on-action: &trigvar<<1} watch trigger
+  2. {#watch-parent} watch parent
+    1. {#watch-indicator; ? &trigvar==1} watch indicator
+
+22. {#listbox-root; &step=; open} Listbox span state assignment fixture
+  1. {#listbox-node} [A]{&step<<a} [B]{&step<<b} [C]{&step<<c}
+    1. {#listbox-indicator-a; ? &step==a} step is a
+    2. {#listbox-indicator-b; ? &step==b} step is b
+    3. {#listbox-indicator-c; ? &step==c} step is c
+
+19. {#event-root; open} Event attrs fixture root
+  1. {#event-spawn-parent; &spawned=1} on-spawn parent
+    1. {#event-spawn-indicator; ? &spawned} Spawn indicator visible
+    2. {#event-spawn-sibling} Spawn sibling
+  2. {#event-select-parent; &focused=0; on-select: &focused<<1; on-deselect: &focused<<0} on-select parent
+    1. {#event-select-indicator; ? &focused==1} Select indicator visible
+  3. {#event-action-parent; &acted=0; on-action: &acted<<1} on-action parent
+    1. {#event-action-indicator; ? &acted==1} Action indicator visible
+  4. {#event-expand-parent; &expanded-flag=0; on-expand: &expanded-flag<<1; on-collapse: &expanded-flag<<0} on-expand parent
+    1. {#event-expand-child} Expand child
+    2. {#event-expand-indicator; ? &expanded-flag==1} Expand indicator visible

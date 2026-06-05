@@ -1,0 +1,302 @@
+/**
+ * shared.ts
+ *
+ * Pure utility functions shared between build.mjs (Node) and main.js / renderer.js (browser).
+ * No DOM, no imports, no side effects.
+ */
+
+import type { SourceNode } from './parser.js';
+
+const RVMARK_SEGMENT = '/rvmark/';
+
+// ── Address resolution ─────────────────────────────────────────────────────────
+//
+// Runtime canonical address form: <origin>/rvmark/<file>#<slug>
+//   - origin: 'https://host' (or 'http://host') — always present at runtime.
+//     For same-origin local files, runtime prepends location.origin in loadPageFile.
+//   - /rvmark/: literal path segment where every federated site publishes raw files.
+//   - file:    relative path within the origin's rvmark tree, e.g. 'docs.rvmark'
+//              or 'logic/nd.rvmark', or an asset path like 'images/photo.jpg'.
+//   - #slug:   optional fragment.
+//
+// Examples:
+//   'https://thissite.com/rvmark/docs.rvmark#intro'
+//   'https://alice.example/rvmark/docs.rvmark#intro'
+//   'https://thissite.com/rvmark/images/photo.jpg'
+//
+// sourceFileAddress is a canonical address (the file that owns the ref).
+// Its origin determines what local-relative refs resolve against.
+//
+// Build-time addresses (path-only, no origin) are handled by separate logic in
+// build-rvmark.mjs — these helpers assume full URLs.
+//
+// resolveAddress       — for transclusion refs pointing at rvmark nodes
+// resolveMediaAddress  — for asset refs (images, markdown files, html files)
+// addressToHref        — convert canonical address to navigable href for <a href>
+// addressOrigin        — extract origin ('https://host') from a canonical address
+
+/**
+ * Extract the origin ('https://host', no trailing slash) from a canonical address.
+ * Returns '' for path-only addresses (build-time form).
+ */
+export function addressOrigin(address: string): string {
+  const schemeEnd = address.indexOf('://');
+  if (schemeEnd === -1) return '';
+  const pathStart = address.indexOf('/', schemeEnd + 3);
+  return pathStart === -1 ? address : address.slice(0, pathStart);
+}
+
+function resolveLocalPath(ref: string, sourceFileAddress: string): string {
+  const origin = addressOrigin(sourceFileAddress);
+  const localPart = sourceFileAddress.slice(origin.length); // starts with '/'
+
+  if (ref.startsWith('/')) return origin + RVMARK_SEGMENT + ref.slice(1);
+  if (ref.startsWith('./') || ref.startsWith('../')) {
+    const dir = localPart.replace(/[^/]*$/, '');
+    const parts = (dir + ref).split('/');
+    const out: string[] = [];
+    for (const p of parts) {
+      if (p === '..') out.pop();
+      else if (p !== '.') out.push(p);
+    }
+    return origin + out.join('/');
+  }
+  // Bare path — relative to sourceFileAddress's directory
+  const dir = localPart.replace(/[^/]*$/, '');
+  return origin + dir + ref;
+}
+
+/**
+ * Resolve a transclusion ref string to a canonical address.
+ * sourceFileAddress is the canonical address of the file that owns the ref.
+ */
+export function resolveAddress(ref: string, sourceFileAddress: string): string | null {
+  if (!ref) return null;
+  if (ref.startsWith('https://') || ref.startsWith('http://')) return ref;
+
+  const hashIdx = ref.indexOf('#');
+  const pathPart = hashIdx === -1 ? ref : ref.slice(0, hashIdx);
+  const fragment = hashIdx === -1 ? '' : ref.slice(hashIdx); // includes '#'
+
+  if (ref.startsWith('#')) {
+    // Same-file anchor — strip any existing fragment, add the new one
+    const baseHashIdx = sourceFileAddress.indexOf('#');
+    const base = baseHashIdx === -1 ? sourceFileAddress : sourceFileAddress.slice(0, baseHashIdx);
+    return base + fragment;
+  }
+
+  let resolved = resolveLocalPath(pathPart, sourceFileAddress);
+  if (!resolved.endsWith('.rvmark')) resolved += '.rvmark';
+  return resolved + fragment;
+}
+
+/**
+ * Resolve a media/asset ref string to a canonical address.
+ * sourceFileAddress is the canonical address of the file that owns the ref.
+ */
+export function resolveMediaAddress(ref: string, sourceFileAddress: string): string | null {
+  if (!ref) return null;
+  if (ref.startsWith('https://') || ref.startsWith('http://')) return ref;
+  return resolveLocalPath(ref, sourceFileAddress);
+}
+
+/**
+ * Convert a canonical address to a navigable href for <a href>.
+ * Strips '/rvmark/', strips '.rvmark', maps 'index' to '', preserves origin.
+ *   'https://thissite.com/rvmark/docs.rvmark#x'  → 'https://thissite.com/docs#x'
+ *   'https://alice.com/rvmark/docs.rvmark#x'    → 'https://alice.com/docs#x'
+ *   'https://thissite.com/rvmark/images/p.jpg'  → 'https://thissite.com/rvmark/images/p.jpg'
+ */
+export function addressToHref(address: string): string {
+  const origin = addressOrigin(address);
+  const localPart = address.slice(origin.length);
+  if (!localPart.startsWith(RVMARK_SEGMENT)) return address;
+
+  const without = localPart.slice(RVMARK_SEGMENT.length);
+  const hashIdx = without.indexOf('#');
+  const filePart = hashIdx === -1 ? without : without.slice(0, hashIdx);
+  const fragment = hashIdx === -1 ? '' : without.slice(hashIdx);
+
+  // Non-rvmark assets are served under /rvmark/ as-is
+  if (!filePart.endsWith('.rvmark')) return origin + RVMARK_SEGMENT + filePart + fragment;
+  return origin + '/' + fileToUrlStem(filePart) + fragment;
+}
+
+/**
+ * Extract the .rvmark file path (relative to the origin's rvmark tree) from a
+ * canonical address. Returns null if the address doesn't point under /rvmark/.
+ */
+export function addressToFile(address: string): string | null {
+  const origin = addressOrigin(address);
+  const localPart = address.slice(origin.length);
+  if (!localPart.startsWith(RVMARK_SEGMENT)) return null;
+  const without = localPart.slice(RVMARK_SEGMENT.length);
+  const hashIdx = without.indexOf('#');
+  return hashIdx === -1 ? without : without.slice(0, hashIdx);
+}
+
+/**
+ * Extract the slug fragment from a canonical address.
+ */
+export function addressToSlug(address: string): string | null {
+  const hashIdx = address.indexOf('#');
+  return hashIdx === -1 ? null : address.slice(hashIdx + 1) || null;
+}
+
+/**
+ * Convert a relative rvmark file path to its URL stem.
+ *   'index.rvmark'        → ''
+ *   'docs.rvmark'         → 'docs'
+ *   'logic/nd.rvmark'     → 'logic/nd'
+ *   'logic/index.rvmark'  → 'logic'
+ */
+export function fileToUrlStem(relPath: string): string {
+  let stem = relPath.replace(/\.rvmark$/, '');
+  if (stem === 'index') return '';
+  if (stem.endsWith('/index')) stem = stem.slice(0, -'/index'.length);
+  return stem;
+}
+
+/**
+ * Compute a relative URL from one URL stem to another.
+ *   relativeUrl('a/b', 'a/c') → '../c/'
+ *   relativeUrl('a',   'a')   → './'
+ */
+export function relativeUrl(fromStem: string, toStem: string): string {
+  if (fromStem === toStem) return './';
+  const fromParts = fromStem ? fromStem.split('/') : [];
+  const toParts   = toStem   ? toStem.split('/')   : [];
+  let common = 0;
+  while (common < fromParts.length && common < toParts.length && fromParts[common] === toParts[common]) {
+    common++;
+  }
+  const ups   = fromParts.length - common;
+  const downs = toParts.slice(common);
+  let rel = '../'.repeat(ups) + downs.join('/');
+  if (rel === '') return './';
+  if (!rel.endsWith('/')) rel += '/';
+  return rel;
+}
+
+/**
+ * Compute a node's within-file positional address.
+ * This is the canonical id used on <li> elements and as the base for children.
+ * Mirrors the runtime logic in buildRenderNode.
+ */
+export function nodeAddress(parentAddress: string | null, numbering: string): string {
+  return parentAddress != null ? `${parentAddress}.${numbering}` : numbering;
+}
+
+/**
+ * Return true if the node carries an explicit author-assigned slug
+ * ({#slug} or {id: slug}), as opposed to a generated positional slug.
+ */
+export function hasExplicitSlug(node: SourceNode): boolean {
+  return node.attrs.has('id');
+}
+
+// ── Slug resolution ────────────────────────────────────────────────────────────
+
+export function parseCompoundSlug(slug: string): { anchor: string; path: number[] } {
+  const parts = slug.split('.');
+  let anchorEnd = 0;
+  while (anchorEnd < parts.length && isNaN(parseInt(parts[anchorEnd], 10))) anchorEnd++;
+  return {
+    anchor: parts.slice(0, anchorEnd).join('.') || slug,
+    path:   parts.slice(anchorEnd).map(s => parseInt(s, 10)).filter(n => !isNaN(n)),
+  };
+}
+
+export function resolveSlugInFile(
+  { nodeMap, roots }: { nodeMap: Record<string, SourceNode>; roots: SourceNode[] },
+  slug: string | null | undefined,
+): { node: SourceNode } | null {
+  if (!slug) return null;
+  if (nodeMap[slug]) return { node: nodeMap[slug] };
+  const { anchor, path } = parseCompoundSlug(slug);
+  if (nodeMap[anchor]) {
+    let node = nodeMap[anchor];
+    for (const pos of path) {
+      const child = node.children?.find(c => c.numbering.split('.').slice(-1)[0] === String(pos));
+      if (!child) return null;
+      node = child;
+    }
+    return { node };
+  }
+  const allParts = slug.startsWith('.') ? slug.slice(1).split('.') : slug.split('.');
+  const rootNode = roots.find(r => r.numbering === allParts[0]);
+  if (rootNode) {
+    let node = rootNode;
+    for (const part of allParts.slice(1)) {
+      const child = node.children?.find(c => c.numbering.split('.').slice(-1)[0] === part);
+      if (!child) return null;
+      node = child;
+    }
+    return { node };
+  }
+  return null;
+}
+
+// Resolves a compound focusSlug to the permalink base that renderNode computes
+// for the target node. nodePermalinkBase is the rendered root's base, used as
+// fallback for purely-numeric roots that have no explicit id.
+export function resolveFocusSlug(
+  focusSlug: string | null | undefined,
+  nodeMap: Record<string, SourceNode>,
+  roots: SourceNode[],
+  nodePermalinkBase: string,
+): string | null {
+  if (!focusSlug) return null;
+  if (nodeMap[focusSlug]) return focusSlug;
+
+  const { anchor: fa, path: fp } = parseCompoundSlug(focusSlug);
+  let focusNode: SourceNode | null = nodeMap[fa] ?? null;
+  let focusPath = fp;
+  let focusBase = fa;
+
+  if (!focusNode) {
+    const allParts = focusSlug.split('.').map(s => parseInt(s, 10));
+    if (allParts.every(n => !isNaN(n))) {
+      const rootNode = roots.find(r => r.numbering === String(allParts[0])) ?? null;
+      if (rootNode) {
+        focusNode = rootNode;
+        focusPath = allParts.slice(1);
+        focusBase = (rootNode.attrs as any).id || nodePermalinkBase;
+      }
+    }
+  }
+
+  if (!focusNode) return focusSlug;
+
+  let cur: SourceNode = focusNode;
+  for (const pos of focusPath) {
+    const child: SourceNode | undefined = cur.children.find((c: SourceNode) => c.numbering === String(pos));
+    if (!child) return focusSlug;
+    focusBase = `${(cur.attrs as any).id ? cur.slug : focusBase}.${child.numbering}`;
+    cur = child;
+  }
+
+  return (cur.attrs as any).id ? cur.slug : focusBase;
+}
+
+/**
+ * Parse a transclusion reference value into a structured ref object.
+ *   #slug           → { type: 'local', slug }
+ *   ./path#slug     → { type: 'file', path, slug }
+ *   https://...     → { type: 'remote', url, slug }
+ */
+export function parseTransclusionRef(val: string): { type: 'local', slug: string } | { type: 'file', path: string, slug: string | null } | { type: 'remote', url: string, slug: string | null } | null {
+  if (!val) return null;
+  if (val.startsWith('#')) return { type: 'local', slug: val.slice(1) };
+  if (val.startsWith('https://') || val.startsWith('http://')) {
+    try {
+      const url = new URL(val);
+      return { type: 'remote', url: url.href, slug: url.hash ? url.hash.slice(1) : null };
+    } catch (_) { return null; }
+  }
+  let path = val;
+  if (!path.startsWith('./') && !path.startsWith('../') && !path.startsWith('/')) path = './' + path;
+  const hashIdx = path.indexOf('#');
+  if (hashIdx === -1) return { type: 'file', path, slug: null };
+  return { type: 'file', path: path.slice(0, hashIdx), slug: path.slice(hashIdx + 1) };
+}

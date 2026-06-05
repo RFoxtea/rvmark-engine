@@ -1,0 +1,113 @@
+/* types/markdown.css — styles for the markdown node type */
+
+.md-body {
+  /* Border aligns with centre of child bullet column (same x as node-children + bullet-w/2) */
+  margin-top: 0.4rem;
+  margin-left: calc(var(--bullet-w) / 2 - var(--body-border-w) / 2);
+  margin-right: calc(var(--bullet-w) / 2 - var(--body-border-w) / 2);
+  margin-bottom: 0.5rem;
+  border-left: var(--body-border-w) solid var(--border-tree);
+  min-width: 0;
+  width: 100%;
+}
+
+.md-body-scroll {
+  max-height: 30vh;
+  overflow-y: auto;
+  outline: none;
+  padding: 0.4rem 0.6rem 0.4rem 0.6rem;
+  line-height: 1.75;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+/* ── Scroll fade masks ── */
+.md-body[data-overflow]:not([data-scrolled-to-top]):not([data-scrolled-to-bottom]) .md-body-scroll {
+  mask-image: linear-gradient(to bottom, transparent 0%, black var(--md-fade-h), black calc(100% - var(--md-fade-h)), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black var(--md-fade-h), black calc(100% - var(--md-fade-h)), transparent 100%);
+}
+.md-body[data-overflow][data-scrolled-to-top]:not([data-scrolled-to-bottom]) .md-body-scroll {
+  mask-image: linear-gradient(to bottom, black calc(100% - var(--md-fade-h)), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - var(--md-fade-h)), transparent 100%);
+}
+.md-body[data-overflow][data-scrolled-to-bottom]:not([data-scrolled-to-top]) .md-body-scroll {
+  mask-image: linear-gradient(to bottom, transparent 0%, black var(--md-fade-h), black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black var(--md-fade-h), black 100%);
+}
+
+/* ── Block elements ── */
+.md-body p  { margin: 0.3rem 0; }
+
+.md-body h1, .md-body h2, .md-body h3,
+.md-body h4, .md-body h5, .md-body h6 {
+  margin: 0.6rem 0 0.2rem;
+  font-weight: 600;
+}
+.md-body h2 { font-size: 1.25rem; }
+.md-body h3 { font-size: 1.1rem; }
+.md-body h4 { font-size: 1rem; }
+.md-body h5 { font-size: 0.92rem; }
+.md-body h6 { font-size: 0.85rem; color: var(--muted); }
+
+.md-body ul, .md-body ol {
+  padding-left: 1.2rem;
+  margin: 0.3rem 0;
+}
+
+.md-body blockquote {
+  border-left: 2px solid var(--border);
+  padding-left: 0.6rem;
+  color: var(--muted);
+  margin: 0.3rem 0;
+}
+
+.md-body pre {
+  background: var(--surface);
+  padding: 0.5rem;
+  border-radius: 3px;
+  overflow-x: auto;
+  margin: 0.4rem 0;
+  line-height: 1.45;
+}
+.md-body pre code { padding: 0; background: inherit; }
+
+.md-body code {
+  background: var(--surface);
+  padding: 0 3px;
+  border-radius: 2px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.85em;
+}
+
+.md-body a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+/* ── Tables ── */
+.md-body table {
+  border-collapse: collapse;
+  margin: 0.4rem 0;
+  font-size: 0.92em;
+  width: 100%;
+}
+.md-body th, .md-body td {
+  border: 1px solid var(--border);
+  padding: 0.2rem 0.5rem;
+  text-align: left;
+}
+.md-body thead th {
+  background: var(--surface-2);
+  font-weight: 500;
+}
+.md-body tbody tr:nth-child(even) { background: var(--bg); }
+
+/* code inside td/th: don't shrink further inside already-smaller table text */
+.md-body td code,
+.md-body th code {
+  font-size: 1em;
+}
+
+/* ── Math blocks ── */
+.md-math-block {
+  text-align: center;
+  margin: 0.6rem 0;
+  overflow-x: auto;
+}

@@ -1,0 +1,42 @@
+/* types/html.css — styles for the html node type */
+
+.html-body {
+  max-width: calc(100% - var(--indent));
+  box-sizing: border-box;
+  margin-left: var(--indent);
+  padding: 0.2rem 1rem 0.3rem calc(var(--bullet-w) + 0.3rem);
+  border-left: 2px solid var(--border);
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.html-body:focus { outline: none; }
+
+.html-body-iframe {
+  display: block;
+  border: none;
+  min-height: 8rem;
+}
+
+.html-body.html-body-iframe {
+  padding: 0;
+  margin: 0;
+  max-width: 100%;
+  width: 100%;
+}
+
+.node-content--iframe {
+  padding: 0;
+}
+
+.node-content--iframe:focus {
+  box-shadow: -1px 0 0 0 var(--accent);
+}
+
+.node-content--iframe-active,
+.node-content--iframe-active:focus,
+.node-content--iframe-focused {
+  box-shadow: -1px 0 0 0 var(--muted);
+  outline: none;
+}

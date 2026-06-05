@@ -1,0 +1,7 @@
+{title: federation target}
+
+1. {#root; open} Hello from the peer
+  - {#peer-child} Peer child one
+  - Peer child two
+  - {#deep; open} Deep anchor
+    - {#deep-child} Inside deep

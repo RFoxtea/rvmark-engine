@@ -1,0 +1,237 @@
+/**
+ * tr-base.ts
+ *
+ * Shared base class for tr and table type handlers.
+ * Subclasses pass a TrConfig describing their differences.
+ */
+
+import type { RenderNode, SourceNode } from '../render-node.js';
+import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyExhibit, applyEventAttr, expandNode, exhibitOpenFromNode, prewarmToggleFonts } from '../handler-utils.js';
+import { BaseTypeHandler } from '../base-handler.js';
+import { resolveTransclusionConfig } from '../transclusion.js';
+import { mdInlineWithSpansContinued } from '../markdown.js';
+import type { ParsedSpanAttrs } from '../markdown.js';
+import { wireListbox, isListbox } from '../listbox-utils.js';
+import type { ListboxNav } from '../listbox.js';
+import { wireSelectThenToggle, focusAndScroll } from '../interaction.js';
+
+export const CELL_SEP = /\s*\|\s*/;
+
+export function parseCells(label: string): string[] {
+  return label.split(CELL_SEP).map(s => s.trim()).filter((s, i, a) => i < a.length - 1 || s !== '');
+}
+
+export interface TrConfig {
+  liClass:           string;
+  toggleClass:       string;
+  cellClass:         string;
+  contentClass:      string;
+  focusableSelector: string;
+  withExhibit?:      boolean;
+  withBullet?:       boolean;
+  /** Hook called after li/content setup, before toggle/cells. */
+  onSetup?: (ctx: { content: HTMLElement; li: HTMLElement; attrs: ReturnType<typeof resolveAttrs>; sourceNode: SourceNode }) => void;
+}
+
+export abstract class TrTypeHandlerBase extends BaseTypeHandler {
+  private readonly cfg: TrConfig;
+  private _tog!:        HTMLSpanElement;
+  private _listboxNav?: ListboxNav;
+  private _unwatchChildren?: () => void;
+
+  // Set during construction, used across methods
+  private _expandable!:  boolean;
+  private _alwaysOpen!:  boolean;
+  private _actionVal!:  string | null;
+  private _li!:         HTMLElement;
+
+  constructor(rn: RenderNode, cfg: TrConfig) {
+    super(rn, cfg.focusableSelector);
+    this.cfg = cfg;
+    const sourceNode = rn.sourceNode;
+    const attrs = resolveAttrs(sourceNode);
+    applyOnSpawn(attrs, rn);
+
+    const { content } = this;
+    content.classList.add(cfg.contentClass);
+
+    if (cfg.withBullet) {
+      const bullet = attrs.get('bullet');
+      if (bullet !== undefined)
+        content.style.setProperty('--node-bullet', `'${bullet.replace(/'/g, "\\'")}'`);
+      const bf = attrs.get('bullet-font');
+      if (bf !== undefined) content.style.setProperty('--node-bullet-font', bf);
+      if (attrs.has('bullet-spins')) content.classList.add('node-content--bullet-spins');
+    }
+
+    const li = rn.li;
+    this._li = li;
+    li.classList.add(cfg.liClass);
+
+    cfg.onSetup?.({ content, li, attrs, sourceNode });
+
+    this._actionVal = cfg.withExhibit ? (attrs.get('action') ?? null) : null;
+    if (cfg.withExhibit) applyExhibit(this.rn, attrs);
+
+    const openVal   = attrs.get('open');
+    const neverOpen = openVal === 'never';
+    const paramOpen = attrs.has('open') && (openVal === '' || openVal === 'true');
+    this._alwaysOpen = openVal === 'always';
+
+    const { embedVal, childrenList } = resolveTransclusionConfig(sourceNode, attrs);
+    this._expandable   = !neverOpen && (sourceNode.children.length > 0 || !!embedVal || !!childrenList);
+
+
+    this.buildToggle();
+    this.buildCells(sourceNode, attrs);
+
+    if (this._expandable && !this._alwaysOpen) {
+      if (this._actionVal === 'exhibit') {
+        wireSelectThenToggle(content, () => exhibitOpenFromNode(rn));
+      } else {
+        wireSelectThenToggle(content, (expand) => { if (rn.toggleable) this.doToggle(expand); });
+      }
+    } else if (this._actionVal === 'exhibit') {
+      wireSelectThenToggle(content, () => exhibitOpenFromNode(rn));
+    }
+
+    this.buildKeyboardHandler();
+    this.buildVisibilityListener();
+
+    if (this._expandable && (paramOpen || this._alwaysOpen)) this.doExpand();
+  }
+
+  // ── Expand/collapse ────────────────────────────────────────────────────────
+
+  private doExpand() {
+    void expandNode(this.rn);
+    for (const v of this.rn.sourceNode.attrs.getAll('on-expand')) applyEventAttr(v, this.rn);
+  }
+  private doCollapse() {
+    for (const v of this.rn.sourceNode.attrs.getAll('on-collapse')) applyEventAttr(v, this.rn);
+    this.rn.setChildren([]);
+  }
+  private doToggle(forceState?: boolean) {
+    const open = forceState !== undefined ? forceState : !this.rn.expanded;
+    if (open) this.doExpand(); else this.doCollapse();
+  }
+
+
+  // ── Build steps ────────────────────────────────────────────────────────────
+
+  private buildToggle() {
+    const { content, rn, cfg, _expandable, _alwaysOpen } = this;
+    const tog = document.createElement('span');
+    tog.className = `${cfg.toggleClass} toggle`;
+    tog.classList.add('leaf');
+    if (_expandable && !_alwaysOpen) {
+      tog.addEventListener('click', (e) => {
+        e.stopPropagation();
+        content.focus();
+        if (rn.toggleable) this.doToggle();
+      });
+    }
+    this._li.insertBefore(tog, rn.children);
+    this._tog = tog;
+  }
+
+  onConnected(): void {
+    prewarmToggleFonts(this._tog);
+  }
+
+  private buildCells(sourceNode: SourceNode, attrs: ReturnType<typeof resolveAttrs>) {
+    const cells = parseCells(sourceNode.label);
+    const spanMap = new Map<number, ParsedSpanAttrs>();
+    let nextOrdinal = 0;
+
+    for (const cell of cells) {
+      const div = document.createElement('div');
+      div.className = this.cfg.cellClass;
+      const { html, nextOrdinal: n } = mdInlineWithSpansContinued(cell, spanMap, nextOrdinal);
+      div.innerHTML = html;
+      nextOrdinal = n;
+      this.content.appendChild(div);
+    }
+
+    if (isListbox(attrs, spanMap)) {
+      const { content, rn } = this;
+      content.classList.add('node-content--listbox');
+      content.setAttribute('role', 'listbox');
+      this._listboxNav = wireListbox({
+        navRoot:         content,
+        optionContainer: content,
+        spanMap,
+        rn,
+        sourceNode,
+        scrollOnSelect:  false,
+        volatile:        attrs.has('listbox-volatile'),
+      });
+    }
+  }
+
+  private buildKeyboardHandler() {
+    const { content, rn, _li: li } = this;
+    content.addEventListener('keydown', (e) => {
+      if (e.target !== content) return;
+      if (listboxKeydown(e, this._listboxNav, rn)) return;
+      if (actionKeydown(e, rn)) return;
+      const { _expandable: expandable, _alwaysOpen: alwaysOpen } = this;
+      switch (e.key) {
+        case 'Enter':
+        case ' ':
+          if (expandable && !alwaysOpen && rn.toggleable) {
+            this.doToggle();
+          }
+          for (const v of rn.sourceNode.attrs.getAll('on-action')) applyEventAttr(v, rn);
+          e.preventDefault();
+          return;
+        case 'ArrowRight':
+          if (expandable && rn.toggleable && !rn.expanded) {
+            this.doToggle(true);
+            e.preventDefault();
+          } else if (rn.expanded) {
+            focusAndScroll(rn.firstChild()?.contentEl ?? null);
+            e.preventDefault();
+          }
+          return;
+        case 'ArrowLeft':
+          if (expandable && !alwaysOpen && rn.expanded) {
+            this.doCollapse();
+          } else {
+            focusAndScroll(li.parentElement?.closest<HTMLElement>('.node')?.querySelector<HTMLElement>(':scope > .node-content'));
+          }
+          e.preventDefault();
+          return;
+        case 'c':
+          if (!e.ctrlKey && !e.metaKey) {
+            copyPermalink(rn);
+            e.preventDefault();
+          }
+          return;
+      }
+      treeNavKeydown(e, content, li);
+    });
+  }
+
+  private _setExpandable(nowExpandable: boolean) {
+    this.setExpandable(nowExpandable, this._tog, () => this.doCollapse());
+  }
+
+  private buildVisibilityListener() {
+    const { rn, _expandable: expandable, _alwaysOpen: alwaysOpen } = this;
+    if (!expandable || alwaysOpen) return;
+    if (!rn.sourceNode.children.length) {
+      this._setExpandable(true);
+      return;
+    }
+    this._unwatchChildren = rn.watchChildren(rn.sourceNode.children, (nowExpandable) => {
+      this._setExpandable(nowExpandable);
+    });
+  }
+
+  // ── TypeHandler interface ──────────────────────────────────────────────────
+
+  onDestroy(): void {
+    this._unwatchChildren?.();
+  }
+}

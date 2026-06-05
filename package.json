@@ -1,0 +1,38 @@
+{
+  "name": "rvmark",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "rvmark engine — interactive tree-based document runtime and static site generator.",
+  "bin": {
+    "rvmark-build": "./bin/rvmark.mjs"
+  },
+  "exports": {
+    "./build": "./build/build-rvmark.mjs"
+  },
+  "files": [
+    "bin/",
+    "build/",
+    "out/",
+    "src/template.html",
+    "src/styles.css",
+    "src/types/*.css",
+    "assets/"
+  ],
+  "scripts": {
+    "build": "node build/build.mjs",
+    "test": "node build/build.mjs --test && playwright test --config playwright.config.js",
+    "prepare": "node build/build.mjs"
+  },
+  "dependencies": {
+    "dompurify": "^3.3.3",
+    "fast-xml-parser": "^5.4.1",
+    "marked": "^15.0.12"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "http-server": "^14.1.1",
+    "ts-morph": "^28.0.0",
+    "typescript": "^6.0.2"
+  }
+}

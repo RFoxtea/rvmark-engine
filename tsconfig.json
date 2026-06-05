@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ES2020",
+    "moduleResolution": "bundler",
+    "outDir": "out",
+    "rootDir": "src",
+    "strict": true,
+    "allowJs": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*"]
+}

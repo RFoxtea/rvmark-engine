@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"></head>
+<body>
+<div id="indicator" style="display:none">iframevar-visible</div>
+<button id="writer">iframe-writer</button>
+<script>
+  var state = {};
+  function render() {
+    document.getElementById('indicator').style.display =
+      state['iframevar'] === '1' ? '' : 'none';
+  }
+  document.getElementById('writer').addEventListener('click', function() {
+    parent.postMessage({ type: 'rvmark-state-write', op: 'set', key: 'iframevar', value: '1' }, '*');
+  });
+  window.addEventListener('message', function(e) {
+    var d = e.data;
+    if (!d) return;
+    if (d.type === 'rvmark-relay-snapshot') {
+      Object.assign(state, d.frame);
+      render();
+    } else if (d.type === 'rvmark-preroot-set') {
+      state[d.key] = d.value;
+      render();
+    } else if (d.type === 'rvmark-preroot-delete') {
+      delete state[d.key];
+      render();
+    }
+  });
+</script>
+</body>
+</html>

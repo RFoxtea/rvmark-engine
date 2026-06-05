@@ -1,0 +1,67 @@
+/* ── table-node li: the grid container ── */
+.table-node {
+  display: grid;
+  grid-template-columns: calc(var(--bullet-w) + var(--tree-gap)) var(--table-cols, repeat(1, 1fr));
+  width: var(--node-w);
+}
+
+/* ── Toggle bullet: column 1, row 1 ── */
+.table-node > .table-toggle {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--bullet-w);
+  justify-self: start;
+}
+
+/* ── Header row: columns 2+, row 1 ── */
+.node-content--table {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 2 / -1;
+  grid-row: 1;
+  align-items: stretch;
+  border: 1px solid var(--border, #ddd);
+  padding: 0;
+  width: auto;
+}
+
+.node-content--table .tr-cell {
+  font-weight: 500;
+}
+
+/* ── Children container: dissolve into the parent grid ── */
+.node:has(> .node-content--table[aria-expanded="true"]) > .node-children {
+  display: contents;
+  margin-left: 0;
+}
+
+.table-node > .node-children > .tree {
+  display: contents;
+}
+
+/* First tr row top border, and tr rows following a non-tr node */
+.table-node > .node-children > .tree > .tr-row:first-child > .node-content,
+.table-node > .node-children > .tree > .node:not(.tr-row) + .tr-row > .node-content {
+  border-top: 1px solid var(--border, #ddd);
+}
+
+/* Non-tr children: span full width including bullet zone */
+.table-node > .node-children > .tree > .node:not(.tr-row) {
+  grid-column: 1 / -1;
+}
+
+/* Toggle: + / − driven by aria-expanded on the sibling .node-content--table */
+.table-node > .table-toggle:not(.leaf)::before                                  { content: '+'; }
+.table-node:has(> .node-content--table[aria-expanded="true"]) > .table-toggle:not(.leaf)::before { content: '−'; }
+
+/* Recolor toggle on focus */
+.table-node:has(> .node-content--table:focus) > .table-toggle { color: var(--accent); cursor: pointer; }
+
+/* Selection / focus: no border-radius */
+.table-node > .node-content--table[aria-selected="true"],
+.table-node > .node-content--table:focus {
+  border-radius: 0;
+}

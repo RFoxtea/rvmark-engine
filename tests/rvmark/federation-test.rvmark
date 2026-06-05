@@ -1,0 +1,8 @@
+{title: federation test}
+
+@peer {url: http://localhost:8003}
+
+1. {#main; open} Federation test page.
+  - {#child-peer-embed; open; => @peer/federation-target} Peer embed
+  - {#child-peer-anchor; open; => @peer/federation-target#deep} Peer anchor embed
+  - {#child-undeclared; open; => @undeclared/foo} Undeclared sigil

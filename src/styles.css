@@ -1,0 +1,571 @@
+/* theme.css is prepended by the build — design tokens and fonts live there */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  height: 100vh;
+  height: 100dvh; /* dynamic viewport height — adjusts for mobile browser chrome */
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1rem;
+}
+
+/* ── Root layout ── */
+#root {
+  max-width: 960px;
+  width: 100%;
+  height: 100%;
+  margin: 0 auto;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+header, footer {
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+  flex-shrink: 0;
+}
+
+header { padding-top: 1rem; }
+footer { padding-bottom: 1rem; }
+
+#tree-scroll {
+  flex: 1 1 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  padding-bottom: 1rem;
+
+  /* The tree column is a size container — node widths and any "narrow column"
+     responsive rules below trigger off this, not the viewport. This is what
+     makes the tree reflow when an exhibit panel takes half the screen. */
+  container-type: inline-size;
+  container-name: tree;
+  --node-w: min(var(--node-max-w), 100cqi - 1.5rem);
+}
+
+/* ── Header ── */
+header {
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.6rem;
+}
+
+header h1 {
+  color: var(--fg);
+}
+
+header .meta {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 0.3rem;
+}
+
+/* ── Footer ── */
+footer {
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ── Tree chrome ── */
+.tree {
+  list-style: none;
+  padding: 0 0.75rem;
+}
+
+.node { position: relative; }
+
+.node-content {
+  display: flex;
+  align-items: baseline;
+  gap: var(--tree-gap);
+  padding: 0.15rem 0;
+  cursor: default;
+  width: var(--node-w);
+  flex-shrink: 0;
+}
+
+.node-content:hover .node-id { opacity: 1; }
+
+/* ── Toggle bullet ── */
+.toggle::before { font-family: var(--node-bullet-font, 'IBM Plex Mono', 'Noto Sans Mono', 'Noto Sans Symbols', 'Noto Sans Symbols 2', 'Noto Emoji', monospace); }
+.node-content[style*="--node-bullet"] .toggle::before { font-family: var(--node-bullet-font, 'IBM Plex Mono', 'Noto Sans Mono', 'Noto Sans Symbols', 'Noto Sans Symbols 2', 'Noto Emoji', monospace); }
+.toggle {
+  flex-shrink: 0;
+  width: var(--bullet-w);
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.15s;
+  display: inline-block;
+  text-align: center;
+}
+
+/* Symbol hierarchy — all visual, no JS involvement */
+/* aria-expanded lives on .node-content (the treeitem) */
+.toggle::before                                                                    { content: '•'; }
+.node-content[aria-expanded]:not([style*="--node-bullet"]) .toggle:not(.leaf)::before { content: '▶'; }
+.node-content[style*="--node-bullet"] .toggle::before                             { content: var(--node-bullet); }
+
+/* Subscript ▶ badge when a custom-bullet node is expandable */
+.toggle { position: relative; }
+.node-content[aria-expanded][style*="--node-bullet"]:not(.node-content--bullet-spins) .toggle::after {
+  content: '▶';
+  font-family: monospace;
+  font-size: 0.75em;
+  line-height: 1;
+  position: absolute;
+  bottom: 0.05em;
+  right: -0.1em;
+  color: inherit;
+  transition: transform 0.15s;
+  text-shadow: 0 0 0.2em var(--bg), 0 0 0.2em var(--bg), 0 0 0.2em var(--bg);
+}
+.node-content[aria-expanded="true"][style*="--node-bullet"]:not(.node-content--bullet-spins) .toggle::after {
+  transform: rotate(90deg);
+  transform-origin: center center;
+  bottom: -0.1em;
+  right: 0em;
+}
+
+.toggle { cursor: pointer; }
+.toggle:hover { color: var(--accent); }
+.node-content[aria-expanded="true"]:not([style*="--node-bullet"]) .toggle:not(.leaf),
+.node-content[aria-expanded="true"].node-content--bullet-spins .toggle:not(.leaf) { transform: rotate(90deg); }
+.toggle.leaf  { cursor: default; color: var(--muted); }
+.toggle.leaf:hover { color: var(--muted); }
+
+.node-content:focus .toggle { color: var(--accent); cursor: pointer; }
+
+/* ── Label ── */
+.node-label {
+  flex: 1;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.node-label strong { font-weight: 700; }
+.node-label em     { font-style: italic; }
+.node-label a      { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.node-label code   { background: var(--surface); padding: 0 3px; border-radius: 2px; font-size: 0.85em; }
+.node-label rt     { font-size: 0.7em; }
+.node-label .vinculum { text-decoration: overline; }
+.node-label .vinculum .vinculum { text-decoration: overline double; }
+.node-label .strikethrough { text-decoration: line-through; }
+
+/* ── Inline options (listbox) ── */
+.inline-option {
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.inline-option[aria-selected="true"] {
+  color: var(--fg);
+}
+
+/* ── .badges: inline listbox styled as 88x31 badge strip ── */
+.node-content.badges {
+  align-items: center;
+}
+.node-content.badges .node-label[role="listbox"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.node-content.badges .inline-option {
+  display: block;
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: 2px;
+  line-height: 0;
+}
+.node-content.badges .inline-option:hover {
+  outline: 1px solid var(--border);
+  outline-offset: 1px;
+}
+.node-content.badges .inline-option[aria-selected="true"] {
+  outline: 1px solid var(--muted);
+  outline-offset: 1px;
+}
+.node-content.badges .inline-option img {
+  display: block;
+  image-rendering: pixelated;
+  width: 88px;
+  height: 31px;
+}
+
+/* ── .tabs: inline listbox styled as tab strip ── */
+.node-content.tabs .node-label[role="listbox"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+}
+.node-content.tabs .inline-option {
+  padding: 0.1rem 0.6rem;
+  border-bottom: 2px solid var(--border-tree);
+  text-decoration: none;
+  font-size: 0.85rem;
+  color: var(--muted);
+  transition: color 0.1s, border-color 0.1s;
+  cursor: pointer;
+}
+.node-content.tabs .inline-option:hover {
+  color: var(--fg);
+  border-bottom-color: var(--border);
+}
+.node-content.tabs .inline-option[aria-selected="true"] {
+  color: var(--fg);
+  border-bottom-color: var(--muted);
+}
+
+/* ── Permalink ── */
+.node-id {
+  font-size: 0.68rem;
+  color: var(--dim);
+  opacity: 0;
+  transition: opacity 0.15s;
+  text-decoration: none;
+  margin-left: 0.3rem;
+  padding: 0 0.2rem;
+  flex-shrink: 0;
+}
+.node-id:hover { color: var(--accent); }
+/* ── External link icon ── */
+.ext-icon {
+  width: 0.85em;
+  height: 0.85em;
+  vertical-align: -0.15em;
+  margin-left: 0.2em;
+}
+
+/* ── Children container ── */
+.node-children {
+  display: none;
+  margin-left: calc(var(--bullet-w) + var(--tree-gap));
+}
+
+.node:has(> .node-content[aria-expanded="true"]) > .node-children { display: block; }
+
+/* ── Nested tree ── */
+.tree .tree {
+  padding: 0;
+}
+
+.node-children > * + .tree {
+  margin-top: 0.5rem;
+}
+
+/* ── Selection & focus highlight ── */
+/* aria-selected persists when focus moves into the node's doc zone (children content). */
+.node-content[aria-selected="true"] {
+  background: var(--surface-2);
+  border-radius: 3px;
+}
+.node-content:focus {
+  outline: none;
+  background: var(--surface-2);
+  border-radius: 3px;
+}
+.node-content:focus .toggle  { color: var(--accent); }
+.node-content:focus .node-id { opacity: 1; color: var(--muted); }
+.node-content[aria-selected="true"] .node-id { opacity: 1; }
+
+/* ── Body mode indicator ── */
+.node-content:has(.md-body-scroll:focus) { box-shadow: 0 0 0 1px var(--accent); border-radius: 3px; }
+.node-content:focus .md-body { border-left-color: var(--accent-dim); }
+
+
+
+/* ── Minor nodes ── */
+.node-content.minor .node-label { color: var(--muted); }
+
+/* ── Tag chips ── */
+.node-tag {
+  display: inline-block;
+  font-size: 0.68rem;
+  line-height: 1.2;
+  padding: 0 5px;
+  border: 1px solid var(--tag-color, var(--border-tag));
+  border-radius: 3px;
+  color: var(--tag-color, var(--muted));
+  margin-right: 0.35rem;
+  vertical-align: 0.05em;
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+.node-tag--link,
+.node-label .node-tag--link {
+  cursor: pointer;
+  color: var(--tag-color, var(--muted));
+  text-decoration: none;
+}
+.node-tag--link:hover {
+  background: var(--tag-color, var(--border-tag));
+  color: var(--bg);
+}
+
+/* ── Footer links ── */
+footer a { color: inherit; text-decoration: none; }
+
+/* Footer sections — break between interpuncts, not inside a section */
+footer .footer-section { white-space: nowrap; }
+
+/* ── Show-hidden toggle (footer) ── */
+.show-hidden-toggle { cursor: pointer; user-select: none; }
+/* Visually hidden but kept in tab order and accessible to screen readers */
+.show-hidden-toggle input {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+.show-hidden-toggle::before { content: '[ ] '; }
+.show-hidden-toggle:has(input:checked)::before { content: '[×] '; }
+.show-hidden-toggle:has(input:focus-visible) { outline: 1px solid var(--accent); outline-offset: 1px; }
+
+/* ── Transclusion error ── */
+.node-load-error {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
+/* ── Static content (no-JS fallback) ── */
+#static-content {
+  flex: 1 1 0;
+  overflow-y: auto;
+  padding: 0 0.75rem 1rem;
+
+  /* Same container setup as #tree-scroll so static nodes reflow on narrow columns */
+  container-type: inline-size;
+  container-name: tree;
+  --node-w: min(var(--node-max-w), 100cqi - 1.5rem);
+}
+
+.static-tree {
+  list-style: none;
+  padding-left: var(--indent);
+  margin: 0;
+}
+
+/* Top-level list has no indent */
+#static-content > .static-tree {
+  padding-left: 0;
+}
+
+#static-content > .static-tree > li + li {
+  margin-top: 1em;
+}
+
+.static-tree > li {
+  position: relative;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+/* Tree bullet */
+.static-tree > li::before {
+  content: '•';
+  position: absolute;
+  left: calc(-1 * var(--bullet-w));
+  width: var(--bullet-w);
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* Links */
+.static-tree a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.static-tree .strikethrough { text-decoration: line-through; }
+
+/* Inline formatting */
+.static-tree code {
+  background: var(--surface);
+  padding: 0 3px;
+  border-radius: 2px;
+  font-size: 0.85em;
+}
+
+/* Tag chips */
+.static-tag {
+  display: inline-block;
+  font-size: 0.68rem;
+  line-height: 1.2;
+  padding: 0 5px;
+  border: 1px solid var(--tag-color, var(--border-tag));
+  border-radius: 3px;
+  color: var(--tag-color, var(--muted));
+  margin-right: 0.35rem;
+  vertical-align: 0.05em;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.static-tag--link {
+  cursor: pointer;
+}
+.static-tag--link:hover {
+  background: var(--tag-color, var(--border-tag));
+  color: var(--bg);
+}
+
+/* Hidden nodes */
+.static-hidden { display: none; }
+
+/* Markdown body blocks */
+.static-body {
+  margin: 0.3rem 0 0.5rem;
+  padding-left: 0.5rem;
+  border-left: 2px solid var(--border-tree);
+  font-size: 0.85rem;
+  color: var(--fg);
+}
+
+.static-body pre {
+  background: var(--surface);
+  padding: 0.5rem;
+  border-radius: 3px;
+  overflow-x: auto;
+  margin: 0.4rem 0;
+}
+
+.static-body pre code {
+  padding: 0;
+  background: inherit;
+}
+
+.static-body p { margin: 0.3rem 0; }
+
+.static-body table {
+  border-collapse: collapse;
+  margin: 0.4rem 0;
+}
+.static-body th, .static-body td {
+  border: 1px solid var(--border);
+  padding: 0.2rem 0.5rem;
+  font-size: 0.82rem;
+}
+
+/* Transclusion references — distinct from regular links */
+a.static-ref {
+  color: var(--muted);
+  text-decoration: none;
+}
+a.static-ref:hover {
+  text-decoration: underline;
+}
+
+/* Interpage transclusions — visually distinct from in-page jumps */
+a.static-ref--interpage {
+  color: var(--accent);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+/* Exhibit handle — small icon link to the underlying asset */
+a.static-exhibit-link {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.85em;
+  margin-left: 0.25em;
+}
+a.static-exhibit-link:hover {
+  color: var(--accent);
+}
+
+/* URL-mode iframe — plain link to the embedded page */
+a.static-iframe-link {
+  color: var(--accent);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  font-family: var(--mono, monospace);
+  font-size: 0.85em;
+}
+
+.static-remote {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 0.82rem;
+}
+
+
+/* ── Divider ── */
+.node-content--hr {
+  margin-left: calc(var(--bullet-w) + var(--tree-gap));
+  width: calc(var(--node-w) - var(--bullet-w) - var(--tree-gap));
+}
+
+.divider-rule {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.4rem 0;
+  width: 100%;
+}
+
+/* ── Narrow page (device-level chrome) ── */
+@media (max-width: 768px) and (orientation: portrait) {
+  html, body {
+    padding: 0.5rem;
+  }
+  header, footer {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+}
+
+/* ── Narrow tree column (driven by container width, not viewport) ──
+   Fires whether the column is narrow because the viewport is small or
+   because an exhibit/sidepanel has squeezed the tree column. */
+@container tree (max-width: 600px) {
+  .tree .tree { padding: 0; }
+  .md-body { margin-left: 0; }
+}
+
+/* ── Hide header on mobile ── */
+@media (max-width: 768px) and (orientation: portrait), (orientation: landscape) and (max-height: 540px) {
+  header { display: none !important; }
+}
+
+/* ── rvmark iframe guest (embedded as iframe node in another rvmark page) ── */
+html.rvmark-iframe-guest,
+html.rvmark-iframe-guest body {
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+html.rvmark-iframe-guest footer { display: none; }
+html.rvmark-iframe-guest .tree { padding: 0; }
+
+/* ── rvmark exhibit guest (embedded in an exhibit panel) ── */
+html.rvmark-exhibit-guest,
+html.rvmark-exhibit-guest body {
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+html.rvmark-exhibit-guest #root {
+  max-width: none;
+  margin: 0;
+}
+html.rvmark-exhibit-guest header,
+html.rvmark-exhibit-guest footer { display: none; }
+

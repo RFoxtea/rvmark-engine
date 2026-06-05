@@ -1,0 +1,5 @@
+out/
+node_modules/
+tests/dist/
+test-results/
+.last-run.json

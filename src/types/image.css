@@ -1,0 +1,60 @@
+/* types/image.css — styles for the image node type */
+
+.img-body {
+  margin: 0;
+  padding: 0;
+  display: block;
+  width: 100%;
+}
+
+.img-body img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 2px;
+}
+
+/* dark-mode: invert — inverts the image in dark mode (useful for monochrome SVGs with black paths) */
+@media (prefers-color-scheme: dark) {
+  .img-body--dark-invert img {
+    filter: invert(1);
+  }
+}
+
+/* dark-mode: background — adds a white background in dark mode (useful for images that assume a light canvas) */
+@media (prefers-color-scheme: dark) {
+  .img-body--dark-background img {
+    background: #fff;
+    border-radius: 2px;
+  }
+}
+
+/* align: left — explicit left-align (same as default, but useful with width to avoid stretching) */
+.img-body--left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+/* align: center */
+.img-body--center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+/* align: right */
+.img-body--right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.img-body figcaption {
+  margin-top: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
