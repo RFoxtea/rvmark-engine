@@ -1,0 +1,59 @@
+/**
+ * types/gap.ts
+ *
+ * Gap type handler — new RenderNode/TypeHandler model.
+ * Renders vertical whitespace between siblings. No line, no content, not
+ * selectable. Use where a paragraph break should read as air rather than a
+ * drawn rule (contrast with `hr`, which draws a divider-rule).
+ *
+ * Syntax:
+ *   1. {= gap}
+ */
+
+import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
+import { factoryRegister } from '../render-node.js';
+import { resolveAttrs, applyExhibit } from '../handler-utils.js';
+import { resolveTagDef } from '../tags.js';
+
+class GapTypeHandler implements TypeHandler {
+  readonly content:    HTMLElement;
+  readonly selectable: boolean = false;
+
+  constructor(renderNode: RenderNode) {
+    const sourceNode = renderNode.sourceNode;
+    const attrs = resolveAttrs(sourceNode);
+
+    const content = document.createElement('div');
+    this.content = content;
+
+    // ── Classes ──────────────────────────────────────────────────────────────
+    content.classList.add('node-content--gap');
+
+    for (const { name, props } of sourceNode.tags) {
+      const def = resolveTagDef(name, props, sourceNode.sourceFile.tagDefs);
+      for (const cls of def.getAll('class')) content.classList.add(...cls.split(/\s+/).filter(Boolean));
+    }
+    for (const cls of attrs.getAll('class')) content.classList.add(...cls.split(/\s+/).filter(Boolean));
+
+    renderNode.selectable = false;
+    renderNode.meta = sourceNode.meta;
+
+    // ── Exhibit scope ────────────────────────────────────────────────────────
+    applyExhibit(renderNode, attrs);
+  }
+
+  getFocusableElements(_content: HTMLElement): NodeListOf<HTMLElement> {
+    return document.createDocumentFragment().querySelectorAll<HTMLElement>('*');
+  }
+}
+
+const gapFactory: NodeTypeFactory = {
+  create(renderNode) {
+    return new GapTypeHandler(renderNode);
+  },
+  staticRenderBody() {
+    return '';
+  },
+};
+
+factoryRegister('gap', gapFactory);

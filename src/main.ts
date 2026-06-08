@@ -27,6 +27,7 @@ import './types/image.js';
 import './types/tr.js';
 import './types/table.js';
 import './types/hr.js';
+import './types/gap.js';
 
 import type { RvmarkPageContext } from './iframe-guest.js';
 

@@ -77,6 +77,7 @@ await import('../out/types/image.js');
 await import('../out/types/tr.js');
 await import('../out/types/table.js');
 await import('../out/types/hr.js');
+await import('../out/types/gap.js');
 // exhibit.js is not needed at build time (no static rendering) — skip it.
 
 /**
