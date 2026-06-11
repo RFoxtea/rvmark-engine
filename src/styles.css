@@ -1,4 +1,4 @@
-/* theme.css is prepended by the build — design tokens and fonts live there */
+/* theme.css is appended by the build — design tokens and fonts live there */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
@@ -95,8 +95,8 @@ footer {
 
 /* ── Toggle bullet ── */
 .toggle::before { font-family: var(--node-bullet-font, 'IBM Plex Mono', 'Noto Sans Mono', 'Noto Sans Symbols', 'Noto Sans Symbols 2', 'Noto Emoji', monospace); }
-.node-content[style*="--node-bullet"] .toggle::before { font-family: var(--node-bullet-font, 'IBM Plex Mono', 'Noto Sans Mono', 'Noto Sans Symbols', 'Noto Sans Symbols 2', 'Noto Emoji', monospace); }
 .toggle {
+  position: relative;
   flex-shrink: 0;
   width: var(--bullet-w);
   font-size: 0.85rem;
@@ -114,8 +114,7 @@ footer {
 .node-content[aria-expanded]:not([style*="--node-bullet"]) .toggle:not(.leaf)::before { content: '▶'; }
 .node-content[style*="--node-bullet"] .toggle::before                             { content: var(--node-bullet); }
 
-/* Subscript ▶ badge when a custom-bullet node is expandable */
-.toggle { position: relative; }
+/* Subscript ▶ badge when a custom-bullet node is expandable (positions against .toggle, which is position: relative) */
 .node-content[aria-expanded][style*="--node-bullet"]:not(.node-content--bullet-spins) .toggle::after {
   content: '▶';
   font-family: monospace;
@@ -135,7 +134,6 @@ footer {
   right: 0em;
 }
 
-.toggle { cursor: pointer; }
 .toggle:hover { color: var(--accent); }
 .node-content[aria-expanded="true"]:not([style*="--node-bullet"]) .toggle:not(.leaf),
 .node-content[aria-expanded="true"].node-content--bullet-spins .toggle:not(.leaf) { transform: rotate(90deg); }
@@ -281,8 +279,6 @@ footer {
 /* ── Body mode indicator ── */
 .node-content:has(.md-body-scroll:focus) { box-shadow: 0 0 0 1px var(--accent); border-radius: 3px; }
 .node-content:focus .md-body { border-left-color: var(--accent-dim); }
-
-
 
 /* ── Minor nodes ── */
 .node-content.minor .node-label { color: var(--muted); }
@@ -507,7 +503,6 @@ a.static-iframe-link {
   font-size: 0.82rem;
 }
 
-
 /* ── Divider ── */
 .node-content--hr {
   margin-left: calc(var(--bullet-w) + var(--tree-gap));
@@ -574,8 +569,6 @@ html.rvmark-exhibit-guest #root {
 }
 html.rvmark-exhibit-guest header,
 html.rvmark-exhibit-guest footer { display: none; }
-
-
 
 /* ============================================================
    Merged type styles (formerly src/types/*.css).
@@ -882,19 +875,7 @@ html.rvmark-exhibit-guest footer { display: none; }
   flex: 1;
 }
 
-.exhibit-error {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem;
-  color: var(--muted);
-  font-size: 0.82rem;
-  text-align: center;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
+.exhibit-error,
 .exhibit-hint {
   flex: 1;
   display: flex;
@@ -904,6 +885,14 @@ html.rvmark-exhibit-guest footer { display: none; }
   color: var(--muted);
   font-size: 0.82rem;
   text-align: center;
+}
+
+.exhibit-error {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.exhibit-hint {
   white-space: pre-line;
 }
 
