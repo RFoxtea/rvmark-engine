@@ -7,22 +7,26 @@
 
 import type { SourceNode } from './parser.js';
 
-const RVMARK_SEGMENT = '/rvmark/';
+// Reserved engine namespace: content source/media is published under this
+// underscore-prefixed segment so it can never collide with user content paths.
+// Build output mirrors this: _rvmark/ (content), _assets/ (CSS), _engine/ (JS),
+// _vendor/ (third-party libs). See build-rvmark.mjs.
+export const RVMARK_SEGMENT = '/_rvmark/';
 
 // ── Address resolution ─────────────────────────────────────────────────────────
 //
-// Runtime canonical address form: <origin>/rvmark/<file>#<slug>
+// Runtime canonical address form: <origin>/_rvmark/<file>#<slug>
 //   - origin: 'https://host' (or 'http://host') — always present at runtime.
 //     For same-origin local files, runtime prepends location.origin in loadPageFile.
-//   - /rvmark/: literal path segment where every federated site publishes raw files.
+//   - /_rvmark/: literal path segment where every federated site publishes raw files.
 //   - file:    relative path within the origin's rvmark tree, e.g. 'docs.rvmark'
 //              or 'logic/nd.rvmark', or an asset path like 'images/photo.jpg'.
 //   - #slug:   optional fragment.
 //
 // Examples:
-//   'https://thissite.com/rvmark/docs.rvmark#intro'
-//   'https://alice.example/rvmark/docs.rvmark#intro'
-//   'https://thissite.com/rvmark/images/photo.jpg'
+//   'https://thissite.com/_rvmark/docs.rvmark#intro'
+//   'https://alice.example/_rvmark/docs.rvmark#intro'
+//   'https://thissite.com/_rvmark/images/photo.jpg'
 //
 // sourceFileAddress is a canonical address (the file that owns the ref).
 // Its origin determines what local-relative refs resolve against.
@@ -102,10 +106,10 @@ export function resolveMediaAddress(ref: string, sourceFileAddress: string): str
 
 /**
  * Convert a canonical address to a navigable href for <a href>.
- * Strips '/rvmark/', strips '.rvmark', maps 'index' to '', preserves origin.
- *   'https://thissite.com/rvmark/docs.rvmark#x'  → 'https://thissite.com/docs#x'
- *   'https://alice.com/rvmark/docs.rvmark#x'    → 'https://alice.com/docs#x'
- *   'https://thissite.com/rvmark/images/p.jpg'  → 'https://thissite.com/rvmark/images/p.jpg'
+ * Strips '/_rvmark/', strips '.rvmark', maps 'index' to '', preserves origin.
+ *   'https://thissite.com/_rvmark/docs.rvmark#x'  → 'https://thissite.com/docs#x'
+ *   'https://alice.com/_rvmark/docs.rvmark#x'    → 'https://alice.com/docs#x'
+ *   'https://thissite.com/_rvmark/images/p.jpg'  → 'https://thissite.com/_rvmark/images/p.jpg'
  */
 export function addressToHref(address: string): string {
   const origin = addressOrigin(address);
@@ -117,14 +121,14 @@ export function addressToHref(address: string): string {
   const filePart = hashIdx === -1 ? without : without.slice(0, hashIdx);
   const fragment = hashIdx === -1 ? '' : without.slice(hashIdx);
 
-  // Non-rvmark assets are served under /rvmark/ as-is
+  // Non-rvmark assets are served under /_rvmark/ as-is
   if (!filePart.endsWith('.rvmark')) return origin + RVMARK_SEGMENT + filePart + fragment;
   return origin + '/' + fileToUrlStem(filePart) + fragment;
 }
 
 /**
  * Extract the .rvmark file path (relative to the origin's rvmark tree) from a
- * canonical address. Returns null if the address doesn't point under /rvmark/.
+ * canonical address. Returns null if the address doesn't point under /_rvmark/.
  */
 export function addressToFile(address: string): string | null {
   const origin = addressOrigin(address);

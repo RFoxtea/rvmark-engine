@@ -575,3 +575,562 @@ html.rvmark-exhibit-guest #root {
 html.rvmark-exhibit-guest header,
 html.rvmark-exhibit-guest footer { display: none; }
 
+
+
+/* ============================================================
+   Merged type styles (formerly src/types/*.css).
+   ============================================================ */
+
+/* ---- markdown ---- */
+/* types/markdown.css — styles for the markdown node type */
+
+.md-body {
+  /* Border aligns with centre of child bullet column (same x as node-children + bullet-w/2) */
+  margin-top: 0.4rem;
+  margin-left: calc(var(--bullet-w) / 2 - var(--body-border-w) / 2);
+  margin-right: calc(var(--bullet-w) / 2 - var(--body-border-w) / 2);
+  margin-bottom: 0.5rem;
+  border-left: var(--body-border-w) solid var(--border-tree);
+  min-width: 0;
+  width: 100%;
+}
+
+.md-body-scroll {
+  max-height: 30vh;
+  overflow-y: auto;
+  outline: none;
+  padding: 0.4rem 0.6rem 0.4rem 0.6rem;
+  line-height: 1.75;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+/* ── Scroll fade masks ── */
+.md-body[data-overflow]:not([data-scrolled-to-top]):not([data-scrolled-to-bottom]) .md-body-scroll {
+  mask-image: linear-gradient(to bottom, transparent 0%, black var(--md-fade-h), black calc(100% - var(--md-fade-h)), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black var(--md-fade-h), black calc(100% - var(--md-fade-h)), transparent 100%);
+}
+.md-body[data-overflow][data-scrolled-to-top]:not([data-scrolled-to-bottom]) .md-body-scroll {
+  mask-image: linear-gradient(to bottom, black calc(100% - var(--md-fade-h)), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - var(--md-fade-h)), transparent 100%);
+}
+.md-body[data-overflow][data-scrolled-to-bottom]:not([data-scrolled-to-top]) .md-body-scroll {
+  mask-image: linear-gradient(to bottom, transparent 0%, black var(--md-fade-h), black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black var(--md-fade-h), black 100%);
+}
+
+/* ── Block elements ── */
+.md-body p  { margin: 0.3rem 0; }
+
+.md-body h1, .md-body h2, .md-body h3,
+.md-body h4, .md-body h5, .md-body h6 {
+  margin: 0.6rem 0 0.2rem;
+  font-weight: 600;
+}
+.md-body h2 { font-size: 1.25rem; }
+.md-body h3 { font-size: 1.1rem; }
+.md-body h4 { font-size: 1rem; }
+.md-body h5 { font-size: 0.92rem; }
+.md-body h6 { font-size: 0.85rem; color: var(--muted); }
+
+.md-body ul, .md-body ol {
+  padding-left: 1.2rem;
+  margin: 0.3rem 0;
+}
+
+.md-body blockquote {
+  border-left: 2px solid var(--border);
+  padding-left: 0.6rem;
+  color: var(--muted);
+  margin: 0.3rem 0;
+}
+
+.md-body pre {
+  background: var(--surface);
+  padding: 0.5rem;
+  border-radius: 3px;
+  overflow-x: auto;
+  margin: 0.4rem 0;
+  line-height: 1.45;
+}
+.md-body pre code { padding: 0; background: inherit; }
+
+.md-body code {
+  background: var(--surface);
+  padding: 0 3px;
+  border-radius: 2px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.85em;
+}
+
+.md-body a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+/* ── Tables ── */
+.md-body table {
+  border-collapse: collapse;
+  margin: 0.4rem 0;
+  font-size: 0.92em;
+  width: 100%;
+}
+.md-body th, .md-body td {
+  border: 1px solid var(--border);
+  padding: 0.2rem 0.5rem;
+  text-align: left;
+}
+.md-body thead th {
+  background: var(--surface-2);
+  font-weight: 500;
+}
+.md-body tbody tr:nth-child(even) { background: var(--bg); }
+
+/* code inside td/th: don't shrink further inside already-smaller table text */
+.md-body td code,
+.md-body th code {
+  font-size: 1em;
+}
+
+/* ── Math blocks ── */
+.md-math-block {
+  text-align: center;
+  margin: 0.6rem 0;
+  overflow-x: auto;
+}
+
+/* ---- video ---- */
+/* types/video.css — styles for the video node type */
+
+.node-content--video {
+  display: block;
+  width: calc(var(--node-w) - var(--bullet-w) - var(--tree-gap));
+  padding: 0;
+}
+
+.node-content--video:focus {
+  box-shadow: -1px 0 0 0 var(--accent);
+}
+
+.video-wrap {
+  position: relative;
+  width: 100%;
+  padding-top: 56.25%; /* 16:9 */
+  margin: 0;
+  background: #000;
+}
+
+.video-wrap iframe,
+.video-wrap video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  outline: none;
+}
+
+/* Letterbox bars on non-16:9 files render pitch black, not the page background. */
+.video-wrap video {
+  background: #000;
+  object-fit: contain;
+}
+
+/* ---- html ---- */
+/* types/html.css — styles for the html node type */
+
+.html-body {
+  max-width: calc(100% - var(--indent));
+  box-sizing: border-box;
+  margin-left: var(--indent);
+  padding: 0.2rem 1rem 0.3rem calc(var(--bullet-w) + 0.3rem);
+  border-left: 2px solid var(--border);
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.html-body:focus { outline: none; }
+
+.html-body-iframe {
+  display: block;
+  border: none;
+  min-height: 8rem;
+}
+
+.html-body.html-body-iframe {
+  padding: 0;
+  margin: 0;
+  max-width: 100%;
+  width: 100%;
+}
+
+.node-content--iframe {
+  padding: 0;
+}
+
+.node-content--iframe:focus {
+  box-shadow: -1px 0 0 0 var(--accent);
+}
+
+.node-content--iframe-active,
+.node-content--iframe-active:focus,
+.node-content--iframe-focused {
+  box-shadow: -1px 0 0 0 var(--muted);
+  outline: none;
+}
+
+/* ---- image ---- */
+/* types/image.css — styles for the image node type */
+
+.img-body {
+  margin: 0;
+  padding: 0;
+  display: block;
+  width: 100%;
+}
+
+.img-body img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 2px;
+}
+
+/* dark-mode: invert — inverts the image in dark mode (useful for monochrome SVGs with black paths) */
+@media (prefers-color-scheme: dark) {
+  .img-body--dark-invert img {
+    filter: invert(1);
+  }
+}
+
+/* dark-mode: background — adds a white background in dark mode (useful for images that assume a light canvas) */
+@media (prefers-color-scheme: dark) {
+  .img-body--dark-background img {
+    background: #fff;
+    border-radius: 2px;
+  }
+}
+
+/* align: left — explicit left-align (same as default, but useful with width to avoid stretching) */
+.img-body--left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+/* align: center */
+.img-body--center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+/* align: right */
+.img-body--right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.img-body figcaption {
+  margin-top: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* ---- exhibit ---- */
+/* ── Exhibit panel ── */
+
+.exhibit-panel {
+  display: none;
+  overflow: hidden;
+  background: var(--bg);
+  flex-direction: column;
+  position: relative;
+}
+
+#exhibit-divider {
+  display: none;
+}
+
+.exhibit-close {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.1rem 0.4rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.exhibit-panel:hover .exhibit-close { opacity: 1; }
+@media (hover: none) { .exhibit-close { opacity: 1; } }
+.exhibit-close:hover { color: var(--accent); border-color: var(--accent); }
+.exhibit-close:focus { opacity: 1; outline: 1px solid var(--accent); }
+
+/* The iframe fills all available space */
+.exhibit-iframe {
+  border: none;
+  width: 100%;
+  flex: 1;
+}
+
+.exhibit-error {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: center;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.exhibit-hint {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: center;
+  white-space: pre-line;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .exhibit-hint { display: none; }
+}
+
+/* ── Layout: exhibit open ── */
+/*
+ * body.exhibit-open: two-column grid — tree on left, exhibit on right.
+ */
+
+body.exhibit-open #root {
+  max-width: none;
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  grid-template-rows: auto 1fr auto;
+  column-gap: 1em;
+}
+
+body.exhibit-open header {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+body.exhibit-open footer {
+  grid-column: 1 / -1;
+  grid-row: 3;
+}
+
+body.exhibit-open #exhibit-divider {
+  display: block;
+  grid-column: 2;
+  grid-row: 2;
+  background: var(--border);
+}
+
+body.exhibit-open #tree-scroll {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+body.exhibit-open .exhibit-panel {
+  display: flex;
+  grid-column: 3;
+  grid-row: 2;
+}
+
+/* ── Portrait mobile: stack vertically ── */
+@media (max-width: 768px) and (orientation: portrait) {
+  body.exhibit-open #root {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr 1px 1fr auto;
+    column-gap: 0;
+    row-gap: 1em;
+  }
+
+  body.exhibit-open header { display: none !important; }
+
+  body.exhibit-open .exhibit-panel {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  body.exhibit-open #exhibit-divider {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  body.exhibit-open #tree-scroll {
+    grid-column: 1;
+    grid-row: 4;
+  }
+
+  body.exhibit-open footer {
+    grid-row: 5;
+  }
+}
+
+/* ---- tr ---- */
+/* ── tr row <li>: dissolve into the parent grid ── */
+.tr-row {
+  display: contents;
+}
+
+/* ── Toggle bullet: column 1 grid item ── */
+.tr-row > .tr-toggle {
+  grid-column: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  width: var(--bullet-w);
+}
+
+/* ── .node-content of a tr row: subgrid row spanning columns 2+ ── */
+.tr-row > .node-content {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 2 / -1;
+  align-items: stretch;
+  border-left: 1px solid var(--border, #ddd);
+  border-right: 1px solid var(--border, #ddd);
+  border-bottom: 1px solid var(--border, #ddd);
+  padding: 0;
+  width: auto;
+}
+
+/* Restore top border after an expansion panel */
+.tr-row:has(> .node-content[aria-expanded="true"]) + .tr-row > .node-content {
+  border-top: 1px solid var(--border, #ddd);
+}
+
+/* ── Individual cells ── */
+.tr-cell {
+  padding: 0.2em 0.5em;
+  font-size: 0.9em;
+  border-right: 1px solid var(--border, #ddd);
+  display: block;
+  align-content: center;
+}
+
+.tr-cell:last-of-type {
+  border-right: none;
+}
+
+/* ── Expansion panel ── */
+.tr-row > .node-children {
+  grid-column: 2 / -1;
+  display: none;
+  margin-left: 0;
+}
+
+.tr-row:has(> .node-content[aria-expanded="true"]) > .node-children {
+  display: block;
+}
+
+.tr-row > .node-children > .tree {
+  padding: 0;
+}
+
+/* Toggle arrow: driven by aria-expanded on sibling .node-content */
+.tr-row:has(> .node-content[aria-expanded]) > .tr-toggle:not(.leaf)::before         { content: '▶'; }
+.tr-row:has(> .node-content[aria-expanded="true"]) > .tr-toggle:not(.leaf)          { transform: rotate(90deg); }
+
+/* Recolor toggle on focus */
+.tr-row:has(> .node-content:focus) > .tr-toggle { color: var(--accent); cursor: pointer; }
+
+/* No border-radius on selection/focus for tr rows */
+.tr-row > .node-content[aria-selected="true"],
+.tr-row > .node-content:focus {
+  border-radius: 0;
+}
+
+/* code inside cells: match .node-label code styling */
+.tr-cell code {
+  background: var(--surface);
+  padding: 0 3px;
+  border-radius: 2px;
+  font-size: 0.85em;
+}
+
+/* ---- table ---- */
+/* ── table-node li: the grid container ── */
+.table-node {
+  display: grid;
+  grid-template-columns: calc(var(--bullet-w) + var(--tree-gap)) var(--table-cols, repeat(1, 1fr));
+  width: var(--node-w);
+}
+
+/* ── Toggle bullet: column 1, row 1 ── */
+.table-node > .table-toggle {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--bullet-w);
+  justify-self: start;
+}
+
+/* ── Header row: columns 2+, row 1 ── */
+.node-content--table {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 2 / -1;
+  grid-row: 1;
+  align-items: stretch;
+  border: 1px solid var(--border, #ddd);
+  padding: 0;
+  width: auto;
+}
+
+.node-content--table .tr-cell {
+  font-weight: 500;
+}
+
+/* ── Children container: dissolve into the parent grid ── */
+.node:has(> .node-content--table[aria-expanded="true"]) > .node-children {
+  display: contents;
+  margin-left: 0;
+}
+
+.table-node > .node-children > .tree {
+  display: contents;
+}
+
+/* First tr row top border, and tr rows following a non-tr node */
+.table-node > .node-children > .tree > .tr-row:first-child > .node-content,
+.table-node > .node-children > .tree > .node:not(.tr-row) + .tr-row > .node-content {
+  border-top: 1px solid var(--border, #ddd);
+}
+
+/* Non-tr children: span full width including bullet zone */
+.table-node > .node-children > .tree > .node:not(.tr-row) {
+  grid-column: 1 / -1;
+}
+
+/* Toggle: + / − driven by aria-expanded on the sibling .node-content--table */
+.table-node > .table-toggle:not(.leaf)::before                                  { content: '+'; }
+.table-node:has(> .node-content--table[aria-expanded="true"]) > .table-toggle:not(.leaf)::before { content: '−'; }
+
+/* Recolor toggle on focus */
+.table-node:has(> .node-content--table:focus) > .table-toggle { color: var(--accent); cursor: pointer; }
+
+/* Selection / focus: no border-radius */
+.table-node > .node-content--table[aria-selected="true"],
+.table-node > .node-content--table:focus {
+  border-radius: 0;
+}

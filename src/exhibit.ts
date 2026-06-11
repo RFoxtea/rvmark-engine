@@ -363,13 +363,9 @@ function exhibitHead(basePath: string): string {
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap">
   <link rel="stylesheet" href="${basePath}styles.css">
-  <link rel="stylesheet" href="${basePath}types/markdown.css">
-  <link rel="stylesheet" href="${basePath}types/video.css">
-  <link rel="stylesheet" href="${basePath}types/html.css">
-  <link rel="stylesheet" href="${basePath}types/image.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"><\/script>
-  <script type="module" src="${basePath}iframe-guest.js"><\/script>`;
+  <script type="module" src="${basePath}_engine/iframe-guest.js"><\/script>`;
 }
 
 // ── Strategy: rvmark tree ─────────────────────────────────────────────────────

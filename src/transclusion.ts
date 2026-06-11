@@ -11,7 +11,7 @@
  *   isOrContainsPermalink      — walk parsed tree to check if targetSlug is node or descendant
  */
 
-import { resolveSlugInFile, resolveAddress, addressToSlug, addressOrigin } from './shared.js';
+import { resolveSlugInFile, resolveAddress, addressToSlug, addressOrigin, RVMARK_SEGMENT } from './shared.js';
 import { loadRvmarkFile } from './loader.js';
 import type { SourceNode, NodeAttrs, OriginDef } from './parser.js';
 
@@ -75,7 +75,8 @@ function buildSigilAddress(originRoot: string, path: string, slug: string | null
   if (!file) file = 'index.rvmark';
   if (!file.endsWith('.rvmark') && !file.endsWith('/')) file += '.rvmark';
   if (file.endsWith('/')) file += 'index.rvmark';
-  return root + 'rvmark/' + file + (slug ? '#' + slug : '');
+  // RVMARK_SEGMENT is '/_rvmark/'; root already ends in '/', so drop its leading slash.
+  return root + RVMARK_SEGMENT.slice(1) + file + (slug ? '#' + slug : '');
 }
 
 // Walk the fallback chain for a sigil ref, trying each origin in order.

@@ -19,7 +19,7 @@ import { parse, resolveFile } from './parser.js';
 import type { RawFile, Head, OriginDef } from './parser.js';
 import { Multimap } from './multimap.js';
 import { SourceFile } from './source-file.js';
-import { addressToFile, addressOrigin } from './shared.js';
+import { addressToFile, addressOrigin, RVMARK_SEGMENT } from './shared.js';
 
 // ── Page context ──────────────────────────────────────────────────────────────
 
@@ -56,7 +56,7 @@ async function getRvmarkSource(address: string): Promise<RvmarkSourceResult> {
 }
 
 // Compute the URL to fetch given a canonical address. The canonical address
-// already encodes the fetch location: '<origin>/rvmark/<file>'. We strip the
+// already encodes the fetch location: '<origin>/_rvmark/<file>'. We strip the
 // fragment, and for same-origin addresses we use a relative URL so the dev
 // server / production deployment URL doesn't need to be known.
 function addressToFetchUrl(address: string): string {
@@ -114,7 +114,7 @@ function resolveInheritedHead(address: string): Promise<Head> {
     const mergedOrigins: Record<string, OriginDef> = {};
     for (const indexFile of chain) {
       if (indexFile === file) continue;
-      const indexAddress = origin + '/rvmark/' + indexFile;
+      const indexAddress = origin + RVMARK_SEGMENT + indexFile;
       try {
         const raw = await fetchRawFile(indexAddress);
         for (const [k, v] of raw.head.meta.allEntries()) mergedMeta.append(k, v);
@@ -159,7 +159,7 @@ export function loadPageFile(file: string, basePath: string): Promise<SourceFile
   // basePath is preserved for backward compatibility with main.ts's signature,
   // but the canonical address is built from location.origin directly.
   void basePath;
-  const address = location.origin + '/rvmark/' + file;
+  const address = location.origin + RVMARK_SEGMENT + file;
   return loadResolvedFile(address);
 }
 
@@ -175,7 +175,7 @@ export async function loadRvmarkFile(address: string): Promise<SourceFile | null
   } catch (_) {
     const origin = addressOrigin(key);
     const fallbackFile = file.replace(/\.rvmark$/, '') + '/index.rvmark';
-    const fallbackAddress = origin + '/rvmark/' + fallbackFile;
+    const fallbackAddress = origin + RVMARK_SEGMENT + fallbackFile;
     try {
       return await loadResolvedFile(fallbackAddress);
     } catch (_2) { return null; }

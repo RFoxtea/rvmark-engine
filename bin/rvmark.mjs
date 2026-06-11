@@ -4,7 +4,7 @@
  *
  * Usage:
  *   rvmark-build --content <dir> --out <dir> [--theme <file>] [--template <file>]
- *                [--static <dir>] [--mount <path>] [--include-drafts]
+ *                [--assets <dir>] [--mount <path>] [--include-drafts]
  *   rvmark-build --test            # build the engine's own test fixtures
  *
  * Defaults: --content rvmark  --out dist
@@ -52,8 +52,8 @@ if (flags.has('test')) {
     outDir:     opts.out      ?? 'dist',
     theme:      opts.theme    ?? null,
     template:   opts.template ?? null,
-    staticDir:  opts.static   ?? null,
-    mountPath:  opts.mount    ?? '/rvmark/',
+    assetsDir:  opts.assets   ?? null,
+    mountPath:  opts.mount    ?? '/_rvmark/',
     includeDrafts: flags.has('includeDrafts'),
   };
 }

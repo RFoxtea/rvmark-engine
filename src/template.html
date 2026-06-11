@@ -22,18 +22,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap">
   <link rel="stylesheet" href="{{BASE}}styles.css">
-  <link rel="stylesheet" href="{{BASE}}types/markdown.css">
-  <link rel="stylesheet" href="{{BASE}}types/video.css">
-  <link rel="stylesheet" href="{{BASE}}types/html.css">
-  <link rel="stylesheet" href="{{BASE}}types/image.css">
-  <link rel="stylesheet" href="{{BASE}}types/exhibit.css">
-  <link rel="stylesheet" href="{{BASE}}types/tr.css">
-  <link rel="stylesheet" href="{{BASE}}types/table.css">
-  <link rel="stylesheet" href="{{BASE}}types/badge.css">
-  <link rel="stylesheet" href="{{BASE}}types/tab.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-  <script src="{{BASE}}purify.min.js"></script>
+  <script src="{{BASE}}_vendor/purify.min.js"></script>
 </head>
 <body>
 <div id="root">
@@ -63,7 +54,7 @@
   window.__RVMARK_SITE_MAP__ = {{SITE_MAP_JSON}};
 </script>
 
-<script src="{{BASE}}marked.min.js"></script>
-<script type="module" src="{{BASE}}main.js"></script>
+<script src="{{BASE}}_vendor/marked.min.js"></script>
+<script type="module" src="{{BASE}}_engine/main.js"></script>
 </body>
 </html>

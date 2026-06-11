@@ -19,7 +19,7 @@ export class SourceFile {
   readonly roots:       SourceNode[];
   readonly head:        Head;
   readonly address:     string;   // e.g. 'logic/nd.rvmark' or 'https://...'
-  readonly pageAddress: string;   // canonical address: '/rvmark/logic/nd.rvmark'
+  readonly pageAddress: string;   // canonical address: '/_rvmark/logic/nd.rvmark'
 
   constructor(
     nodeMap:     Record<string, SourceNode>,

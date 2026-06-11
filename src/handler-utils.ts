@@ -240,7 +240,7 @@ export function resolveAttrs(node: SourceNode): ResolvedAttrs {
 // ── Permalink helpers ──────────────────────────────────────────────────────
 
 // Build the href for a permalink anchor.
-// prefix is a canonical address '/rvmark/docs.rvmark' or '' for the current page.
+// prefix is a canonical address '/_rvmark/docs.rvmark' or '' for the current page.
 // Converts to a navigable href via addressToHref.
 export function buildPermalinkHref(rn: RenderNode): string {
   const state    = rn.state.serialize();

@@ -15,9 +15,9 @@
  *   outDir,                // required — where the built site is written
  *   theme,                 // optional — CSS file appended after core styles
  *   template,              // optional — HTML template (defaults to engine's)
- *   staticDir,             // optional — dir copied verbatim into outDir
+ *   assetsDir,             // optional — dir copied into outDir preserving its name (e.g. ./assets → dist/assets/)
  *   includeDrafts,         // optional — keep {draft} nodes/files
- *   mountPath,             // optional — URL prefix for content (default '/rvmark/')
+ *   mountPath,             // optional — URL prefix for content (default '/_rvmark/')
  * }
  */
 
@@ -90,9 +90,9 @@ export async function buildSite(config) {
     outDir,
     theme = null,
     template = null,
-    staticDir = null,
+    assetsDir = null,
     includeDrafts = false,
-    mountPath = '/rvmark/',
+    mountPath = '/_rvmark/',
   } = config;
 
   if (!contentDir) throw new Error('buildSite: config.contentDir is required');
@@ -145,6 +145,36 @@ function resolveTag(name, sourceFile, inlineProps) {
   if (inlineProps) for (const [k, v] of inlineProps.allEntries()) def.append(k, v);
   if (name.startsWith('.') && !def.has('internal') && !def.has('label')) def.append('internal', '');
   return def;
+}
+
+// ── Reserved-namespace validation ─────────────────────────────────────────────
+// The dist root reserves underscore-prefixed segments for engine artifacts
+// (_rvmark/, _assets/, _engine/, _vendor/, and envoy.html's future home). To keep
+// that guarantee, the content tree may not contain underscore-prefixed directories
+// or underscore-prefixed .rvmark files — they would shadow or collide with reserved
+// paths once mirrored under _rvmark/. Collect every offender, then fail once.
+function collectReservedNameViolations(dir, base) {
+  const violations = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    const rel = base ? `${base}/${entry}` : entry;
+    if (statSync(full).isDirectory()) {
+      if (entry.startsWith('_')) violations.push(`${rel}/  (directory)`);
+      else violations.push(...collectReservedNameViolations(full, rel));
+    } else if (entry.endsWith('.rvmark') && entry.startsWith('_')) {
+      violations.push(`${rel}  (.rvmark file)`);
+    }
+  }
+  return violations;
+}
+
+const reservedViolations = collectReservedNameViolations(RVMARK_DIR, '');
+if (reservedViolations.length) {
+  throw new Error(
+    `Reserved-name violation: underscore-prefixed directories and .rvmark files are ` +
+    `not allowed in the content tree (the '_' prefix is reserved for engine paths).\n` +
+    reservedViolations.map(v => `  - ${v}`).join('\n'),
+  );
 }
 
 // ── Scan rvmark files (recursive) ─────────────────────────────────────────────
@@ -558,14 +588,26 @@ for (const [relPath, sourceFile] of sourceFiles) {
   // ── Copy static assets ──────────────────────────────────────────────────────
 
   // Where content source/media is mirrored under outDir (matches the mount path).
-  const contentOutSub = mountPath.replace(/^\/+|\/+$/g, '') || 'rvmark';
+  const contentOutSub = mountPath.replace(/^\/+|\/+$/g, '') || '_rvmark';
 
-  const assetFiles = readdirSync(enginePath('out')).filter(f => f.endsWith('.js'));
-  for (const f of assetFiles) {
-    cpSync(enginePath('out', f), join(DIST_DIR, f));
+  // Reserved engine namespace in the dist root (underscore-prefixed so they can
+  // never collide with user content): _engine/ (engine JS), _vendor/ (third-party
+  // libs), _assets/ (user static assets). Content/media goes under contentOutSub
+  // (_rvmark/). styles.css is the single stylesheet and lives in the dist root.
+  const ENGINE_DIR = join(DIST_DIR, '_engine');
+  const VENDOR_DIR = join(DIST_DIR, '_vendor');
+  mkdirSync(ENGINE_DIR, { recursive: true });
+  mkdirSync(VENDOR_DIR, { recursive: true });
+
+  // Engine-authored JS bundles → _engine/
+  const engineJs = readdirSync(enginePath('out')).filter(f => f.endsWith('.js'));
+  for (const f of engineJs) {
+    cpSync(enginePath('out', f), join(ENGINE_DIR, f));
   }
+  if (existsSync(enginePath('out/types'))) cpSync(enginePath('out/types'), join(ENGINE_DIR, 'types'), { recursive: true });
 
-  // styles.css = engine defaults + user theme (appended so theme wins)
+  // Single stylesheet: engine styles.css (type CSS is merged into it) + user theme
+  // (appended so theme wins) → dist root.
   {
     let css = readFileSync(enginePath('src/styles.css'), 'utf8');
     if (theme && existsSync(theme)) {
@@ -573,17 +615,13 @@ for (const [relPath, sourceFile] of sourceFiles) {
     }
     writeFileSync(join(DIST_DIR, 'styles.css'), css);
   }
-  if (staticDir && existsSync(staticDir)) cpSync(staticDir, DIST_DIR, { recursive: true });
-  cpSync(requireFromEngine.resolve('marked/marked.min.js'), join(DIST_DIR, 'marked.min.js'));
-  cpSync(requireFromEngine.resolve('dompurify/dist/purify.min.js'), join(DIST_DIR, 'purify.min.js'));
 
-  if (existsSync(enginePath('out/types'))) cpSync(enginePath('out/types'), join(DIST_DIR, 'types'), { recursive: true });
-  // CSS files are not emitted by tsc — copy them from src directly
-  if (existsSync(enginePath('src/types'))) {
-    for (const f of readdirSync(enginePath('src/types')).filter(f => f.endsWith('.css'))) {
-      cpSync(enginePath('src/types', f), join(DIST_DIR, 'types', f));
-    }
-  }
+  // Third-party vendored libs → _vendor/
+  cpSync(requireFromEngine.resolve('marked/marked.min.js'), join(VENDOR_DIR, 'marked.min.js'));
+  cpSync(requireFromEngine.resolve('dompurify/dist/purify.min.js'), join(VENDOR_DIR, 'purify.min.js'));
+
+  // User assets dir (e.g. ./assets) → dist/_assets/ (contents copied in).
+  if (assetsDir && existsSync(assetsDir)) cpSync(assetsDir, join(DIST_DIR, '_assets'), { recursive: true });
 
   // Copy rvmark source files, stripping draft nodes and skipping draft files.
   for (const relPath of rvmarkFiles) {
