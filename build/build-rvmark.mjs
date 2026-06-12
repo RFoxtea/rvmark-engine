@@ -624,9 +624,15 @@ for (const [relPath, sourceFile] of sourceFiles) {
   if (assetsDir && existsSync(assetsDir)) cpSync(assetsDir, join(DIST_DIR, '_assets'), { recursive: true });
 
   // Copy rvmark source files, stripping draft nodes and skipping draft files.
-  for (const relPath of rvmarkFiles) {
+  // Iterate allRvmarkFiles (not the shadow-filtered rvmarkFiles) so the dist
+  // source tree mirrors the rvmark dir: a file shadowed for *page* generation
+  // is still copied here. Shadowing governs which HTML page wins, not which
+  // source bytes are emitted. Draft handling is unchanged.
+  for (const relPath of allRvmarkFiles) {
     const src = readFileSync(join(RVMARK_DIR, relPath), 'utf8');
-    if (!INCLUDE_DRAFTS && !rawFiles.has(relPath)) continue; // skip draft files
+    // Skip draft files. Can't use rawFiles membership here — shadowed files are
+    // absent from rawFiles regardless of draft status — so check the source.
+    if (!INCLUDE_DRAFTS && parse(src).head.meta?.has('draft')) continue;
     const stripped = INCLUDE_DRAFTS ? src : stripDraftLines(src);
     const outPath = join(DIST_DIR, contentOutSub, relPath);
     mkdirSync(dirname(outPath), { recursive: true });
