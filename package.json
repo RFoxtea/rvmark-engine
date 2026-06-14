@@ -8,7 +8,8 @@
     "rvmark-build": "./bin/rvmark.mjs"
   },
   "exports": {
-    "./build": "./build/build-rvmark.mjs"
+    "./build": "./build/build-rvmark.mjs",
+    "./envoy": "./out/envoy-guest.js"
   },
   "files": [
     "bin/",

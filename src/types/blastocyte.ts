@@ -5,18 +5,27 @@ import { resolveTransclusionConfig, resolveRef } from '../transclusion.js';
 import { buildStatePass } from '../state.js';
 import { parsePass, treeNavKeydown } from '../handler-utils.js';
 import { Multimap } from '../multimap.js';
+import { createCustomTypeHandler } from './custom.js';
 
 function differentiate(rn: RenderNode): TypeHandler {
   const node     = rn.sourceNode;
   const attrs    = mergeNodeAttrs(tagsNodeAttrs(node.tags, node.sourceFile?.tagDefs), node.attrs);
   const typeName = attrs.get('type') ?? 'text';
-  const factory  = factoryGet(typeName) ?? factoryGet('text')!;
-  const handler  = factory.create(rn);
+  const factory  = factoryGet(typeName);
+
+  // Unknown type with an explicit `type` attr → site-defined custom type. Route
+  // it through its origin's envoy (sandboxed author code). A bare node with no
+  // type, or an unresolvable empty type, still falls back to `text`.
+  if (!factory && typeName !== 'text') {
+    return createCustomTypeHandler(rn, typeName);
+  }
+
+  const handler = (factory ?? factoryGet('text')!).create(rn);
   rn.attachHandler(handler);
   return handler;
 }
 
-function loadingHandler(rn: RenderNode): TypeHandler {
+export function loadingHandler(rn: RenderNode): TypeHandler {
   const content = document.createElement('div');
   content.classList.add('node-content--loading');
   content.setAttribute('role', 'treeitem');

@@ -14,7 +14,8 @@
  *   contentDir,            // required — dir holding the .rvmark tree
  *   outDir,                // required — where the built site is written
  *   theme,                 // optional — CSS file appended after core styles
- *   template,              // optional — HTML template (defaults to engine's)
+ *   template,              // optional — HTML template PATH (defaults to engine's)
+ *   templateHtml,          // optional — HTML template CONTENTS (wins over template)
  *   assetsDir,             // optional — dir copied into outDir preserving its name (e.g. ./assets → dist/assets/)
  *   includeDrafts,         // optional — keep {draft} nodes/files
  *   mountPath,             // optional — URL prefix for content (default '/_rvmark/')
@@ -80,6 +81,59 @@ await import('../out/types/hr.js');
 await import('../out/types/gap.js');
 // exhibit.js is not needed at build time (no static rendering) — skip it.
 
+// ── Custom-type / envoy emission ──────────────────────────────────────────────
+// Transpile every author custom-type module in `customTypesDir` into
+// `<dist>/_custom-types/` and generate `<dist>/envoy.html` to load them. Author
+// files are TypeScript that default-export a CustomType descriptor and import
+// only types from 'rvmark/envoy' (erased by transpile). We transpile (strip
+// types) rather than typecheck — fast, and isolatedModules-safe.
+async function emitEnvoy(customTypesDir, DIST_DIR) {
+  const ts = (await import(requireFromEngine.resolve('typescript'))).default;
+
+  const outDir = join(DIST_DIR, '_custom-types');
+  mkdirSync(outDir, { recursive: true });
+
+  const srcFiles = readdirSync(customTypesDir).filter(f => f.endsWith('.ts'));
+  const modules = []; // emitted module basenames (e.g. 'mytype.js')
+
+  for (const f of srcFiles) {
+    const src = readFileSync(join(customTypesDir, f), 'utf8');
+    const { outputText } = ts.transpileModule(src, {
+      compilerOptions: {
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ESNext,
+        isolatedModules: true,
+      },
+      fileName: f,
+    });
+    const outName = f.replace(/\.ts$/, '.js');
+    writeFileSync(join(outDir, outName), outputText);
+    modules.push(outName);
+  }
+
+  // Generated entry glue: import envoy-guest's registerTransform + every author
+  // descriptor (default export), then register each. registerTransform is our
+  // concern, not the author's — authors only declare a descriptor.
+  const imports = modules
+    .map((m, i) => `import d${i} from './_custom-types/${m}';`)
+    .join('\n    ');
+  const regs = modules.map((_, i) => `registerTransform(d${i});`).join('\n    ');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>rvmark envoy</title></head>
+<body>
+  <script type="module">
+    import { registerTransform } from './_engine/envoy-guest.js';
+    ${imports}
+    ${regs}
+  </script>
+</body>
+</html>
+`;
+  writeFileSync(join(DIST_DIR, 'envoy.html'), html);
+}
+
 /**
  * Build a site from rvmark content into a static HTML site.
  * See the config shape documented at the top of this file.
@@ -90,7 +144,9 @@ export async function buildSite(config) {
     outDir,
     theme = null,
     template = null,
+    templateHtml = null,
     assetsDir = null,
+    customTypesDir = null,
     includeDrafts = false,
     mountPath = '/_rvmark/',
   } = config;
@@ -109,7 +165,10 @@ export async function buildSite(config) {
       catch { return null; }
     },
   };
-  const TEMPLATE = readFileSync(template ?? enginePath('src/template.html'), 'utf8');
+  // `templateHtml` (raw contents) wins over `template` (path); both default to
+  // the engine's template. Lets callers patch the template in-memory (e.g. the
+  // --test build relaxing the CSP for the http peer) without forking the file.
+  const TEMPLATE = templateHtml ?? readFileSync(template ?? enginePath('src/template.html'), 'utf8');
 
   // Per-build state (was module-level in the monorepo script).
   const urlStemToFile = new Map();
@@ -622,6 +681,15 @@ for (const [relPath, sourceFile] of sourceFiles) {
 
   // User assets dir (e.g. ./assets) → dist/_assets/ (contents copied in).
   if (assetsDir && existsSync(assetsDir)) cpSync(assetsDir, join(DIST_DIR, '_assets'), { recursive: true });
+
+  // Custom node types → _custom-types/ + generated envoy.html (dist root).
+  // Author files default-export a CustomType descriptor (see envoy-guest.ts);
+  // each is transpiled (types-only imports erase) into _custom-types/, and the
+  // generated envoy.html imports envoy-guest.js + every descriptor and registers
+  // them. envoy.html loads into the sandboxed per-origin OriginEnvoy iframe.
+  if (customTypesDir && existsSync(customTypesDir)) {
+    await emitEnvoy(customTypesDir, DIST_DIR);
+  }
 
   // Copy rvmark source files, stripping draft nodes and skipping draft files.
   // Iterate allRvmarkFiles (not the shadow-filtered rvmarkFiles) so the dist

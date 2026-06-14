@@ -21,14 +21,14 @@
     1. Child of AI-tagged node
   8. {#child-wip} [WIP] Tagged WIP
   9. {#child-internal} [Internal] Internal tag node
-  10. {#child-markdown; = markdown}
-      ```markdown
+  10. {#child-markdown; = block}
+      ~~~
       This is **markdown** with `code`.
 
       | col1 | col2 |
       |------|------|
       | a    | b    |
-      ```
+      ~~~
   11. {#child-embed; => #embed-target}
   12. {#child-math} Inline math: $x = 1$
   13. {#child-cross-embed; => ./other#other-root}
@@ -62,14 +62,14 @@
 12. {#draft-node; draft} DRAFT_NODE_LABEL
   1. {#draft-child} DRAFT_CHILD_LABEL
     1. DRAFT_GRANDCHILD_LABEL
-  2. {#draft-body-node; = markdown}
-     ```markdown
+  2. {#draft-body-node; = block}
+     ~~~
      DRAFT_BODY_CONTENT
-     ```
-14. {#draft-with-body; draft; = markdown}
-    ```markdown
+     ~~~
+14. {#draft-with-body; draft; = block}
+    ~~~
     DRAFT_TOP_BODY_CONTENT
-    ```
+    ~~~
 15. {#draft-continuation; draft} DRAFT_CONTINUATION_LABEL
 DRAFT_CONTINUATION_TEXT that spans a continuation line
 16. {#draft-nested-parent} Parent of nested draft
@@ -166,3 +166,9 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
   4. {#event-expand-parent; &expanded-flag=0; on-expand: &expanded-flag<<1; on-collapse: &expanded-flag<<0} on-expand parent
     1. {#event-expand-child} Expand child
     2. {#event-expand-indicator; ? &expanded-flag==1} Expand indicator visible
+
+24. {#envoy-root; open} Custom-type envoy fixture root
+  1. {#envoy-echo-a; = echo} Echo node A passed through the envoy
+    1. {#envoy-echo-a-child} Echo A child survives the round-trip
+  2. {#envoy-echo-b; = echo} Echo node B reuses the same origin envoy
+  3. {#envoy-missing; = nonexistent} Custom type with no registered transform

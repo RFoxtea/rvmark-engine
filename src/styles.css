@@ -1,4 +1,35 @@
-/* theme.css is appended by the build — design tokens and fonts live there */
+/* Default design tokens — engine base layer. A consuming site's theme.css is
+   appended after this by the build, so any token here can be overridden there;
+   but the engine ships a complete, self-sufficient default palette so a site
+   with no (or a partial) theme still renders legibly. Colors are system-color
+   based (Canvas/CanvasText/…) and adapt to the user's light/dark preference. */
+:root {
+  color-scheme: light dark;
+
+  --bg:       Canvas;
+  --fg:       CanvasText;
+  --muted:    color-mix(in srgb, CanvasText 60%, Canvas);
+  --dim:      GrayText;
+  --accent:   ActiveText;
+  --accent-2: oklch(from var(--accent) l c calc(h + 180));
+  --warning:  Mark;
+
+  --accent-dim:  color-mix(in srgb, var(--accent) 60%, var(--bg));
+  --border:      color-mix(in srgb, CanvasText 30%, Canvas);
+  --border-tree: color-mix(in srgb, CanvasText 15%, Canvas);
+  --border-tag:  color-mix(in srgb, CanvasText 40%, Canvas);
+  --surface:     color-mix(in srgb, CanvasText 8%, Canvas);
+  --surface-2:   color-mix(in srgb, CanvasText 5%, Canvas);
+  --highlight:   color-mix(in srgb, CanvasText 12%, Canvas);
+
+  --indent: 1.1rem;
+  --bullet-w: 1rem;
+  --tree-gap: 0.3rem;
+  --tree-indent-offset: 0.4rem;
+  --body-border-w: 2px;
+  --md-fade-h: 2rem;
+  --node-max-w: 600px;
+}
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }

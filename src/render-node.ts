@@ -232,9 +232,23 @@ export class RenderNode {
 
   static setSelection(next: RenderNode | null): void {
     const prev = RenderNode.currentSelection;
-    if (prev === next) return;
 
-    if (prev && prev._handler) {
+    // `aria-selected` is the authoritative "this node's select side-effects are
+    // currently applied" marker (set/cleared only here). Use it — not pointer
+    // identity — to decide whether `next` is already selected. A node can remain
+    // `currentSelection` while its select effects were undone by a transient
+    // on-deselect: e.g. arrowing onto a show-when child that flips false and
+    // self-destroys, returning focus to this same node. There, prev === next but
+    // on-deselect already ran (state mutated), so we must re-run the select block
+    // to honour the invariant "currentSelection is always actually selected".
+    const nextSelected = next === null || next._handler?.content.getAttribute('aria-selected') === 'true';
+    if (prev === next && nextSelected) return;
+
+    // Run the deselect block only when leaving a DIFFERENT node. When prev === next
+    // (the stale-selection repair case) we must not deselect-then-reselect the same
+    // node — that would fire a spurious on-deselect/rvmark-deselect; we only need
+    // to re-apply the select side-effects below.
+    if (prev && prev !== next && prev._handler) {
       const prevContent = prev._handler.content;
       prevContent.setAttribute('aria-selected', 'false');
       prevContent.tabIndex = -1;
