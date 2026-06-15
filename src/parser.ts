@@ -5,10 +5,11 @@
  * Completely type-agnostic: the parser does not know or care what node types
  * exist. It only extracts structure (numbering, attrs, label, bodyLines).
  *
- * The one parser-level convention for body lines is the {/=} closing delimiter,
- * which is triggered when a node's type has registered itself as a body-collecting
- * type via registerBodyType(), AND the node has no inline label (i.e. it is in
- * block-body mode rather than inline-value mode).
+ * The one parser-level convention for body lines is the fenced code block
+ * (``` or ~~~) placed immediately below the node line, which is collected when a
+ * node's type has registered itself as a body-collecting type via registerBodyType(),
+ * AND the node has no inline label (i.e. it is in block-body mode rather than
+ * inline-value mode). The matching closing fence ends the body.
  *
  * Sigil syntax is normalized to canonical alphanumeric keys on parse:
  *   #value   → id
@@ -152,7 +153,7 @@ export interface RawFile {
   nodeMap: Record<string, RawNode>;
 }
 
-// Types that collect a multiline body until {/=}.
+// Types that collect a multiline body from a fenced code block (``` or ~~~).
 // Populated by registerBodyType() — called by factoryRegister in render-node.ts
 // when a factory with collectsBody: true is registered.
 const bodyTypes = new Set<string>();

@@ -3,10 +3,11 @@
  *
  * Renders an HTML fragment in the node body inside a sandboxed iframe.
  * Two modes:
- *   - Inline block: body lines collected by the parser up to {/=}
- *       {type: iframe}
+ *   - Inline block: body lines collected by the parser from a fenced code block
+ *       - {= iframe}
+ *       ```
  *       <p>raw HTML here</p>
- *       {/=}
+ *       ```
  *   - URL fetch: HTML fetched from a remote URL via iframe.src
  *       {= iframe} ./path/to/fragment.html
  *
