@@ -2,7 +2,8 @@
  * types/markdown.ts
  *
  * Implements the `block` node type: a multiline Markdown body rendered inside a
- * node. Body lines collected by the parser (collectsBody: true). Supports:
+ * node. Body lines are collected by the parser from a following fenced code
+ * block. Supports:
  *   - Inline block: body lines inside a fenced code block (``` or ~~~)
  *   - File mode: {= block} ./path/to/file.md  or  ./file.md#Section
  *
@@ -234,7 +235,6 @@ class MarkdownTypeHandler extends BaseTypeHandler {
 }
 
 const blockFactory: NodeTypeFactory = {
-  collectsBody: true,
   create(renderNode) {
     return new MarkdownTypeHandler(renderNode);
   },

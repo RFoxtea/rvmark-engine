@@ -61,12 +61,11 @@ if (typeof globalThis.DOMPurify === 'undefined') {
 // ── Import parser and type modules ────────────────────────────────────────────
 // Dynamic import ensures globalThis stubs are in place before module init runs.
 
-const { parse, resolveFile, registerBodyType } = await import('../out/parser.js');
+const { parse, resolveFile } = await import('../out/parser.js');
 const { Multimap } = await import('../out/multimap.js');
 
-const { factoryGet, setBodyTypeRegistrar } = await import('../out/render-node.js');
+const { factoryGet } = await import('../out/render-node.js');
 const { SourceFile } = await import('../out/source-file.js');
-setBodyTypeRegistrar(registerBodyType);
 
 // Import type files for their side effects (they call RvmarkRegistry.register).
 await import('../out/types/text.js');

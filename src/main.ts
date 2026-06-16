@@ -9,9 +9,8 @@
  * window.__RVMARK_PAGE__. This avoids inline scripts in the iframe srcdoc.
  */
 
-import { registerBodyType as registerParserBodyType } from './parser.js';
 import { prerootFrame } from './state.js';
-import { buildRenderNode, setBodyTypeRegistrar, RenderNode } from './render-node.js';
+import { buildRenderNode, RenderNode } from './render-node.js';
 import { resolveSlugInFile, parseCompoundSlug, resolveFocusSlug } from './shared.js';
 import type { SourceFile } from './source-file.js';
 import { loadPageFile, setPageContext } from './loader.js';
@@ -43,8 +42,6 @@ declare global {
     _rvmarkFindNodes?: typeof findNodes;
   }
 }
-
-setBodyTypeRegistrar(registerParserBodyType);
 
 async function renderRoot(
   sourceFile:    SourceFile,

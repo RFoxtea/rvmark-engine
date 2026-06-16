@@ -6,10 +6,12 @@
  * exist. It only extracts structure (numbering, attrs, label, bodyLines).
  *
  * The one parser-level convention for body lines is the fenced code block
- * (``` or ~~~) placed immediately below the node line, which is collected when a
- * node's type has registered itself as a body-collecting type via registerBodyType(),
- * AND the node has no inline label (i.e. it is in block-body mode rather than
- * inline-value mode). The matching closing fence ends the body.
+ * (``` or ~~~) placed immediately below the node line. It is captured into
+ * bodyLines unconditionally — for any node, regardless of label or type. The
+ * parser makes no judgment about whether the body is wanted; it just records
+ * what is in the source. The matching closing fence ends the body. Whether
+ * anything consumes bodyLines is left entirely to the type handler; a handler
+ * that ignores it simply drops the body.
  *
  * Sigil syntax is normalized to canonical alphanumeric keys on parse:
  *   #value   → id
@@ -21,7 +23,6 @@
  *
  * Exports:
  *   parse(src)            → { meta, roots, nodeMap }
- *   registerBodyType(typeName)
  */
 
 import { Multimap } from './multimap.js';
@@ -153,15 +154,6 @@ export interface RawFile {
   nodeMap: Record<string, RawNode>;
 }
 
-// Types that collect a multiline body from a fenced code block (``` or ~~~).
-// Populated by registerBodyType() — called by factoryRegister in render-node.ts
-// when a factory with collectsBody: true is registered.
-const bodyTypes = new Set<string>();
-
-export function registerBodyType(typeName: string): void {
-  bodyTypes.add(typeName);
-}
-
 // Parse a `;`-separated attribute block body (the part inside `{…}`).
 // Sigils normalize to canonical keys:
 //   #value     → id
@@ -288,13 +280,19 @@ export function parse(src: string): RawFile {
       const node: ParseRawNode = { depth, ordinal, attrs, tags, label, bodyLines: [] };
       rawNodes.push(node);
       i++;
-      // Collect multiline body delimited by a fenced code block.
-      // The first non-blank line after the node must open a fence (```+ or ~~~+).
-      // Body collection ends when the matching closing fence is found.
-      // The fence lines themselves are stripped; only the content between them
-      // is stored in bodyLines.
-      const effectiveType = attrs.get('type');
-      if (effectiveType && bodyTypes.has(effectiveType) && !node.label.trim()) {
+      // Collect a multiline body delimited by a fenced code block (```+ or ~~~+),
+      // if the first non-blank line after the node opens one. Body collection ends
+      // at the matching closing fence. The fence lines themselves are stripped;
+      // only the content between them is stored in bodyLines.
+      //
+      // Captured UNCONDITIONALLY — for any node, label or no label, type or no
+      // type. The SourceNode just records what's in the source; it makes no
+      // judgment about whether the body is "wanted". Whether anything consumes
+      // bodyLines is a downstream decision for the type handler (a handler that
+      // ignores it simply drops the body). A node may carry both a label and a
+      // body; handlers that treat them as mutually exclusive (e.g. positional-value
+      // types like image/iframe, where the label is the value) just ignore the body.
+      {
         // Peek ahead for the opening fence, skipping blank lines
         let j = i;
         while (j < lines.length && lines[j].trim() === '') j++;

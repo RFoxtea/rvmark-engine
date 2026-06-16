@@ -62,13 +62,12 @@ export interface StaticBuildContext {
 
 export interface NodeTypeFactory {
   readonly defaultOpen?: boolean;
-  readonly collectsBody?: boolean;
   create(renderNode: RenderNode): TypeHandler;
   staticRenderBody?(node: SourceNode, ctx: StaticBuildContext): string | null;
 }
 
 // ── Factory registry ──────────────────────────────────────────────────────────
-export { factoryRegister, factoryGet, setBodyTypeRegistrar } from './type-registry.js';
+export { factoryRegister, factoryGet } from './type-registry.js';
 
 // ── show-when evaluation ──────────────────────────────────────────────────────
 // Returns true if the node should be HIDDEN (condition means "hide when").

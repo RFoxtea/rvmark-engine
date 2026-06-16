@@ -2,7 +2,7 @@
  * markdown.ts
  *
  * Renders a multiline Markdown body inside a node.
- * Body lines are collected by the parser (collectsBody: true).
+ * Body lines are collected by the parser from a following fenced code block.
  *
  * Supports the full CommonMark spec via marked.js, plus:
  *   - GFM tables
