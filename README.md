@@ -11,19 +11,30 @@ dependency.
 
 ## Installation
 
+rvmark is not yet published to npm. For now, clone the repository and build the engine
+locally:
+
 ```sh
-npm install rvmark
+git clone <repo-url> rvmark-engine
+cd rvmark-engine
+npm install
+npm run build
 ```
 
-This installs the `rvmark-build` CLI and exposes the engine's build/runtime entry points.
+This produces the `rvmark-build` CLI at `bin/rvmark.mjs` and the engine's
+build/runtime entry points. A consuming project can depend on the engine via a local
+path (`"rvmark": "file:../rvmark-engine"`).
+
+> An installable npm package (`npm install rvmark`) is planned but not yet available.
 
 ## Usage
 
-Build a directory of `.rvmark` content into a static site:
+Build a directory of `.rvmark` content into a static site (invoke the CLI via its bin
+path, or through a consuming project's `rvmark-build` script):
 
 ```sh
-rvmark-build --content <dir> --out <dir> [--theme <file>] [--template <file>]
-             [--assets <dir>] [--custom-types <dir>] [--mount <path>] [--include-drafts]
+node bin/rvmark.mjs --content <dir> --out <dir> [--theme <file>] [--template <file>]
+                    [--assets <dir>] [--custom-types <dir>] [--mount <path>] [--include-drafts]
 ```
 
 Defaults: `--content rvmark`, `--out dist`.
@@ -34,6 +45,8 @@ server-side runtime: the engine runs at build time, and the hydration runtime ru
 the visitor's browser.
 
 ## Package exports
+
+Once a project depends on the engine (via npm or a `file:` path), it resolves by name:
 
 ```js
 import { buildSite } from 'rvmark/build';   // programmatic build entry
