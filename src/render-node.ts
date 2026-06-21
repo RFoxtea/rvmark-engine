@@ -401,6 +401,7 @@ export class RenderNode {
     const selectionInside = selection === this
       || (!!selection && this.li.contains(selection.li));
     const focusInside = !!this._handler?.content.contains(document.activeElement);
+    let pushedTo: RenderNode | null = null;
     if (selectionInside || focusInside) {
       let liveAncestor = this.parent();
       while (liveAncestor && (liveAncestor._destroying || !liveAncestor._handler?.selectable)) {
@@ -410,12 +411,20 @@ export class RenderNode {
       // so only call setSelection when we aren't also moving focus.
       if (focusInside) liveAncestor?.content.focus();
       else RenderNode.setSelection(liveAncestor);
+      pushedTo = liveAncestor ?? null;
     }
     this._destroyExistingChildren();
     this._handler?.onDestroy?.();
     for (const v of this.attrs.getAll('on-destroy')) applyEventAttr(v, this);
     this.li.remove();
     this._onVacate?.();
+    // Selection pushed to an ancestor on destroy isn't a keyboard/click move, so
+    // nothing else scrolls it into view (setSelection only scrolls horizontally).
+    // Scroll after removal so layout reflects the now-gone subtree.
+    if (pushedTo?._handler) {
+      const ancestorContent = pushedTo._handler.content;
+      requestAnimationFrame(() => scrollRowIntoMiddle(ancestorContent));
+    }
   }
 
   fireConnected(): void {

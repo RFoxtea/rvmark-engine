@@ -287,6 +287,8 @@ class TextTypeHandler extends BaseTypeHandler {
   private async doExpand(scroll = true) {
     await expandNode(this.rn);
     for (const v of this.rn.sourceNode.attrs.getAll('on-expand')) applyEventAttr(v, this.rn);
+    // This rAF may fire after the node was collapsed/destroyed (expandNode is
+    // awaited above); scrollRowIntoMiddle no-ops on a detached row.
     if (scroll) requestAnimationFrame(() => scrollRowIntoMiddle(this.content));
     if (RenderNode.currentSelection === this.rn) this.activate();
   }

@@ -18,6 +18,11 @@ export function scrollRowIntoMiddle(
   const scroller = document.getElementById('tree-scroll');
   if (!scroller) return;
 
+  // A detached row reports a (0,0) rect; scrolling to it yanks the scroller to a
+  // garbage offset. This happens when a queued scroll rAF (e.g. scroll-on-expand)
+  // fires after its node was collapsed/destroyed — bail rather than corrupt scroll.
+  if (!scroller.contains(targetContent)) return;
+
   const scrollerRect = scroller.getBoundingClientRect();
   const targetRect   = targetContent.getBoundingClientRect();
   const scrollerH    = scroller.clientHeight;
