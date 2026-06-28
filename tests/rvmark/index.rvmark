@@ -149,6 +149,11 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
   2. {#watch-parent} watch parent
     1. {#watch-indicator; ? &trigvar==1} watch indicator
 
+25. {#multi-cond-root; &conda=0; &condb=0; open} multi-condition show-when fixture root
+  1. {#multi-cond-trigger-a; on-action: &conda<<1} multi-cond trigger a
+  2. {#multi-cond-trigger-b; on-action: &condb<<1} multi-cond trigger b
+  3. {#multi-cond-indicator; ?&conda==1; ?&condb==1} multi-cond indicator
+
 22. {#listbox-root; &step=; open} Listbox span state assignment fixture
   1. {#listbox-node} [A]{&step<<a} [B]{&step<<b} [C]{&step<<c}
     1. {#listbox-indicator-a; ? &step==a} step is a

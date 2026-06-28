@@ -153,19 +153,21 @@ function reactiveSpawnSlot(
 
 // Returns the spawned RenderNode if visible immediately, null if deferred.
 function initSlot(
-  slot:        ChildSlot,
-  showWhenRaw: string | undefined,
-  focusSlug:   string | null,
-  parentMeta:  Record<string, unknown>,
+  slot:         ChildSlot,
+  showWhenRaws: string[],
+  focusSlug:    string | null,
+  parentMeta:   Record<string, unknown>,
 ): RenderNode | null {
-  if (!showWhenRaw) {
+  if (showWhenRaws.length === 0) {
     return spawnSlot(slot, focusSlug, parentMeta);
   }
 
-  const keys = [...new Set(parseShowWhen(showWhenRaw).map(c => c.key))];
+  const isHidden = () => showWhenRaws.some(sw => evalShowWhen(sw, slot.parentState));
+
+  const keys = [...new Set(showWhenRaws.flatMap(sw => parseShowWhen(sw)).map(c => c.key))];
 
   const check = () => {
-    const hidden = evalShowWhen(showWhenRaw, slot.parentState);
+    const hidden = isHidden();
     if (!hidden && slot.live === null) {
       reactiveSpawnSlot(slot, focusSlug, parentMeta);
     } else if (hidden && slot.live !== null) {
@@ -177,8 +179,7 @@ function initSlot(
   keys.forEach((k, i) => slot.parentState.subscribe(k, fns[i]));
   slot.teardown = () => keys.forEach((k, i) => slot.parentState.unsubscribe(k, fns[i]));
 
-  const hidden = evalShowWhen(showWhenRaw, slot.parentState);
-  if (!hidden) return spawnSlot(slot, focusSlug, parentMeta);
+  if (!isHidden()) return spawnSlot(slot, focusSlug, parentMeta);
   return null;
 }
 
@@ -368,16 +369,15 @@ export class RenderNode {
     const isVisible = (c: SourceNode) => {
       const a = nodeAttrs(c);
       if (a.has('draft')) return false;
-      const sw = a.get('show-when');
-      return !sw || !evalShowWhen(sw, this.state);
+      return !a.getAll('show-when').some(sw => evalShowWhen(sw, this.state));
     };
 
     callback(nodes.some(isVisible));
 
     const keys = new Set<string>();
     for (const child of nodes) {
-      const sw = nodeAttrs(child).get('show-when');
-      if (sw) for (const cond of parseShowWhen(sw)) keys.add(cond.key);
+      for (const sw of nodeAttrs(child).getAll('show-when'))
+        for (const cond of parseShowWhen(sw)) keys.add(cond.key);
     }
     if (!keys.size) return () => {};
 
@@ -532,8 +532,8 @@ export class RenderNode {
     // Spawn the initial batch (those not deferred by show-when).
     const initialRns: RenderNode[] = [];
     for (const slot of slots) {
-      const showWhenRaw = nodeAttrs(slot.node).get('show-when');
-      const rn = initSlot(slot, showWhenRaw, focusSlug, parentMeta);
+      const showWhenRaws = nodeAttrs(slot.node).getAll('show-when');
+      const rn = initSlot(slot, showWhenRaws, focusSlug, parentMeta);
       if (rn) { ul.appendChild(rn.li); initialRns.push(rn); }
     }
     recomputeAria(slots);

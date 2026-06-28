@@ -1765,6 +1765,52 @@ test.describe('watchChildren', () => {
   });
 });
 
+// ── Multi-condition show-when ─────────────────────────────────────────────────
+// Fixture: #multi-cond-indicator carries two separate show-when parts,
+// {?&conda==1; ?&condb==1}, which parse to two distinct 'show-when' attr values.
+// The node must stay hidden until BOTH conditions hold (AND-on-show). Regression
+// guard for the bug where the reader used Multimap.get() and kept only the last
+// condition, so a single trigger wrongly revealed the node.
+
+test.describe('multi-condition show-when', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/#multi-cond-root');
+    await waitForTree(page);
+    await waitForNode(page, 'multi-cond-trigger-a');
+  });
+
+  test('indicator hidden on first load when neither condition holds', async ({ page }) => {
+    expect(await tryNodeContent(page, 'multi-cond-indicator')).toBeNull();
+  });
+
+  test('indicator stays hidden when only the last condition holds', async ({ page }) => {
+    const trigB = await nodeContent(page, 'multi-cond-trigger-b');
+    await trigB.click();
+    await trigB.press('Enter');
+    // condb==1 but conda still 0 — pre-fix this wrongly showed the node.
+    await waitForNode(page, 'multi-cond-trigger-a');
+    expect(await tryNodeContent(page, 'multi-cond-indicator')).toBeNull();
+  });
+
+  test('indicator stays hidden when only the first condition holds', async ({ page }) => {
+    const trigA = await nodeContent(page, 'multi-cond-trigger-a');
+    await trigA.click();
+    await trigA.press('Enter');
+    await waitForNode(page, 'multi-cond-trigger-b');
+    expect(await tryNodeContent(page, 'multi-cond-indicator')).toBeNull();
+  });
+
+  test('indicator visible only when both conditions hold', async ({ page }) => {
+    const trigA = await nodeContent(page, 'multi-cond-trigger-a');
+    await trigA.click();
+    await trigA.press('Enter');
+    const trigB = await nodeContent(page, 'multi-cond-trigger-b');
+    await trigB.click();
+    await trigB.press('Enter');
+    await expect(await waitForNode(page, 'multi-cond-indicator')).toBeVisible();
+  });
+});
+
 // ── iframe-pass ───────────────────────────────────────────────────────────────
 
 test.describe('iframe-pass', () => {

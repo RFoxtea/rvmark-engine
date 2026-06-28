@@ -1,7 +1,7 @@
 /**
  * types/video.ts
  *
- * Embeds a video in the node body. Two sources are supported:
+ * Embeds a video in the node body. Three sources are supported:
  *
  *   1. YouTube videos and playlists (embedded via the IFrame Player API):
  *        {= video} https://www.youtube.com/watch?v=...
@@ -9,14 +9,18 @@
  *        {= video} https://www.youtube.com/playlist?list=...
  *        {= video} PLxxxxxxxxxxxxxxxxx  (bare 13+ char playlist ID)
  *
- *   2. Direct video files (embedded via a native <video> element):
+ *   2. Odysee videos (embedded via an iframe to odysee.com/$/embed/...):
+ *        {= video} https://odysee.com/@channel:c/video-name:a
+ *
+ *   3. Direct video files (embedded via a native <video> element):
  *        {= video} ./clip.mp4
  *        {= video} https://example.com/clip.webm
  *        {type: video; src: ./clip.mp4}
  *
  * For YouTube embeds the IFrame Player API (enablejsapi=1 + postMessage) is used
  * to toggle play/pause from the tree row via Enter or Space. For native files the
- * <video> element is toggled directly.
+ * <video> element is toggled directly. Odysee exposes no documented player API,
+ * so Enter/Space is a no-op there — use the embed's own native controls.
  *
  * Player state constants (from YT IFrame API):
  *   -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 video cued
@@ -57,6 +61,9 @@ class VideoTypeHandler implements TypeHandler {
 
   private readonly _canonicalHref:  string | null;
   private _iframe:                  HTMLIFrameElement | null = null;
+  // True when _iframe is a YouTube embed wired to the IFrame Player API.
+  // Odysee iframes have no player API, so their play/pause toggle is a no-op.
+  private _ytIframe:                boolean = false;
   private _video:                   HTMLVideoElement | null = null;
   private _gating!: FocusGating;
 
@@ -116,25 +123,37 @@ class VideoTypeHandler implements TypeHandler {
       content.appendChild(wrap);
       this._video = video;
     } else {
-      const embed = rawUrl ? ytEmbed(rawUrl) : null;
-      this._canonicalHref = embed?.href ?? null;
-      if (embed) {
+      const yt = rawUrl ? ytEmbed(rawUrl) : null;
+      const odysee = !yt && rawUrl ? odyseeEmbed(rawUrl) : null;
+      this._canonicalHref = yt?.href ?? odysee?.href ?? null;
+      if (yt) {
         const wrap = document.createElement('div');
         wrap.className = 'video-wrap';
         wrap.innerHTML = `<iframe
-          src="${embed.src}&enablejsapi=1"
+          src="${yt.src}&enablejsapi=1"
           allowfullscreen
           loading="lazy"
         ></iframe>`;
         content.appendChild(wrap);
 
         this._iframe = wrap.querySelector('iframe')!;
+        this._ytIframe = true;
         this._iframe.addEventListener('load', () => {
           this._iframe!.contentWindow!.postMessage(
             JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
             'https://www.youtube-nocookie.com'
           );
         });
+      } else if (odysee) {
+        const wrap = document.createElement('div');
+        wrap.className = 'video-wrap';
+        wrap.innerHTML = `<iframe
+          src="${odysee.src}"
+          allowfullscreen
+          loading="lazy"
+        ></iframe>`;
+        content.appendChild(wrap);
+        this._iframe = wrap.querySelector('iframe')!;
       }
     }
 
@@ -177,7 +196,8 @@ class VideoTypeHandler implements TypeHandler {
       else this._video.pause();
       return;
     }
-    if (!this._iframe) return;
+    // Odysee embeds have no documented player API; only YouTube can be toggled.
+    if (!this._iframe || !this._ytIframe) return;
     const playing = _ytPlaying.get(this._iframe) ?? false;
     this._iframe.contentWindow!.postMessage(
       JSON.stringify({ event: 'command', func: playing ? 'pauseVideo' : 'playVideo', args: [] }),
@@ -202,7 +222,7 @@ const videoFactory: NodeTypeFactory = {
       if (!url) return null;
       return `<video src="${esc(url)}" controls preload="metadata" playsinline referrerpolicy="no-referrer"></video>`;
     }
-    const embed = ytEmbed(rawUrl);
+    const embed = ytEmbed(rawUrl) ?? odyseeEmbed(rawUrl);
     if (!embed) return null;
     return `<p><a href="${embed.href}" target="_blank" rel="noopener noreferrer">${embed.label}</a></p>`;
   },
@@ -222,9 +242,9 @@ function safeMediaUrl(resolved: string): string | null {
   return (!proto || proto === 'http' || proto === 'https') ? resolved : null;
 }
 
-/** True when the source points at a direct video file rather than a YouTube link. */
+/** True when the source points at a direct video file rather than a YouTube/Odysee link. */
 function isFileSource(url: string): boolean {
-  if (/(?:youtube\.com|youtu\.be)/i.test(url)) return false;
+  if (/(?:youtube\.com|youtu\.be|odysee\.com)/i.test(url)) return false;
   return FILE_EXT_RE.test(url);
 }
 
@@ -256,4 +276,33 @@ function ytEmbed(url: string): { src: string; href: string; label: string } | nu
     label: 'Watch on YouTube',
   };
   return null;
+}
+
+/**
+ * Maps an odysee.com video page URL to its iframe embed URL.
+ *
+ * The rule is simply to insert `$/embed/` after the host:
+ *   https://odysee.com/@channel:c/video-name:a
+ *     → https://odysee.com/$/embed/@channel:c/video-name:a
+ *
+ * We only accept absolute https URLs whose host is exactly odysee.com (or a
+ * subdomain of it) and whose path is not already an `/$/...` app route, so a
+ * crafted `src`/label can't redirect the embed elsewhere. Odysee exposes no
+ * documented player API, so there is no equivalent of YouTube's enablejsapi.
+ */
+function odyseeEmbed(url: string): { src: string; href: string; label: string } | null {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return null; }
+  if (parsed.protocol !== 'https:') return null;
+  if (!/^(?:[a-z0-9-]+\.)*odysee\.com$/i.test(parsed.hostname)) return null;
+
+  const path = parsed.pathname.replace(/^\/+/, '');
+  // Reject app routes (`/$/...`, including an already-embed URL) and empty paths.
+  if (!path || path.startsWith('$/')) return null;
+
+  return {
+    src:   `https://odysee.com/$/embed/${path}`,
+    href:  url,
+    label: 'Watch on Odysee',
+  };
 }
