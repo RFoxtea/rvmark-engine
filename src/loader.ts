@@ -52,7 +52,28 @@ async function getRvmarkSource(address: string): Promise<RvmarkSourceResult> {
   const url = addressToFetchUrl(address);
   const res = await fetch(url, { cache: 'no-cache' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return { source: await res.text() };
+  const source = await res.text();
+  // Content-type guard. A missing .rvmark can come back as HTTP 200 when the
+  // server rewrites unknown paths to an HTML fallback (SPA catch-all, custom
+  // 200 error page). Without this check the HTML would be parse()d as rvmark,
+  // yielding a corrupt SourceFile instead of a clean miss — which silently
+  // defeats the caller's /index.rvmark fallback (see loadRvmarkFile). Treat an
+  // HTML response as not-found so the fallback fires. We check both the
+  // declared content-type and the body's leading bytes, because a server may
+  // serve .rvmark as application/octet-stream (nginx default) yet still hand
+  // back an HTML document for the miss.
+  if (looksLikeHtml(res, source)) {
+    throw new Error(`expected rvmark source, got HTML (${url})`);
+  }
+  return { source };
+}
+
+// True when the response body is an HTML document rather than rvmark source.
+function looksLikeHtml(res: Response, source: string): boolean {
+  const ct = res.headers.get('content-type') ?? '';
+  if (ct.includes('text/html')) return true;
+  const head = source.trimStart().slice(0, 15).toLowerCase();
+  return head.startsWith('<!doctype html') || head.startsWith('<html');
 }
 
 // Compute the URL to fetch given a canonical address. The canonical address
