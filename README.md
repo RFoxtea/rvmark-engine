@@ -21,7 +21,7 @@ npm install
 npm run build
 ```
 
-This produces the `rvmark-build` CLI at `bin/rvmark.mjs` and the engine's
+This produces the `rvmark` CLI at `bin/rvmark.mjs` and the engine's
 build/runtime entry points. A consuming project can depend on the engine via a local
 path (`"rvmark": "file:../rvmark-engine"`).
 
@@ -30,7 +30,7 @@ path (`"rvmark": "file:../rvmark-engine"`).
 ## Usage
 
 Build a directory of `.rvmark` content into a static site (invoke the CLI via its bin
-path, or through a consuming project's `rvmark-build` script):
+path, or the globally-installed `rvmark` command):
 
 ```sh
 node bin/rvmark.mjs --content <dir> --out <dir> [--theme <file>] [--template <file>]

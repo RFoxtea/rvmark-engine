@@ -1,7 +1,7 @@
 /**
  * build.mjs — compile the engine, then (optionally) build the bundled test
  * fixtures. Consumers of the published package don't run this; they invoke the
- * `rvmark-build` CLI against their own content. This is the engine's own
+ * `rvmark` CLI against their own content. This is the engine's own
  * dev/test build.
  *
  * Usage: node build/build.mjs [--test] [--include-drafts]

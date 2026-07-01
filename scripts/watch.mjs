@@ -1,70 +1,90 @@
 /**
- * watch.mjs — watch paths for changes, then re-run a build command.
+ * watch.mjs — watch paths for changes, then run a debounced callback.
  *
- * Generic across consumers: pass the watch targets and the rebuild command so
- * the same watcher serves both the engine's own dev loop and a content site.
+ * Generic across consumers. Importable as a library (`watchPaths`) so the rvmark
+ * CLI can drive an in-process rebuild, and runnable directly as a CLI that spawns
+ * an external rebuild command.
  *
- * Usage:
+ * Library:
+ *   import { watchPaths } from './watch.mjs';
+ *   watchPaths(['rvmark', 'theme.css'], () => rebuild());
+ *
+ * CLI:
  *   node watch.mjs --watch <path> [--watch <path> ...] -- <build cmd...>
  *
- * Each --watch path may be a file or a directory (watched recursively).
+ * Each watch path may be a file or a directory (watched recursively — recursive
+ * fs.watch requires Node >= 20 on Linux; supported on macOS/Windows throughout).
  * Everything after `--` is the rebuild command (argv-style).
- *
- * Example (site):
- *   node watch.mjs --watch rvmark --watch theme.css -- npx rvmark-build --content rvmark --theme theme.css --out dist
  */
 
 import { watch } from 'fs';
 import { spawn } from 'child_process';
 
-const argv = process.argv.slice(2);
-const watchTargets = [];
-let cmd = [];
-for (let i = 0; i < argv.length; i++) {
-  if (argv[i] === '--watch') { watchTargets.push(argv[++i]); continue; }
-  if (argv[i] === '--') { cmd = argv.slice(i + 1); break; }
+/**
+ * Watch `targets`, calling `onChange` (debounced) when any of them changes.
+ * Returns an array of FSWatcher handles so the caller can close them.
+ */
+export function watchPaths(targets, onChange, { debounceMs = 100 } = {}) {
+  let timer = null;
+  const handler = (_eventType, filename) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      console.log(`  change detected: ${filename || '(unknown)'}`);
+      onChange(filename);
+    }, debounceMs);
+  };
+  const watchers = [];
+  for (const target of targets) {
+    try { watchers.push(watch(target, { recursive: true }, handler)); } catch (_) {}
+  }
+  return watchers;
 }
 
-if (watchTargets.length === 0 || cmd.length === 0) {
-  console.error('watch.mjs: need at least one --watch <path> and a `-- <build cmd>`');
-  process.exit(1);
+/**
+ * Serialize calls to `run` (an async/callback build): never run two at once,
+ * coalesce overlapping requests into a single trailing run. `run(done)` must
+ * call `done()` when finished.
+ */
+export function serializeBuilds(run) {
+  let building = false;
+  let queued   = false;
+  function trigger() {
+    if (building) { queued = true; return; }
+    building = true;
+    run(() => {
+      building = false;
+      if (queued) { queued = false; trigger(); }
+    });
+  }
+  return trigger;
 }
 
-let building = false;
-let queued   = false;
+// ---- CLI mode: only when executed directly, not when imported. ----
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const argv = process.argv.slice(2);
+  const watchTargets = [];
+  let cmd = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--watch') { watchTargets.push(argv[++i]); continue; }
+    if (argv[i] === '--') { cmd = argv.slice(i + 1); break; }
+  }
 
-function build() {
-  if (building) { queued = true; return; }
-  building = true;
-  const start = Date.now();
-  const child = spawn(cmd[0], cmd.slice(1), { stdio: 'inherit' });
-  child.on('close', (code) => {
-    const ms = Date.now() - start;
-    if (code === 0) {
-      console.log(`  rebuilt in ${ms}ms\n`);
-    } else {
-      console.error(`  build failed (exit ${code}) in ${ms}ms\n`);
-    }
-    building = false;
-    if (queued) {
-      queued = false;
-      build();
-    }
+  if (watchTargets.length === 0 || cmd.length === 0) {
+    console.error('watch.mjs: need at least one --watch <path> and a `-- <build cmd>`');
+    process.exit(1);
+  }
+
+  const build = serializeBuilds((done) => {
+    const start = Date.now();
+    const child = spawn(cmd[0], cmd.slice(1), { stdio: 'inherit' });
+    child.on('close', (code) => {
+      const ms = Date.now() - start;
+      if (code === 0) console.log(`  rebuilt in ${ms}ms\n`);
+      else            console.error(`  build failed (exit ${code}) in ${ms}ms\n`);
+      done();
+    });
   });
-}
 
-// Debounce: coalesce rapid changes into a single rebuild
-let timer = null;
-function onChange(eventType, filename) {
-  if (timer) clearTimeout(timer);
-  timer = setTimeout(() => {
-    console.log(`  change detected: ${filename || '(unknown)'}`);
-    build();
-  }, 100);
+  watchPaths(watchTargets, build);
+  console.log('Watching for changes...\n');
 }
-
-for (const target of watchTargets) {
-  try { watch(target, { recursive: true }, onChange); } catch (_) {}
-}
-
-console.log('Watching for changes...\n');
