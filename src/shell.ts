@@ -36,7 +36,6 @@ export function setFooter(nodeMeta: Record<string, unknown> | null): void {
     footer.appendChild(document.createTextNode(' · '));
     const label = document.createElement('label');
     label.className = 'show-hidden-toggle footer-section';
-    label.title = 'Show nodes marked [hidden]';
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.id = 'show-hidden-cb';
