@@ -17,9 +17,11 @@ import { tagsNodeAttrs, mergeNodeAttrs, resolveTagDef } from './tags.js';
 import { scrollRowIntoMiddle } from './scroll.js';
 import type { SourceNode } from './parser.js';
 import { parseOnSpawn } from './parser.js';
+import { Multimap } from './multimap.js';
 import type { ResolvedAttrs } from './render-node.js';
 import { RenderNode } from './render-node.js';
 import { resolveRef, resolveEffectiveChildren, resolveTransclusionConfig } from './transclusion.js';
+import { TRANSCLUDE_DEADLINE_MS } from './constants.js';
 import type { PassEntry, PassMode, StateNode } from './state.js';
 import { exhibitStampScope, exhibitHandleNode, exhibitOpenFromNode } from './exhibit.js';
 export { exhibitOpenFromNode };
@@ -68,22 +70,77 @@ export async function expandNode(rn: RenderNode, transcludeRef?: string): Promis
     if (!node || !node.children.length) return;
     rn.setChildren(node.children, null, rn.meta, passChildrenEntries);
   } else if (childrenList) {
-    const preloads = childrenList.map(r => r === '*' ? null : resolveRef(r, sourceNode.sourceFile.pageAddress));
+    const addr = sourceNode.sourceFile.pageAddress;
+    const needsResolve = childrenList.some(r => r !== '*');
+
+    // Phase 1: while any ref is in flight, show a single loading marker. It rides
+    // the setChildren mount race (MOUNT_SETTLE_MS), so a fast resolve supersedes it
+    // before it ever paints — no flash — while a slow one reveals it.
+    if (needsResolve) {
+      rn.setChildren([makeLoadingNode(sourceNode)], null, rn.meta, passChildrenEntries);
+    }
+
+    // Phase 2: race every ref against one shared deadline. A ref still unresolved
+    // when the deadline fires becomes a timeout marker; an unresolvable ref becomes
+    // a not-found marker. Refs settle together (no progressive per-ref mounting):
+    // one wholesale swap into the flattened result. `*` contributes local children.
+    const TIMED_OUT = Symbol('timed-out');
+    const deadline = new Promise<typeof TIMED_OUT>(res => setTimeout(() => res(TIMED_OUT), TRANSCLUDE_DEADLINE_MS));
+    const outcomes = await Promise.all(childrenList.map(async (rawRef) => {
+      if (rawRef === '*') return { rawRef, star: true, node: null as SourceNode | null, timedOut: false };
+      const node = await Promise.race([resolveRef(rawRef, addr), deadline]);
+      if (node === TIMED_OUT) return { rawRef, star: false, node: null, timedOut: true };
+      return { rawRef, star: false, node: node as SourceNode | null, timedOut: false };
+    }));
+
     const allNodes: SourceNode[] = [];
-    for (let i = 0; i < childrenList.length; i++) {
-      const rawRef = childrenList[i];
-      if (rawRef === '*') {
+    for (const o of outcomes) {
+      if (o.star) {
         if (sourceNode.children.length) allNodes.push(...sourceNode.children as SourceNode[]);
+      } else if (o.node) {
+        allNodes.push(...await resolveEffectiveChildren(o.node, new Set([o.rawRef])));
       } else {
-        const node = await preloads[i] as any;
-        if (!node) continue;
-        allNodes.push(...await resolveEffectiveChildren(node, new Set([childrenList[i]])));
+        allNodes.push(makeErrorNode(sourceNode, o.rawRef, o.timedOut ? 'timeout' : 'error'));
       }
     }
-    rn.setChildren(allNodes.length ? allNodes : [], null, rn.meta, passChildrenEntries);
+    rn.setChildren(allNodes, null, rn.meta, passChildrenEntries);
   } else if (sourceNode.children.length) {
     rn.setChildren(sourceNode.children as SourceNode[], null, rn.meta, passChildrenEntries);
   }
+}
+
+// ── Synthetic transclusion markers ─────────────────────────────────────────
+// Programmatically-minted child nodes shown while a children-mode transclusion
+// resolves. They borrow the host's sourceFile (for tag/media/address resolution)
+// and carry no identity fields — they are never in the nodeMap and never a focus
+// target. Mirrors the errorNode pattern in types/custom.ts.
+
+function syntheticChild(host: SourceNode, attrs: Multimap, label: string): SourceNode {
+  return {
+    slug: '', permalinkId: '', numbering: '',
+    attrs, tags: [], label, bodyLines: [],
+    children: [], meta: {}, sourceFile: host.sourceFile,
+  };
+}
+
+// The single "resolving…" marker (loading type → animated placeholder).
+function makeLoadingNode(host: SourceNode): SourceNode {
+  const attrs = new Multimap();
+  attrs.set('type', 'loading');
+  return syntheticChild(host, attrs, '');
+}
+
+// A per-ref marker for a broken ('not found') or timed-out ref: a plain text node,
+// so it renders exactly like any other row (bullet + label). Exported so the
+// link-mode transclusion path (blastocyte) produces an identical error row — the
+// broken link-mode and children-mode cases must look the same.
+export function makeErrorNode(host: SourceNode, ref: string, reason: 'error' | 'timeout'): SourceNode {
+  const attrs = new Multimap();
+  attrs.set('type', 'text');
+  attrs.set('bullet', '⨂');            // distinct error bullet
+  attrs.append('class', 'node-load-error');  // muted row (styles.css)
+  const label = reason === 'timeout' ? `${ref} timed out` : `${ref} not found`;
+  return syntheticChild(host, attrs, label);
 }
 
 // ── Exhibit wiring ─────────────────────────────────────────────────────────

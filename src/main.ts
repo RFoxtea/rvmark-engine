@@ -16,6 +16,7 @@ import type { SourceFile } from './source-file.js';
 import { loadPageFile, setPageContext } from './loader.js';
 import { setMeta, setFooter, clearTree, showError } from './shell.js';
 import { waitForPageContext, initPrerootListeners } from './iframe-guest.js';
+import { MOUNT_SETTLE_MS } from './constants.js';
 // Side-effect imports: register all built-in types via factoryRegister
 import './types/text.js';
 import './markdown.js';
@@ -71,7 +72,7 @@ async function renderRoot(
   const rootRn = buildRenderNode(node, resolvedFocusSlug);
   root.appendChild(rootRn.li);
   rootRn.fireConnected();
-  await Promise.race([rootRn.whenReady, new Promise<void>(r => setTimeout(r, 250))]);
+  await Promise.race([rootRn.whenReady, new Promise<void>(r => setTimeout(r, MOUNT_SETTLE_MS))]);
   const firstContent = root.querySelector('.node-content') as HTMLElement | null;
   if (firstContent && !resolvedFocusSlug) {
     const firstRn: RenderNode | undefined = (firstContent.closest<HTMLElement>('.node') as any)?._renderNode;

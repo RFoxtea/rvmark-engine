@@ -758,6 +758,51 @@ test.describe('cross-file transclusion', () => {
   });
 });
 
+// ── Delayed & broken transclusions ───────────────────────────────────────────
+// A "delayed" transclusion is one whose .rvmark fetch is slow: we hold the fetch
+// open with request interception, gated on a promise the test controls. The
+// on-load link-mode embed (child-cross-embed) primes the shared file cache, so
+// child-cross-children awaits the same held fetch when expanded.
+
+test.describe('delayed and broken transclusions', () => {
+  test('delayed children-mode transclusion shows one loading marker, then settles', async ({ page }) => {
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    await page.route('**/_rvmark/other.rvmark', async (route) => {
+      await gate;               // hold the fetch — this IS the delay
+      await route.continue();
+    });
+
+    await page.goto('/');
+    await waitForTree(page);
+    const row = await waitForNode(page, 'child-cross-children');
+    await row.focus();
+    await row.press('ArrowRight');   // expand → phase 1 mounts the loading marker
+
+    const li = await nodeLi(page, 'child-cross-children');
+    const loading = li.locator('.node-children .node-content--loading');
+    await expect(loading).toHaveCount(1);   // exactly one marker while gated
+
+    release();                       // fetch completes → phase 2 swaps in real children
+    await expect(loading).toHaveCount(0);
+    await expect(li.locator('.node-children .node-content').first()).toContainText('Other file child');
+  });
+
+  test('broken children-mode transclusion shows a not-found error marker', async ({ page }) => {
+    await page.route('**/_rvmark/other.rvmark', (route) => route.fulfill({ status: 404, body: 'nope' }));
+
+    await page.goto('/');
+    await waitForTree(page);
+    const row = await waitForNode(page, 'child-cross-children');
+    await row.focus();
+    await row.press('ArrowRight');   // expand → ref fails → error marker (not silent)
+
+    const err = (await nodeLi(page, 'child-cross-children'))
+      .locator('.node-children .node-content').filter({ hasText: 'not found' });
+    await expect(err).toHaveCount(1);
+  });
+});
+
 // ── Markdown bodies ──────────────────────────────────────────────────────────
 
 test.describe('markdown bodies', () => {

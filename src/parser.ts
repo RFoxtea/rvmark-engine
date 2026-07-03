@@ -234,7 +234,8 @@ export function parse(src: string): RawFile {
   //   ordinal  — any alphanumeric string, or '-' / '*' (auto-numbered bullets)
   interface ParseRawNode {
     depth: number;
-    ordinal: string;
+    ordinal: string;   // raw ordinal literal; '-' / '*' for auto-numbered bullets
+    auto: boolean;     // true if ordinal was a '-' / '*' bullet (number assigned later)
     attrs: NodeAttrs;
     tags: Tag[];
     label: string;
@@ -243,14 +244,12 @@ export function parse(src: string): RawFile {
   const rawNodes: ParseRawNode[] = [];
   // Indent stack: array of indent strings seen so far (index 0 = root = "")
   const indentStack: string[] = [''];
-  // Auto-counter per depth level for '-' / '*' bullets
-  const bulletCounters = new Map<number, number>();
   while (i < lines.length) {
     const l = lines[i];
     const m = l.match(/^([ \t]*)(?:([a-zA-Z0-9]+)\.|([-*]))\s+(.*)$/);
     if (m) {
       const indent = m[1];
-      let ordinal = m[2] || m[3];
+      const ordinal = m[2] || m[3];
 
       // Resolve depth from indent stack
       let depth: number;
@@ -265,19 +264,13 @@ export function parse(src: string): RawFile {
         depth = indentStack.length;
       }
 
-      // Reset bullet counters for deeper levels than current
-      for (const k of bulletCounters.keys()) {
-        if (k >= depth) bulletCounters.delete(k);
-      }
-
-      // Auto-number bullet items
-      if (ordinal === '-' || ordinal === '*') {
-        bulletCounters.set(depth, (bulletCounters.get(depth) ?? 0) + 1);
-        ordinal = String(bulletCounters.get(depth));
-      }
+      // Auto-numbered bullets ('-' / '*') are not numbered here: their number
+      // depends on their explicit-integer siblings, which are only known once the
+      // tree is built. Flag them now; assignOrdinals resolves the number below.
+      const auto = ordinal === '-' || ordinal === '*';
 
       const { attrs, tags, label } = extractAttrs(m[4]);
-      const node: ParseRawNode = { depth, ordinal, attrs, tags, label, bodyLines: [] };
+      const node: ParseRawNode = { depth, ordinal, auto, attrs, tags, label, bodyLines: [] };
       rawNodes.push(node);
       i++;
       // Collect a multiline body delimited by a fenced code block (```+ or ~~~+),
@@ -333,29 +326,27 @@ export function parse(src: string): RawFile {
   const roots: RawNode[] = [];
   const stack: Array<{ depth: number; node: RawNode }> = [];
 
+  // Build the tree structure only. Ordinals — and the slug/permalinkId derived
+  // from them — are assigned afterwards in assignOrdinals, because an auto-numbered
+  // bullet's number depends on its siblings, known only once the group is complete.
+  const autoNodes = new Set<RawNode>();
+
   for (const praw of rawNodes) {
     const depth = praw.depth;
-    const idAttr = praw.attrs.get('id');
-    const slug = idAttr ?? praw.ordinal;
 
     while (stack.length && stack[stack.length - 1].depth >= depth) stack.pop();
-    const parentNode = stack.length ? stack[stack.length - 1].node : null;
-    const parentId = parentNode ? parentNode.permalinkId : null;
-    const permalinkId = idAttr
-      ?? (parentId ? `${parentId}.${praw.ordinal}` : `.${praw.ordinal}`);
 
     const node: RawNode = {
-      slug,
-      permalinkId,
-      numbering: praw.ordinal,
+      slug: '',
+      permalinkId: '',
+      numbering: praw.ordinal,   // raw literal for now; finalised in assignOrdinals
       attrs: praw.attrs,
       tags: praw.tags,
       label: praw.label,
       bodyLines: praw.bodyLines,
       children: [],
     };
-
-    nodeMap[slug] = node;
+    if (praw.auto) autoNodes.add(node);
 
     if (stack.length) {
       stack[stack.length - 1].node.children.push(node);
@@ -364,6 +355,31 @@ export function parse(src: string): RawFile {
     }
     stack.push({ depth, node });
   }
+
+  // Assign ordinals per sibling group. Auto-numbered bullets continue from the
+  // largest explicit-integer ordinal among their siblings (0 if none), taking the
+  // next integer each, in source order — so they never collide with explicit
+  // ordinals. Runs top-down: a node's permalinkId feeds its children's.
+  function assignOrdinals(siblings: RawNode[], parentId: string | null): void {
+    let maxInt = 0;
+    for (const n of siblings) {
+      if (!autoNodes.has(n) && /^\d+$/.test(n.numbering)) {
+        const v = parseInt(n.numbering, 10);
+        if (v > maxInt) maxInt = v;
+      }
+    }
+    let next = maxInt + 1;
+    for (const n of siblings) {
+      const ordinal = autoNodes.has(n) ? String(next++) : n.numbering;
+      const idAttr = n.attrs.get('id');
+      n.numbering   = ordinal;
+      n.slug        = idAttr ?? ordinal;
+      n.permalinkId = idAttr ?? (parentId ? `${parentId}.${ordinal}` : `.${ordinal}`);
+      nodeMap[n.slug] = n;
+      assignOrdinals(n.children, n.permalinkId);
+    }
+  }
+  assignOrdinals(roots, null);
 
   const head: Head = { meta, tagDefs, origins };
   return { head, roots, nodeMap };

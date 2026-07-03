@@ -49,10 +49,13 @@ export abstract class BaseTypeHandler implements TypeHandler {
 
   protected setExpandable(nowExpandable: boolean, tog: HTMLElement, collapse: () => void): void {
     if (!nowExpandable && this.rn.expanded) {
+      // Clear toggleable *before* collapsing so a re-entrant setExpandable(true)
+      // can be detected below. collapse() may destroy a focused child, moving
+      // focus to this node, firing on-select synchronously and re-entering
+      // setExpandable(true); if that happened toggleable is now true again and we
+      // must not clobber it back to false.
+      this.rn.toggleable = false;
       collapse();
-      // collapse() may destroy a focused child, moving focus to this node,
-      // firing on-select synchronously and re-entering setExpandable(true).
-      // If that happened, toggleable is already true — don't clobber it.
       if (this.rn.toggleable) return;
     }
     this.rn.toggleable = nowExpandable;

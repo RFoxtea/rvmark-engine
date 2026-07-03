@@ -26,6 +26,7 @@ import type { ExhibitConfig } from './exhibit.js';
 import { applyEventAttr } from './handler-utils.js';
 import { scrollRowIntoMiddle } from './scroll.js';
 import { blastocyteFactory } from './types/blastocyte.js';
+import { MOUNT_SETTLE_MS } from './constants.js';
 export type { StateFrame as StateView };
 
 // ── ResolvedAttrs ─────────────────────────────────────────────────────────────
@@ -563,7 +564,7 @@ export class RenderNode {
       return;
     }
 
-    const timeout  = new Promise<void>(resolve => setTimeout(resolve, 250));
+    const timeout  = new Promise<void>(resolve => setTimeout(resolve, MOUNT_SETTLE_MS));
     const allReady = Promise.all(initialRns.map(rn => rn.whenReady));
     Promise.race([allReady, timeout]).then(mount);
   }

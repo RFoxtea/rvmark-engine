@@ -145,8 +145,9 @@ footer {
 .node-content[aria-expanded]:not([style*="--node-bullet"]) .toggle:not(.leaf)::before { content: '▶'; }
 .node-content[style*="--node-bullet"] .toggle::before                             { content: var(--node-bullet); }
 
-/* Subscript ▶ badge when a custom-bullet node is expandable (positions against .toggle, which is position: relative) */
-.node-content[aria-expanded][style*="--node-bullet"]:not(.node-content--bullet-spins) .toggle::after {
+/* Subscript ▶ badge when a custom-bullet node is expandable (positions against .toggle, which is position: relative).
+   Gated on .toggle:not(.leaf) so always-open / non-toggleable custom-bullet nodes don't sprout a phantom marker. */
+.node-content[aria-expanded][style*="--node-bullet"]:not(.node-content--bullet-spins) .toggle:not(.leaf)::after {
   content: '▶';
   font-family: monospace;
   font-size: 0.75em;
@@ -158,7 +159,7 @@ footer {
   transition: transform 0.15s;
   text-shadow: 0 0 0.2em var(--bg), 0 0 0.2em var(--bg), 0 0 0.2em var(--bg);
 }
-.node-content[aria-expanded="true"][style*="--node-bullet"]:not(.node-content--bullet-spins) .toggle::after {
+.node-content[aria-expanded="true"][style*="--node-bullet"]:not(.node-content--bullet-spins) .toggle:not(.leaf)::after {
   transform: rotate(90deg);
   transform-origin: center center;
   bottom: -0.1em;
@@ -364,10 +365,10 @@ footer .footer-section { white-space: nowrap; }
 .show-hidden-toggle:has(input:focus-visible) { outline: 1px solid var(--accent); outline-offset: 1px; }
 
 /* ── Transclusion error ── */
+/* A broken/timed-out transclusion renders as an ordinary row with a distinct
+   ⨂ bullet (set per-node via --node-bullet) and muted text. */
 .node-load-error {
   color: var(--muted);
-  font-size: 0.8rem;
-  font-style: italic;
 }
 
 /* ── Static content (no-JS fallback) ── */

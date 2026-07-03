@@ -1,9 +1,9 @@
 import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
-import { factoryGet } from '../type-registry.js';
+import { factoryGet, factoryRegister } from '../type-registry.js';
 import { tagsNodeAttrs, mergeNodeAttrs } from '../tags.js';
 import { resolveTransclusionConfig, resolveRef } from '../transclusion.js';
 import { buildStatePass } from '../state.js';
-import { parsePass, treeNavKeydown } from '../handler-utils.js';
+import { parsePass, treeNavKeydown, makeErrorNode } from '../handler-utils.js';
 import { Multimap } from '../multimap.js';
 import { createCustomTypeHandler } from './custom.js';
 
@@ -45,8 +45,22 @@ export function loadingHandler(rn: RenderNode): TypeHandler {
     treeNavKeydown(e, content, rn.li);
   });
 
-  return { content, selectable: true, managesReady: true };
+  return {
+    content,
+    selectable: true,
+    managesReady: true,
+    // Stop the animation timer if this node is torn down before it resolves
+    // (e.g. a children-mode loading marker superseded by its settled content, or
+    // a still-loading transclusion whose parent collapses).
+    onDestroy() { (content as any)._stopLoading?.(); },
+  };
 }
+
+// `loading` type — a programmatically-minted placeholder child that shows the
+// loading animation while a children-mode transclusion resolves. Authors never
+// write it; it is minted by makeLoadingNode (handler-utils). managesReady keeps it
+// out of the setChildren mount race so it inherits the MOUNT_SETTLE_MS anti-flash.
+factoryRegister('loading', { create: (rn) => loadingHandler(rn) });
 
 export const blastocyteFactory: NodeTypeFactory = {
   create(rn: RenderNode): TypeHandler {
@@ -76,7 +90,8 @@ export const blastocyteFactory: NodeTypeFactory = {
           };
           rn.replaceHandler(mergedNode);
         } else {
-          handler.content.querySelector('.node-label')!.textContent = `${embedVal} not found`;
+          // Same plain error row as the children-mode path — bullet + "<ref> not found".
+          rn.replaceHandler(makeErrorNode(node, embedVal!, 'error'));
         }
       });
 
