@@ -7,6 +7,7 @@
  * Auto-registers on load (when window.parent !== window):
  *   - Escape key → parent.postMessage({ type: 'rvmark-escape' })
  *   - rvmark-select events → parent.postMessage({ type: 'exhibit-meta', meta })
+ *   - rvmark-deselect to nothing → parent.postMessage({ type: 'exhibit-meta', meta: null })
  *   - error / unhandledrejection → parent.postMessage({ type: 'exhibit-error' })
  *
  * Also exports:
@@ -35,6 +36,13 @@ if (window.parent !== window) {
 
   document.addEventListener('rvmark-select', (e: Event) => {
     parent.postMessage({ type: 'exhibit-meta', meta: (e as CustomEvent).detail?.meta }, '*');
+  });
+
+  document.addEventListener('rvmark-deselect', () => {
+    // Tell the host to reset its footer to page meta. On an A→B move the paired
+    // rvmark-select posts B's meta right after (same turn), so this null is
+    // immediately superseded; when selection goes to nothing, it stands.
+    parent.postMessage({ type: 'exhibit-meta', meta: null }, '*');
   });
 
   window.addEventListener('error', (e: ErrorEvent) => {

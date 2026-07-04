@@ -24,7 +24,7 @@ export function setMeta(meta: Multimap | null): void {
 
 export function setFooter(nodeMeta: Record<string, unknown> | null): void {
   const p = currentPageMeta;
-  const license = (p?.get('license') ?? '') as string;
+  const license = (nodeMeta?.license ?? p?.get('license') ?? '') as string;
   const author  = (nodeMeta?.author ?? p?.get('author') ?? '') as string;
   const footer  = document.querySelector('footer');
   if (!footer) return;

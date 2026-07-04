@@ -116,8 +116,16 @@ async function init(page: RvmarkPageContext): Promise<void> {
     document.getElementById('tree-scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
   });
 
-  (document.getElementById('tree-root') as HTMLElement).addEventListener('rvmark-select', (e) => {
+  const treeRoot = document.getElementById('tree-root') as HTMLElement;
+  treeRoot.addEventListener('rvmark-select', (e) => {
     setFooter((e as CustomEvent).detail.meta);
+  });
+  treeRoot.addEventListener('rvmark-deselect', () => {
+    // Reset to page-level meta. On a normal A→B move this runs first and the
+    // paired rvmark-select immediately overwrites it (same JS turn, one paint,
+    // no flash). When selection goes to nothing, no select follows and the
+    // page-meta footer stands.
+    setFooter(null);
   });
 
   window.addEventListener('message', (e: MessageEvent) => {
