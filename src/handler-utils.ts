@@ -59,17 +59,17 @@ export function parsePass(raw: string): PassEntry[] {
 export async function expandNode(rn: RenderNode, transcludeRef?: string): Promise<void> {
   const sourceNode = rn.sourceNode;
   const attrs = mergeNodeAttrs(tagsNodeAttrs(sourceNode.tags, sourceNode.sourceFile?.tagDefs), sourceNode.attrs);
-  const { embedVal: _embedVal, childrenList } = resolveTransclusionConfig(sourceNode, attrs);
-  const embedVal = transcludeRef ?? _embedVal;
+  const { embedVal, childrenList: _childrenList } = resolveTransclusionConfig(sourceNode, attrs);
+  // A caller-supplied ref (listbox option) or a link-mode embedVal is just a
+  // single-ref children list. Route both through the list path below so the
+  // target's own transclude chain is followed (resolveEffectiveChildren) — the
+  // link-mode vs children-mode distinction is only about the node's own chrome.
+  const childrenList = transcludeRef ? [transcludeRef] : (_childrenList ?? (embedVal ? [embedVal] : null));
 
   const passChildrenRaw = attrs.get('children-pass');
   const passChildrenEntries = passChildrenRaw !== undefined ? parsePass(passChildrenRaw) : undefined;
 
-  if (embedVal) {
-    const node = await resolveRef(embedVal, sourceNode.sourceFile.pageAddress) as any;
-    if (!node || !node.children.length) return;
-    rn.setChildren(node.children, null, rn.meta, passChildrenEntries);
-  } else if (childrenList) {
+  if (childrenList) {
     const addr = sourceNode.sourceFile.pageAddress;
     const needsResolve = childrenList.some(r => r !== '*');
 

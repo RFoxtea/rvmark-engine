@@ -160,6 +160,12 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
     2. {#listbox-indicator-b; ? &step==b} step is b
     3. {#listbox-indicator-c; ? &step==c} step is c
 
+26. {#listbox-transclude-root; open} Listbox option transitive transclusion fixture
+  1. {#listbox-transclude-node} [Direct]{=> #tt-leaf} [Transitive]{=> #tt-mid}
+27. {#tt-mid; => #tt-leaf} tt-mid children-mode label
+28. {#tt-leaf} tt-leaf target
+  1. {#tt-leaf-child} tt-leaf child content
+
 19. {#event-root; open} Event attrs fixture root
   1. {#event-spawn-parent; &spawned=1} on-spawn parent
     1. {#event-spawn-indicator; ? &spawned} Spawn indicator visible

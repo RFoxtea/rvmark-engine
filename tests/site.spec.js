@@ -1777,6 +1777,34 @@ test.describe('listbox span state assignments', () => {
   });
 });
 
+// Fixture: #listbox-transclude-node has two inline options. [Direct] embeds
+// #tt-leaf (which has real children); [Transitive] embeds #tt-mid, itself a
+// children-mode node that embeds #tt-leaf. Selecting an option runs a link-mode
+// expandNode with the option's ref, which must resolve the target's *effective*
+// children — so a target that is itself a transcluding node still renders.
+test.describe('listbox option transitive transclusion', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/#listbox-transclude-root');
+    await waitForTree(page);
+    await waitForNode(page, 'listbox-transclude-node');
+  });
+
+  test('option targeting a node with children renders its children', async ({ page }) => {
+    const node = await nodeContent(page, 'listbox-transclude-node');
+    await node.click();
+    await node.locator('[role="option"]').filter({ hasText: 'Direct' }).click();
+    await expect(await waitForNode(page, 'tt-leaf-child')).toBeVisible();
+  });
+
+  test('option targeting a transcluding node renders through the chain', async ({ page }) => {
+    const node = await nodeContent(page, 'listbox-transclude-node');
+    await node.click();
+    await node.locator('[role="option"]').filter({ hasText: 'Transitive' }).click();
+    // #tt-mid embeds #tt-leaf, so the panel must show tt-leaf's child — not empty.
+    await expect(await waitForNode(page, 'tt-leaf-child')).toBeVisible();
+  });
+});
+
 test.describe('watchChildren', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/#watch-root');
