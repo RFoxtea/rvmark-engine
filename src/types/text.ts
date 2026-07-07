@@ -92,6 +92,19 @@ class TextTypeHandler extends BaseTypeHandler {
     const bf = attrs.get('bullet-font');
     if (bf !== undefined) content.style.setProperty('--node-bullet-font', bf);
     if (attrs.has('bullet-spins')) content.classList.add('node-content--bullet-spins');
+
+    // Ordered-list item. `{li}` marks the item (alias for the `.li` class);
+    // `{li: N}` also restarts the list counter so this item shows N. The value
+    // is reparsed to a canonical integer before it reaches CSS — anything else
+    // (non-numeric, empty) leaves the counter on its normal sequence.
+    if (attrs.has('li')) {
+      content.classList.add('li');
+      const raw = attrs.get('li');
+      if (raw) {
+        const n = Number.parseInt(raw, 10);
+        if (Number.isFinite(n)) content.style.setProperty('--li-start', String(n));
+      }
+    }
   }
 
   private buildToggleBullet(_sourceNode: SourceNode) {

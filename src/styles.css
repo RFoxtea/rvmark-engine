@@ -145,9 +145,28 @@ footer {
 .node-content[aria-expanded]:not([style*="--node-bullet"]) .toggle:not(.leaf)::before { content: '▶'; }
 .node-content[style*="--node-bullet"] .toggle::before                             { content: var(--node-bullet); }
 
+/* Ordered-list items ({.li}). A list (.tree) that contains any .li item owns a
+   counter scoped to itself, so sibling lists each restart at 1. The number
+   replaces the bullet; nested .li lists count independently. */
+.tree:has(> .node > .node-content.li)                       { counter-reset: rvmark-li; }
+.node-content.li                                            { counter-increment: rvmark-li; }
+.node-content.li .toggle::before,
+.node-content.li[aria-expanded] .toggle:not(.leaf)::before  { content: counter(rvmark-li) '.'; }
+/* Number markers stay right-aligned to the label and grow the box when the
+   ordinal outgrows the default bullet width, pushing the label aside instead of
+   overlapping it. min-width keeps short numbers aligned with sibling bullets. */
+.node-content.li .toggle { width: auto; min-width: var(--bullet-w); text-align: right; }
+/* {li: N} sets this item to N and lets the list continue from there. Uses
+   counter-set (not a second counter-reset, which would open a competing counter
+   scope and mis-number following siblings); counter-set writes the value in
+   place and the item's own increment does not double-count it. --li-start is
+   written as a validated integer by the text handler. */
+.node-content.li[style*="--li-start"] { counter-set: rvmark-li var(--li-start); }
+
 /* Subscript ▶ badge when a custom-bullet node is expandable (positions against .toggle, which is position: relative).
    Gated on .toggle:not(.leaf) so always-open / non-toggleable custom-bullet nodes don't sprout a phantom marker. */
-.node-content[aria-expanded][style*="--node-bullet"]:not(.node-content--bullet-spins) .toggle:not(.leaf)::after {
+.node-content[aria-expanded][style*="--node-bullet"]:not(.node-content--bullet-spins) .toggle:not(.leaf)::after,
+.node-content.li[aria-expanded] .toggle:not(.leaf)::after {
   content: '▶';
   font-family: monospace;
   font-size: 0.75em;
@@ -159,7 +178,8 @@ footer {
   transition: transform 0.15s;
   text-shadow: 0 0 0.2em var(--bg), 0 0 0.2em var(--bg), 0 0 0.2em var(--bg);
 }
-.node-content[aria-expanded="true"][style*="--node-bullet"]:not(.node-content--bullet-spins) .toggle:not(.leaf)::after {
+.node-content[aria-expanded="true"][style*="--node-bullet"]:not(.node-content--bullet-spins) .toggle:not(.leaf)::after,
+.node-content.li[aria-expanded="true"] .toggle:not(.leaf)::after {
   transform: rotate(90deg);
   transform-origin: center center;
   bottom: -0.1em;
@@ -167,7 +187,7 @@ footer {
 }
 
 .toggle:hover { color: var(--accent); }
-.node-content[aria-expanded="true"]:not([style*="--node-bullet"]) .toggle:not(.leaf),
+.node-content[aria-expanded="true"]:not([style*="--node-bullet"]):not(.li) .toggle:not(.leaf),
 .node-content[aria-expanded="true"].node-content--bullet-spins .toggle:not(.leaf) { transform: rotate(90deg); }
 .toggle.leaf  { cursor: default; color: var(--muted); }
 .toggle.leaf:hover { color: var(--muted); }
