@@ -33,11 +33,10 @@
  *   child → parent: { type: 'rvmark-has-second-tab-stop', value: boolean }
  */
 
-import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
+import type { NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { resolveAttrs, treeNavKeydown, actionKeydown, copyPermalink, applyExhibit, expandNode, wireFocusGating } from '../handler-utils.js';
-import type { FocusGating } from '../handler-utils.js';
-import { resolveTagDef } from '../tags.js';
+import { resolveAttrs, treeNavKeydown, actionKeydown, copyPermalink, applyExhibit, expandNode } from '../handler-utils.js';
+import { BaseTypeHandler } from '../base-handler.js';
 
 import { wireSelectThenToggle } from '../interaction.js';
 import { StateRelay, buildStatePass } from '../state.js';
@@ -165,14 +164,11 @@ function setupIframe(iframe: HTMLIFrameElement, content: HTMLElement): { activat
 
 // ── Type handler ───────────────────────────────────────────────────────────────
 
-class IframeTypeHandler implements TypeHandler {
-  readonly content:    HTMLElement;
-  readonly selectable: boolean = true;
-
+class IframeTypeHandler extends BaseTypeHandler {
   private _activateRelay: (() => void) | null = null;
-  private _gating!: FocusGating;
 
   constructor(renderNode: RenderNode) {
+    super(renderNode, '*');
     const sourceNode = renderNode.sourceNode;
     const attrs = resolveAttrs(sourceNode);
 
@@ -182,29 +178,8 @@ class IframeTypeHandler implements TypeHandler {
       ? sourceNode.bodyLines.join('\n') : null;
     const fixedHeight = attrs.get('height') ?? null;
 
-    const content = document.createElement('div');
-    this.content = content;
-
-    // ── Classes ──────────────────────────────────────────────────────────────
+    const content = this.content;
     content.classList.add('node-content--iframe');
-
-    for (const { name, props } of sourceNode.tags) {
-      const def = resolveTagDef(name, props, sourceNode.sourceFile.tagDefs);
-      for (const cls of def.getAll('class')) content.classList.add(...cls.split(/\s+/).filter(Boolean));
-    }
-    for (const cls of attrs.getAll('class')) content.classList.add(...cls.split(/\s+/).filter(Boolean));
-
-
-    // ── ARIA / selection ─────────────────────────────────────────────────────
-    content.setAttribute('role', 'treeitem');
-
-    renderNode.selectable = true;
-    renderNode.meta = sourceNode.meta;
-
-    this._gating = wireFocusGating(
-      content,
-      () => content.querySelectorAll<HTMLElement>('*'),
-    );
 
     // ── Click / exhibit wiring ────────────────────────────────────────────────
     applyExhibit(renderNode, attrs);
@@ -277,11 +252,6 @@ class IframeTypeHandler implements TypeHandler {
     void expandNode(renderNode);
   }
 
-  get modeActive(): boolean { return this._gating.modeActive; }
-  activate():   void { this._gating.activate(); }
-  deactivate(): void { this._gating.deactivate(); }
-  onSelect(): void {}
-  onDeselect(): void {}
 }
 
 const iframeFactory: NodeTypeFactory = {

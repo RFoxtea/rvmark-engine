@@ -26,11 +26,10 @@
  *   -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 video cued
  */
 
-import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
+import type { NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { resolveAttrs, treeNavKeydown, actionKeydown, copyPermalink, applyExhibit, expandNode, wireFocusGating } from '../handler-utils.js';
-import type { FocusGating } from '../handler-utils.js';
-import { resolveTagDef } from '../tags.js';
+import { resolveAttrs, treeNavKeydown, actionKeydown, copyPermalink, applyExhibit, expandNode } from '../handler-utils.js';
+import { BaseTypeHandler } from '../base-handler.js';
 
 import { wireSelectThenToggle } from '../interaction.js';
 
@@ -55,46 +54,22 @@ window.addEventListener('message', (e) => {
 // Extensions we treat as direct video files (native <video>).
 const FILE_EXT_RE = /\.(mp4|webm|ogv|ogg|mov|m4v)(?:[?#]|$)/i;
 
-class VideoTypeHandler implements TypeHandler {
-  readonly content:    HTMLElement;
-  readonly selectable: boolean = true;
-
+class VideoTypeHandler extends BaseTypeHandler {
   private readonly _canonicalHref:  string | null;
   private _iframe:                  HTMLIFrameElement | null = null;
   // True when _iframe is a YouTube embed wired to the IFrame Player API.
   // Odysee iframes have no player API, so their play/pause toggle is a no-op.
   private _ytIframe:                boolean = false;
   private _video:                   HTMLVideoElement | null = null;
-  private _gating!: FocusGating;
 
   constructor(renderNode: RenderNode) {
+    super(renderNode, 'iframe, video');
     const sourceNode = renderNode.sourceNode;
     const attrs = resolveAttrs(sourceNode);
     const rawUrl = attrs.get('src') ?? (sourceNode.label || null);
 
-    const content = document.createElement('div');
-    this.content = content;
-
-    // ── Classes ──────────────────────────────────────────────────────────────
+    const content = this.content;
     content.classList.add('node-content--video');
-
-    for (const { name, props } of sourceNode.tags) {
-      const def = resolveTagDef(name, props, sourceNode.sourceFile.tagDefs);
-      for (const cls of def.getAll('class')) content.classList.add(...cls.split(/\s+/).filter(Boolean));
-    }
-    for (const cls of attrs.getAll('class')) content.classList.add(...cls.split(/\s+/).filter(Boolean));
-
-
-    // ── ARIA / selection ─────────────────────────────────────────────────────
-    content.setAttribute('role', 'treeitem');
-
-    renderNode.selectable = true;
-    renderNode.meta = sourceNode.meta;
-
-    this._gating = wireFocusGating(
-      content,
-      () => content.querySelectorAll<HTMLElement>('iframe, video'),
-    );
 
     // ── Click wiring ──────────────────────────────────────────────────────────
     applyExhibit(renderNode, attrs);
@@ -183,12 +158,6 @@ class VideoTypeHandler implements TypeHandler {
 
     void expandNode(renderNode);
   }
-
-  get modeActive(): boolean { return this._gating.modeActive; }
-  activate():   void { this._gating.activate(); }
-  deactivate(): void { this._gating.deactivate(); }
-  onSelect(): void {}
-  onDeselect(): void {}
 
   private _togglePlayback(): void {
     if (this._video) {

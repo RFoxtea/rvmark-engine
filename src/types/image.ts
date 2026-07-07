@@ -10,10 +10,10 @@
  * Optional: width: CSS length (e.g. 50%, 300px) — constrains the image width
  */
 
-import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
+import type { NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
 import { resolveAttrs, copyPermalink, treeNavKeydown, actionKeydown, expandNode } from '../handler-utils.js';
-import { resolveTagDef } from '../tags.js';
+import { BaseTypeHandler } from '../base-handler.js';
 
 const DARK_MODE_CLASSES: Record<string, string> = {
   invert:     'img-body--dark-invert',
@@ -28,11 +28,9 @@ const ALIGN_CLASSES: Record<string, string> = {
 
 const WIDTH_RE = /^[0-9]+(\.[0-9]+)?(px|em|rem|%|vw|vh|ch|ex|cm|mm|in|pt|pc)$/;
 
-class ImageTypeHandler implements TypeHandler {
-  readonly content:    HTMLElement = document.createElement('div');
-  readonly selectable: boolean     = true;
-
+class ImageTypeHandler extends BaseTypeHandler {
   constructor(renderNode: RenderNode) {
+    super(renderNode, 'a[href]');
     const sourceNode = renderNode.sourceNode;
     const attrs = resolveAttrs(sourceNode);
     const rawUrl = attrs.get('src') ?? sourceNode.label ?? null;
@@ -50,18 +48,6 @@ class ImageTypeHandler implements TypeHandler {
 
     const content = this.content;
     const li = renderNode.li;
-
-    for (const { name, props } of sourceNode.tags) {
-      const def = resolveTagDef(name, props, sourceNode.sourceFile.tagDefs);
-      for (const cls of def.getAll('class')) content.classList.add(...cls.split(/\s+/).filter(Boolean));
-    }
-    for (const cls of attrs.getAll('class')) content.classList.add(...cls.split(/\s+/).filter(Boolean));
-
-    // ── ARIA / selection ──────────────────────────────────────────────────────
-    content.setAttribute('role', 'treeitem');
-
-    renderNode.selectable = true;
-    renderNode.meta = sourceNode.meta;
 
     if (url) {
       const figure = document.createElement('figure');
