@@ -6,7 +6,7 @@
  */
 
 import type { RenderNode, SourceNode } from '../render-node.js';
-import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyExhibit, applyEventAttr, expandNode, exhibitOpenFromNode, prewarmToggleFonts } from '../handler-utils.js';
+import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyExhibit, applyEventAttr, expandNode, exhibitOpenFromNode, prewarmToggleFonts, applyBulletProps, applyListItemProps } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { resolveTransclusionConfig } from '../transclusion.js';
 import { mdInlineWithSpansContinued } from '../markdown.js';
@@ -56,12 +56,8 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
     content.classList.add(cfg.contentClass);
 
     if (cfg.withBullet) {
-      const bullet = attrs.get('bullet');
-      if (bullet !== undefined)
-        content.style.setProperty('--node-bullet', `'${bullet.replace(/'/g, "\\'")}'`);
-      const bf = attrs.get('bullet-font');
-      if (bf !== undefined) content.style.setProperty('--node-bullet-font', bf);
-      if (attrs.has('bullet-spins')) content.classList.add('node-content--bullet-spins');
+      applyBulletProps(content, attrs);
+      applyListItemProps(content, attrs);
     }
 
     const li = rn.li;

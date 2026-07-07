@@ -10,8 +10,7 @@
 
 import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { resolveAttrs, applyExhibit } from '../handler-utils.js';
-import { resolveTagDef } from '../tags.js';
+import { resolveAttrs, applyExhibit, applyTagClasses } from '../handler-utils.js';
 
 class HrTypeHandler implements TypeHandler {
   readonly content:    HTMLElement;
@@ -26,20 +25,7 @@ class HrTypeHandler implements TypeHandler {
 
     // ── Classes ──────────────────────────────────────────────────────────────
     content.classList.add('node-content--hr');
-
-    for (const { name, props } of sourceNode.tags) {
-      const def = resolveTagDef(name, props, sourceNode.sourceFile.tagDefs);
-      for (const cls of def.getAll('class')) content.classList.add(...cls.split(/\s+/).filter(Boolean));
-    }
-    for (const cls of attrs.getAll('class')) content.classList.add(...cls.split(/\s+/).filter(Boolean));
-
-    const bullet = attrs.get('bullet');
-    if (bullet !== undefined)
-      content.style.setProperty('--node-bullet', `'${bullet.replace(/'/g, "\\'")}'`);
-    const bf = attrs.get('bullet-font');
-    if (bf !== undefined) content.style.setProperty('--node-bullet-font', bf);
-
-    if (attrs.has('bullet-spins')) content.classList.add('node-content--bullet-spins');
+    applyTagClasses(content, sourceNode, attrs);
 
     renderNode.selectable = false;
     renderNode.meta = sourceNode.meta;

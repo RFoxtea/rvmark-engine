@@ -286,6 +286,35 @@ export function applyTagClasses(content: HTMLElement, sourceNode: SourceNode, at
   }
 }
 
+// Apply the custom marker-glyph attrs to a node's content element. Shared by
+// every type that shows a gutter marker (text rows, table rows, hr dividers) so
+// the supported set lives in one place.
+//   bullet / bullet-font / bullet-spins — custom marker glyph + spin
+export function applyBulletProps(content: HTMLElement, attrs: ResolvedAttrs): void {
+  const bullet = attrs.get('bullet');
+  if (bullet !== undefined)
+    content.style.setProperty('--node-bullet', `'${bullet.replace(/'/g, "\\'")}'`);
+  const bf = attrs.get('bullet-font');
+  if (bf !== undefined) content.style.setProperty('--node-bullet-font', bf);
+  if (attrs.has('bullet-spins')) content.classList.add('node-content--bullet-spins');
+}
+
+// Apply ordered-list-item marking. Separate from applyBulletProps because only
+// list-item types (text rows, table rows) may be numbered — a divider must not
+// carry `.li`, or it would consume a list number via the CSS counter.
+//   li / li: N — N restarts the list counter so this item shows N.
+// The value is reparsed to a canonical integer before it reaches CSS, so only
+// digits can flow into --li-start (anything else leaves normal sequence).
+export function applyListItemProps(content: HTMLElement, attrs: ResolvedAttrs): void {
+  if (!attrs.has('li')) return;
+  content.classList.add('li');
+  const raw = attrs.get('li');
+  if (raw) {
+    const n = Number.parseInt(raw, 10);
+    if (Number.isFinite(n)) content.style.setProperty('--li-start', String(n));
+  }
+}
+
 // ── Attr resolution ────────────────────────────────────────────────────────
 
 // Merge tag node.* overrides onto node attrs. Call in factory.create() and

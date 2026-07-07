@@ -8,7 +8,7 @@
 import type { NodeTypeFactory, SourceNode, ResolvedAttrs } from '../render-node.js';
 import { factoryRegister, RenderNode } from '../render-node.js';
 
-import { resolveAttrs, buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyExhibit, applyExhibitAction, applyEventAttr, expandNode, prewarmToggleFonts } from '../handler-utils.js';
+import { resolveAttrs, buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyExhibit, applyExhibitAction, applyEventAttr, expandNode, prewarmToggleFonts, applyBulletProps, applyListItemProps } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';
@@ -85,26 +85,8 @@ class TextTypeHandler extends BaseTypeHandler {
   // ── Private helpers ────────────────────────────────────────────────────────
 
   private buildCssProps(attrs: ResolvedAttrs) {
-    const content = this.content;
-    const bullet = attrs.get('bullet');
-    if (bullet !== undefined)
-      content.style.setProperty('--node-bullet', `'${bullet.replace(/'/g, "\\'")}'`);
-    const bf = attrs.get('bullet-font');
-    if (bf !== undefined) content.style.setProperty('--node-bullet-font', bf);
-    if (attrs.has('bullet-spins')) content.classList.add('node-content--bullet-spins');
-
-    // Ordered-list item. `{li}` marks the item (alias for the `.li` class);
-    // `{li: N}` also restarts the list counter so this item shows N. The value
-    // is reparsed to a canonical integer before it reaches CSS — anything else
-    // (non-numeric, empty) leaves the counter on its normal sequence.
-    if (attrs.has('li')) {
-      content.classList.add('li');
-      const raw = attrs.get('li');
-      if (raw) {
-        const n = Number.parseInt(raw, 10);
-        if (Number.isFinite(n)) content.style.setProperty('--li-start', String(n));
-      }
-    }
+    applyBulletProps(this.content, attrs);
+    applyListItemProps(this.content, attrs);
   }
 
   private buildToggleBullet(_sourceNode: SourceNode) {
