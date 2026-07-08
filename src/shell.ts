@@ -26,6 +26,7 @@ export function setFooter(nodeMeta: Record<string, unknown> | null): void {
   const p = currentPageMeta;
   const license = (nodeMeta?.license ?? p?.get('license') ?? '') as string;
   const author  = (nodeMeta?.author ?? p?.get('author') ?? '') as string;
+  const footerLabel = (p?.get('footer-label') ?? 'rvmark') as string;
   const footer  = document.querySelector('footer');
   if (!footer) return;
 
@@ -34,7 +35,7 @@ export function setFooter(nodeMeta: Record<string, unknown> | null): void {
     footerTextEl = document.createElement('span');
     footer.appendChild(footerTextEl);
     if (!p?.has('no-hidden-toggle')) {
-      footer.appendChild(document.createTextNode(' · '));
+      if (footerLabel || license || author) footer.appendChild(document.createTextNode(' · '));
       const label = document.createElement('label');
       label.className = 'show-hidden-toggle footer-section';
       const cb = document.createElement('input');
@@ -52,10 +53,13 @@ export function setFooter(nodeMeta: Record<string, unknown> | null): void {
   }
 
 
-  let html = '<span class="footer-section">rvmark</span>';
-  if (license) html += ` · <span class="footer-section">${mdInline(String(license))}</span>`;
-  if (author)  html += ` · <span class="footer-section">${mdInline(String(author))}</span>`;
-  footerTextEl.innerHTML = html;
+  // Any of these chips may be empty (footerLabel included), so join only the
+  // present ones — never a leading, trailing, or doubled " · ".
+  const chips: string[] = [];
+  if (footerLabel) chips.push(`<span class="footer-section">${mdInline(footerLabel)}</span>`);
+  if (license)     chips.push(`<span class="footer-section">${mdInline(String(license))}</span>`);
+  if (author)      chips.push(`<span class="footer-section">${mdInline(String(author))}</span>`);
+  footerTextEl.innerHTML = chips.join(' · ');
 }
 
 export function clearTree(): HTMLElement {

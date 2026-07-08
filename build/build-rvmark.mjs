@@ -627,6 +627,7 @@ for (const [relPath, sourceFile] of sourceFiles) {
   const license     = meta?.get('license') ?? '';
   const author      = meta?.get('author') ?? '';
   const showHiddenToggle = !meta?.has('no-hidden-toggle');
+  const footerLabel = meta?.get('footer-label') ?? 'rvmark';
 
   const staticHtml = renderStaticNodes(sourceFile.roots, sourceFile);
 
@@ -636,9 +637,18 @@ for (const [relPath, sourceFile] of sourceFiles) {
   html = html.replaceAll('{{BASE}}',          base);
   html = html.replaceAll('{{RVMARK_FILE}}',   relPath);
   html = html.replaceAll('{{SITE_MAP_JSON}}', siteMapJson);
-  html = html.replaceAll('{{LICENSE}}',      license ? ` · <span class="footer-section">${staticMdInline(license)}</span>` : '');
-  html = html.replaceAll('{{AUTHOR}}',       author  ? ` · <span class="footer-section">${staticMdInline(author)}</span>` : '');
-  html = html.replaceAll('{{SHOW_HIDDEN_TOGGLE}}', showHiddenToggle ? ' · <label class="show-hidden-toggle footer-section"><input type="checkbox" id="show-hidden-cb"> show hidden</label>' : '');
+  {
+    // The template places these four chips back-to-back with no separator of
+    // its own, and any chip (including footerLabel) may be empty — so each
+    // chip after the first present one needs a leading " · ".
+    let seenChip = false;
+    const sep = () => { const s = seenChip ? ' · ' : ''; seenChip = true; return s; };
+
+    html = html.replaceAll('{{FOOTER_LABEL}}', footerLabel ? `${sep()}<span class="footer-section">${staticMdInline(footerLabel)}</span>` : '');
+    html = html.replaceAll('{{LICENSE}}',      license ? `${sep()}<span class="footer-section">${staticMdInline(license)}</span>` : '');
+    html = html.replaceAll('{{AUTHOR}}',       author  ? `${sep()}<span class="footer-section">${staticMdInline(author)}</span>` : '');
+    html = html.replaceAll('{{SHOW_HIDDEN_TOGGLE}}', showHiddenToggle ? `${sep()}<label class="show-hidden-toggle footer-section"><input type="checkbox" id="show-hidden-cb"> show hidden</label>` : '');
+  }
   html = html.replace('{{STATIC_HTML}}', () => staticHtml);
 
   writeFileSync(outPath, html);
