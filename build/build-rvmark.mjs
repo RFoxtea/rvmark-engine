@@ -626,6 +626,7 @@ for (const [relPath, sourceFile] of sourceFiles) {
   const description = meta?.get('description') || 'A tree-structured website powered by rvmark — expand nodes to explore.';
   const license     = meta?.get('license') ?? '';
   const author      = meta?.get('author') ?? '';
+  const showHiddenToggle = !meta?.has('no-hidden-toggle');
 
   const staticHtml = renderStaticNodes(sourceFile.roots, sourceFile);
 
@@ -637,6 +638,7 @@ for (const [relPath, sourceFile] of sourceFiles) {
   html = html.replaceAll('{{SITE_MAP_JSON}}', siteMapJson);
   html = html.replaceAll('{{LICENSE}}',      license ? ` · <span class="footer-section">${staticMdInline(license)}</span>` : '');
   html = html.replaceAll('{{AUTHOR}}',       author  ? ` · <span class="footer-section">${staticMdInline(author)}</span>` : '');
+  html = html.replaceAll('{{SHOW_HIDDEN_TOGGLE}}', showHiddenToggle ? ' · <label class="show-hidden-toggle footer-section"><input type="checkbox" id="show-hidden-cb"> show hidden</label>' : '');
   html = html.replace('{{STATIC_HTML}}', () => staticHtml);
 
   writeFileSync(outPath, html);

@@ -33,20 +33,22 @@ export function setFooter(nodeMeta: Record<string, unknown> | null): void {
     footer.innerHTML = '';
     footerTextEl = document.createElement('span');
     footer.appendChild(footerTextEl);
-    footer.appendChild(document.createTextNode(' · '));
-    const label = document.createElement('label');
-    label.className = 'show-hidden-toggle footer-section';
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.id = 'show-hidden-cb';
-    if (prerootFrame.get('--show-hidden')) cb.checked = true;
-    cb.addEventListener('change', function (this: HTMLInputElement) {
-      if (this.checked) prerootSet('--show-hidden', 'true');
-      else prerootDelete('--show-hidden');
-    });
-    label.appendChild(cb);
-    label.appendChild(document.createTextNode(' show hidden'));
-    footer.appendChild(label);
+    if (!p?.has('no-hidden-toggle')) {
+      footer.appendChild(document.createTextNode(' · '));
+      const label = document.createElement('label');
+      label.className = 'show-hidden-toggle footer-section';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.id = 'show-hidden-cb';
+      if (prerootFrame.get('--show-hidden')) cb.checked = true;
+      cb.addEventListener('change', function (this: HTMLInputElement) {
+        if (this.checked) prerootSet('--show-hidden', 'true');
+        else prerootDelete('--show-hidden');
+      });
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(' show hidden'));
+      footer.appendChild(label);
+    }
   }
 
 
