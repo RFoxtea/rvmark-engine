@@ -183,7 +183,7 @@ export function parseAttrBlock(raw: string): Multimap {
 }
 
 export function parse(src: string): RawFile {
-  const lines = src.split('\n');
+  const lines = src.replace(/\r\n/g, '\n').split('\n');
   let meta: FileMeta = new Multimap();
   const nodeMap: Record<string, RawNode> = {};
   let i = 0;

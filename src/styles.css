@@ -1175,3 +1175,89 @@ body.exhibit-open .exhibit-panel {
 .table-node > .node-content--table:focus {
   border-radius: 0;
 }
+
+/* ============================================================
+   Print
+   ============================================================ */
+/* Prints the tree exactly as currently expanded on screen — collapsed
+   subtrees stay collapsed (CSS can't force JS-driven aria-expanded state,
+   and force-expanding is unsafe anyway given transclusion cycles). The
+   screen layout is a fixed-height scroll viewport (100dvh, overflow clipped,
+   horizontal scroll on overflow); none of that means anything on paper, so
+   it's unwound here to plain flowing, wrapping block layout that paginates. */
+@media print {
+  @page {
+    size: A4;
+    margin: 1.2cm;
+  }
+
+  html, body {
+    height: auto;
+    overflow: visible;
+    padding: 0;
+    background: #fff;
+    color: #000;
+  }
+
+  #root {
+    max-width: none;
+    height: auto;
+    overflow: visible;
+  }
+
+  header, footer,
+  .exhibit-panel, #exhibit-divider,
+  .show-hidden-toggle {
+    display: none !important;
+  }
+
+  #tree-scroll, #static-content {
+    overflow: visible;
+    container-type: normal;
+    --node-w: 100%;
+  }
+
+  /* No visibility override here: whichever of #tree-scroll / #static-content
+     is already showing (hydrated tree in the normal case, static fallback
+     only if JS never ran) is what prints — same "print what's on screen"
+     rule as expand/collapse state. */
+  .tree, .static-tree { overflow: visible; }
+
+  .node-content {
+    width: auto;
+    cursor: auto;
+  }
+
+  .node-label { word-break: break-word; }
+
+  /* Collapsed subtrees print as collapsed, matching the on-screen state. */
+  .node:not(:has(> .node-content[aria-expanded="true"])) > .node-children {
+    display: none;
+  }
+
+  /* Permalink anchors and hover/focus-only affordances don't apply to a
+     static page. */
+  .node-id { display: none; }
+  .toggle::after { display: none; }
+  .node-content:focus,
+  .node-content[aria-selected="true"] {
+    background: none;
+    outline: none;
+  }
+
+  /* Scroll fade masks and inner scroll clipping are screen-only. */
+  .md-body-scroll {
+    max-height: none;
+    overflow: visible;
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+
+  /* Video/iframe embeds have no paper equivalent; drop the player chrome
+     but leave the row (label/caption text) in place. */
+  .video-wrap, .html-body-iframe { display: none; }
+
+  pre, .md-body table, .img-body img {
+    break-inside: avoid;
+  }
+}
