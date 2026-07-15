@@ -22,17 +22,24 @@ export function wireSelectThenToggle(
   target: HTMLElement,
   doToggle: (expand?: boolean, opts?: { scroll?: boolean }) => void,
   focusTarget: HTMLElement = target,
+  isExcluded: (el: HTMLElement) => boolean = () => false,
 ): void {
   let wasSelected = false;
   let downX = 0, downY = 0;
   target.addEventListener('mousedown', (e) => {
-    if ((e.target as HTMLElement).tagName === 'A') return;
+    const et = e.target as HTMLElement;
+    if (et.tagName === 'A' || isExcluded(et)) return;
+    // detail >= 2 means this mousedown is part of a double/triple-click;
+    // preventDefault here (not on 'dblclick') is what actually stops the
+    // browser's native word/paragraph selection.
+    if (e.detail >= 2) e.preventDefault();
     const rn: RenderNode | undefined = (target.closest<HTMLElement>('.node') as any)?._renderNode;
     wasSelected = !!rn && RenderNode.currentSelection === rn;
     downX = e.clientX; downY = e.clientY;
   });
   target.addEventListener('click', (e) => {
-    if ((e.target as HTMLElement).tagName === 'A') return;
+    const et = e.target as HTMLElement;
+    if (et.tagName === 'A' || isExcluded(et)) return;
     const moved = Math.hypot(e.clientX - downX, e.clientY - downY) > DRAG_THRESHOLD_PX;
     if (wasSelected && !moved) doToggle(undefined, { scroll: false });
     else focusTarget.focus();

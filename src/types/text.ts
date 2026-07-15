@@ -176,10 +176,10 @@ class TextTypeHandler extends BaseTypeHandler {
     if (exhibitButton) {
       // label click wiring handled by exhibitHandleNode
     } else if (expandable && !alwaysOpen) {
-      wireSelectThenToggle(lbl, (expand) => {
+      wireSelectThenToggle(content, (expand) => {
         if (rn.toggleable) this.doToggle(expand, { scroll: false });
         else content.focus();
-      }, content);
+      }, content, (el) => el === tog || tog.contains(el));
     } else {
       lbl.addEventListener('click', (e) => { if ((e.target as HTMLElement).tagName === 'A') return; content.focus(); });
     }
