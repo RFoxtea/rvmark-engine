@@ -8,7 +8,7 @@
 import type { NodeTypeFactory, SourceNode, ResolvedAttrs } from '../render-node.js';
 import { factoryRegister, RenderNode } from '../render-node.js';
 
-import { resolveAttrs, buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyExhibit, applyExhibitAction, applyEventAttr, expandNode, prewarmToggleFonts, applyBulletProps, applyListItemProps } from '../handler-utils.js';
+import { resolveAttrs, buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyExhibit, applyEventAttr, expandNode, exhibitOpenFromNode, prewarmToggleFonts, applyBulletProps, applyListItemProps } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';
@@ -17,7 +17,7 @@ import { scrollRowIntoMiddle } from '../scroll.js';
 import { mdInlineWithSpans, staticMdInline } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
 import { resolveTransclusionConfig } from '../transclusion.js';
-import { wireSelectThenToggle } from '../interaction.js';
+import { wireSelectThenAction } from '../interaction.js';
 
 class TextTypeHandler extends BaseTypeHandler {
   private _listboxNav?: ListboxNav;
@@ -75,7 +75,6 @@ class TextTypeHandler extends BaseTypeHandler {
 
     this.buildClickWiring(!!exhibitButton);
     this.buildKeyboardHandler();
-    applyExhibitAction(rn, content);
 
     this.deactivate();
 
@@ -172,11 +171,12 @@ class TextTypeHandler extends BaseTypeHandler {
       });
     }
 
-    // Label wiring: exhibitHandleNode owns it when exhibitButton; otherwise toggle on re-click.
+    // Re-click wiring: exhibit opens the exhibit; otherwise toggle expand/collapse.
     if (exhibitButton) {
-      // label click wiring handled by exhibitHandleNode
+      lbl.style.cursor = 'pointer';
+      wireSelectThenAction(content, () => exhibitOpenFromNode(rn), content, (el) => el === tog || tog.contains(el));
     } else if (expandable && !alwaysOpen) {
-      wireSelectThenToggle(content, (expand) => {
+      wireSelectThenAction(content, (expand) => {
         if (rn.toggleable) this.doToggle(expand, { scroll: false });
         else content.focus();
       }, content, (el) => el === tog || tog.contains(el));

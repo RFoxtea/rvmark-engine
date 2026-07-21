@@ -23,7 +23,7 @@ import { RenderNode } from './render-node.js';
 import { resolveRef, resolveEffectiveChildren, resolveTransclusionConfig } from './transclusion.js';
 import { TRANSCLUDE_DEADLINE_MS } from './constants.js';
 import type { PassEntry, PassMode, StateNode } from './state.js';
-import { exhibitStampScope, exhibitHandleNode, exhibitOpenFromNode } from './exhibit.js';
+import { exhibitStampScope, exhibitOpenFromNode } from './exhibit.js';
 export { exhibitOpenFromNode };
 
 // ── parsePass ──────────────────────────────────────────────────────────────
@@ -149,11 +149,6 @@ export function applyExhibit(rn: RenderNode, attrs: ResolvedAttrs): void {
   const exhibitVal = attrs.get('exhibit');
   if (exhibitVal)
     exhibitStampScope(rn, exhibitVal, rn.sourceNode.sourceFile.pageAddress, attrs);
-}
-
-export function applyExhibitAction(rn: RenderNode, content: HTMLElement): void {
-  if (resolveAttrs(rn.sourceNode).get('action') === 'exhibit')
-    exhibitHandleNode(rn, content);
 }
 
 // ── Listbox keydown dispatch ───────────────────────────────────────────────

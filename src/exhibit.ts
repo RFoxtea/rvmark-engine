@@ -15,9 +15,9 @@
  *   - markdown: a styled rendered .md file
  *   - html: a raw HTML file, overflow controlled by {overflow: …} param
  *
- * The renderer calls exhibitHandleNode(ctx) for any node with an
- * {exhibit: …} param. exhibitHandleNode is responsible for all exhibit-specific
- * behaviour: toggle symbol, alwaysOpen semantics, click/key handlers.
+ * Nodes with {action: exhibit} open the exhibit on select-then-reclick; that
+ * wiring is done by the type handlers via wireSelectThenAction, which calls
+ * exhibitOpenFromNode. Keyboard activation goes through actionKeydown.
  *
  * Selection scoping: when selection moves outside the subtree of the node
  * that opened the exhibit, the exhibit closes automatically.
@@ -336,23 +336,6 @@ export function exhibitOpenFromNode(rn: RenderNode): void {
 // Wires label click to open the _panel. Toggle (bullet) keeps its expand/collapse
 // behavior, wired by the type handler. Keydown is handled centrally via actionKeydown.
 // Uses the nearest enclosing exhibitConfig (which may be on this node or an ancestor).
-export function exhibitHandleNode(rn: RenderNode, content: HTMLElement): void {
-  const lbl = content.querySelector<HTMLElement>('.node-label');
-  if (!lbl) return;
-
-  let wasSelected = false;
-  content.addEventListener('mousedown', () => {
-    wasSelected = RenderNode.currentSelection === rn;
-  });
-
-  lbl.style.cursor = 'pointer';
-  lbl.addEventListener('click', (e) => {
-    if ((e.target as HTMLElement).tagName === 'A') return;
-    if (wasSelected) exhibitOpenFromNode(rn);
-    else content.focus();
-  });
-}
-
 // ── Shared head builder ───────────────────────────────────────────────────────
 
 function exhibitHead(basePath: string): string {

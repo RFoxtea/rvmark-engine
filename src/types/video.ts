@@ -31,7 +31,7 @@ import { factoryRegister } from '../render-node.js';
 import { resolveAttrs, treeNavKeydown, actionKeydown, copyPermalink, applyExhibit, expandNode } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 
-import { wireSelectThenToggle } from '../interaction.js';
+import { wireSelectThenAction } from '../interaction.js';
 
 // Tracks play state per YouTube iframe via onStateChange messages from the IFrame API.
 // May not work in Firefox due to storage partitioning; in that case
@@ -74,7 +74,7 @@ class VideoTypeHandler extends BaseTypeHandler {
     // ── Click wiring ──────────────────────────────────────────────────────────
     applyExhibit(renderNode, attrs);
 
-    wireSelectThenToggle(content, () => {});
+    wireSelectThenAction(content, () => {});
 
     const li = renderNode.li;
 

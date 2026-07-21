@@ -13,7 +13,7 @@ import { mdInlineWithSpansContinued } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';
-import { wireSelectThenToggle, focusAndScroll } from '../interaction.js';
+import { wireSelectThenAction, focusAndScroll } from '../interaction.js';
 
 export const CELL_SEP = /\s*\|\s*/;
 
@@ -83,12 +83,12 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
 
     if (this._expandable && !this._alwaysOpen) {
       if (this._actionVal === 'exhibit') {
-        wireSelectThenToggle(content, () => exhibitOpenFromNode(rn));
+        wireSelectThenAction(content, () => exhibitOpenFromNode(rn));
       } else {
-        wireSelectThenToggle(content, (expand) => { if (rn.toggleable) this.doToggle(expand); });
+        wireSelectThenAction(content, (expand) => { if (rn.toggleable) this.doToggle(expand); });
       }
     } else if (this._actionVal === 'exhibit') {
-      wireSelectThenToggle(content, () => exhibitOpenFromNode(rn));
+      wireSelectThenAction(content, () => exhibitOpenFromNode(rn));
     }
 
     this.buildKeyboardHandler();

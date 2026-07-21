@@ -38,7 +38,7 @@ import { factoryRegister } from '../render-node.js';
 import { resolveAttrs, treeNavKeydown, actionKeydown, copyPermalink, applyExhibit, expandNode } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 
-import { wireSelectThenToggle } from '../interaction.js';
+import { wireSelectThenAction } from '../interaction.js';
 import { StateRelay, buildStatePass } from '../state.js';
 import { postGuestMode, postPrerootSnapshot, wireRelay, registerThemeIframe, unregisterThemeIframe } from '../iframe-host.js';
 import { parsePass } from '../handler-utils.js';
@@ -184,7 +184,7 @@ class IframeTypeHandler extends BaseTypeHandler {
     // ── Click / exhibit wiring ────────────────────────────────────────────────
     applyExhibit(renderNode, attrs);
 
-    wireSelectThenToggle(content, () => {});
+    wireSelectThenAction(content, () => {});
 
     const li = renderNode.li;
 

@@ -24,7 +24,7 @@ import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermal
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';
-import { wireSelectThenToggle } from '../interaction.js';
+import { wireSelectThenAction } from '../interaction.js';
 import { mdToHtmlWithSpans, staticMdToHtml } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
 
@@ -91,9 +91,9 @@ class MarkdownTypeHandler extends BaseTypeHandler {
 
     this._actionVal = attrs.get('action') ?? null;
     if (this._actionVal === 'exhibit') {
-      wireSelectThenToggle(content, () => exhibitOpenFromNode(rn));
+      wireSelectThenAction(content, () => exhibitOpenFromNode(rn));
     } else {
-      wireSelectThenToggle(content, () => {});
+      wireSelectThenAction(content, () => {});
     }
 
     const { url, sectionSlug, bodyText } = this.resolveSrc(attrs, sourceNode);
