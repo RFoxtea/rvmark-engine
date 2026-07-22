@@ -25,7 +25,7 @@
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, cpSync, rmSync, existsSync, statSync } from 'fs';
 import { join, dirname, posix } from 'path';
 import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { fileToUrlStem, relativeUrl, resolveAddress, resolveMediaAddress, addressToFile, addressToSlug, addressToHref } from '../out/shared.js';
 
 // Engine package root — this file lives at <ENGINE_ROOT>/build/build-rvmark.mjs.
@@ -87,7 +87,7 @@ await import('../out/types/gap.js');
 // only types from 'rvmark/envoy' (erased by transpile). We transpile (strip
 // types) rather than typecheck — fast, and isolatedModules-safe.
 async function emitEnvoy(customTypesDir, DIST_DIR) {
-  const ts = (await import(requireFromEngine.resolve('typescript'))).default;
+  const ts = (await import(pathToFileURL(requireFromEngine.resolve('typescript')).href)).default;
 
   const outDir = join(DIST_DIR, '_custom-types');
   mkdirSync(outDir, { recursive: true });

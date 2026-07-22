@@ -438,6 +438,7 @@ export class RenderNode {
 
   replaceHandler(sourceNode: SourceNode): void {
     this.sourceNode = sourceNode;
+    this.permalinkId = sourceNode.permalinkId ?? '';
     this._attrs = mergeNodeAttrs(tagsNodeAttrs(sourceNode.tags, sourceNode.sourceFile?.tagDefs), sourceNode.attrs);
     blastocyteFactory.create(this);
   }

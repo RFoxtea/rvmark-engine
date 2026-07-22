@@ -21,7 +21,7 @@ import { wireSelectThenAction } from '../interaction.js';
 
 class TextTypeHandler extends BaseTypeHandler {
   private _listboxNav?: ListboxNav;
-  private _permalinkAnyFn!: (key: string, value: string | undefined) => void;
+  private _permalinkAnyFn?: (key: string, value: string | undefined) => void;
   private _unwatchChildren?: () => void;
 
   // Computed once in constructor, used across methods
@@ -63,15 +63,17 @@ class TextTypeHandler extends BaseTypeHandler {
 
     if (hasListbox) this.buildListbox(spanMap, attrs.has('listbox-volatile'));
 
-    const anchor = document.createElement('a');
-    anchor.href        = buildPermalinkHref(rn);
-    anchor.className   = 'node-id';
-    anchor.title       = 'permalink';
-    anchor.textContent = '#';
-    anchor.tabIndex    = -1;
-    content.appendChild(anchor);
-    this._permalinkAnyFn = () => { anchor.href = buildPermalinkHref(rn); };
-    rn.state.subscribeAny(this._permalinkAnyFn);
+    if (sourceNode.attrs.get('id')) {
+      const anchor = document.createElement('a');
+      anchor.href        = buildPermalinkHref(rn);
+      anchor.className   = 'node-id';
+      anchor.title       = 'permalink';
+      anchor.textContent = '#';
+      anchor.tabIndex    = -1;
+      content.appendChild(anchor);
+      this._permalinkAnyFn = () => { anchor.href = buildPermalinkHref(rn); };
+      rn.state.subscribeAny(this._permalinkAnyFn);
+    }
 
     this.buildClickWiring(!!exhibitButton);
     this.buildKeyboardHandler();
@@ -154,7 +156,7 @@ class TextTypeHandler extends BaseTypeHandler {
   }
 
   onDestroy(): void {
-    this.rn.state.unsubscribeAny(this._permalinkAnyFn);
+    if (this._permalinkAnyFn) this.rn.state.unsubscribeAny(this._permalinkAnyFn);
     this._unwatchChildren?.();
   }
 
