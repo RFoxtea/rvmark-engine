@@ -16,6 +16,14 @@
       "types": "./out/envoy-guest.d.ts",
       "import": "./out/envoy-guest.js"
     },
+    "./parser": {
+      "types": "./out/parser.d.ts",
+      "import": "./out/parser.js"
+    },
+    "./stringify": {
+      "types": "./out/stringify.d.ts",
+      "import": "./out/stringify.js"
+    },
     "./package.json": "./package.json"
   },
   "engines": {

@@ -134,6 +134,7 @@ export interface RawNode {
   slug:       string;
   permalinkId: string;
   numbering:  string;
+  auto?:      boolean;  // true if sourced from a '-'/'*' bullet rather than an explicit ordinal
   attrs:      NodeAttrs;
   tags:       Tag[];
   label:      string;
@@ -340,6 +341,7 @@ export function parse(src: string): RawFile {
       slug: '',
       permalinkId: '',
       numbering: praw.ordinal,   // raw literal for now; finalised in assignOrdinals
+      auto: praw.auto,
       attrs: praw.attrs,
       tags: praw.tags,
       label: praw.label,
