@@ -79,21 +79,25 @@ function stringifyTags(tags: RawNode['tags']): string {
 
 // ── head ───────────────────────────────────────────────────────────────────
 function stringifyHead(head: Head): string {
-  const lines: string[] = [];
-
   const metaStr = stringifyAttrs(head.meta);
-  if (metaStr) lines.push(metaStr);
 
+  // Tag-def and origin lines form one block, kept together.
+  const defLines: string[] = [];
   for (const [name, def] of Object.entries(head.tagDefs)) {
-    lines.push(stringifyTagDef(name, def));
+    defLines.push(stringifyTagDef(name, def));
   }
   for (const [name, origin] of Object.entries(head.origins)) {
     const parts = [`url: ${origin.url}`];
     if (origin.fallback) parts.push(`fallback: ${origin.fallback}`);
-    lines.push(`${name} {${parts.join('; ')}}`);
+    defLines.push(`${name} {${parts.join('; ')}}`);
   }
 
-  return lines.length ? lines.join('\n') + '\n\n' : '';
+  // The `{meta}` line and the def block are separated by a blank line when both
+  // are present (matching hand-authored layout); either alone stands on its own.
+  const blocks: string[] = [];
+  if (metaStr) blocks.push(metaStr);
+  if (defLines.length) blocks.push(defLines.join('\n'));
+  return blocks.length ? blocks.join('\n\n') + '\n\n' : '';
 }
 
 function stringifyTagDef(name: string, def: TagDef): string {

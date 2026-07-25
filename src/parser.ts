@@ -330,8 +330,7 @@ export function parse(src: string): RawFile {
   // Build the tree structure only. Ordinals — and the slug/permalinkId derived
   // from them — are assigned afterwards in assignOrdinals, because an auto-numbered
   // bullet's number depends on its siblings, known only once the group is complete.
-  const autoNodes = new Set<RawNode>();
-
+  // (auto-ness is carried on node.auto, which assignOrdinals reads directly.)
   for (const praw of rawNodes) {
     const depth = praw.depth;
 
@@ -348,8 +347,6 @@ export function parse(src: string): RawFile {
       bodyLines: praw.bodyLines,
       children: [],
     };
-    if (praw.auto) autoNodes.add(node);
-
     if (stack.length) {
       stack[stack.length - 1].node.children.push(node);
     } else {
@@ -358,33 +355,58 @@ export function parse(src: string): RawFile {
     stack.push({ depth, node });
   }
 
-  // Assign ordinals per sibling group. Auto-numbered bullets continue from the
-  // largest explicit-integer ordinal among their siblings (0 if none), taking the
-  // next integer each, in source order — so they never collide with explicit
-  // ordinals. Runs top-down: a node's permalinkId feeds its children's.
-  function assignOrdinals(siblings: RawNode[], parentId: string | null): void {
-    let maxInt = 0;
-    for (const n of siblings) {
-      if (!autoNodes.has(n) && /^\d+$/.test(n.numbering)) {
-        const v = parseInt(n.numbering, 10);
-        if (v > maxInt) maxInt = v;
-      }
-    }
-    let next = maxInt + 1;
-    for (const n of siblings) {
-      const ordinal = autoNodes.has(n) ? String(next++) : n.numbering;
-      const idAttr = n.attrs.get('id');
-      n.numbering   = ordinal;
-      n.slug        = idAttr ?? ordinal;
-      n.permalinkId = idAttr ?? (parentId ? `${parentId}.${ordinal}` : `.${ordinal}`);
-      nodeMap[n.slug] = n;
-      assignOrdinals(n.children, n.permalinkId);
-    }
-  }
-  assignOrdinals(roots, null);
+  // Finalise ordinals + slug/permalinkId across the whole tree, populating
+  // nodeMap. Shared with hand-built trees via the exported assignOrdinals below;
+  // here the raw literals set above (and node.auto) are the input.
+  assignOrdinals(roots, nodeMap);
 
   const head: Head = { meta, tagDefs, origins };
   return { head, roots, nodeMap };
+}
+
+/**
+ * Finalise a RawNode tree in place: assign each node its `numbering`, `slug`,
+ * and `permalinkId`, and (if a map is passed) index it by slug in `nodeMap`.
+ *
+ * This is the sibling-aware ordinal pass that `parse()` runs as its last step,
+ * exported so scripts that build a tree by hand (see `builder.ts`) finalise it
+ * through the exact same logic rather than reimplementing it — the guarantee
+ * being that a built tree numbers identically to a parsed one.
+ *
+ * Rules (unchanged from the in-parser version):
+ *   - Auto-numbered nodes (`node.auto === true`) continue from the largest
+ *     explicit-integer ordinal among their siblings (0 if none), taking the next
+ *     integer each in array order, so they never collide with explicit ordinals.
+ *   - An explicit `numbering` is kept verbatim (it may be non-integer, e.g. 'd',
+ *     or a zero-padded '02', or deliberately out of order — all preserved).
+ *   - `slug`/`permalinkId` derive from an `id` attr when present, else the
+ *     ordinal; permalinkId chains through the parent's for stability.
+ *
+ * Runs top-down: a node's permalinkId feeds its children's. Idempotent for a
+ * fully-explicit tree; safe to re-run after mutating the tree.
+ */
+export function assignOrdinals(
+  siblings: RawNode[],
+  nodeMap?: Record<string, RawNode>,
+  parentId: string | null = null,
+): void {
+  let maxInt = 0;
+  for (const n of siblings) {
+    if (!n.auto && /^\d+$/.test(n.numbering)) {
+      const v = parseInt(n.numbering, 10);
+      if (v > maxInt) maxInt = v;
+    }
+  }
+  let next = maxInt + 1;
+  for (const n of siblings) {
+    const ordinal = n.auto ? String(next++) : n.numbering;
+    const idAttr = n.attrs.get('id');
+    n.numbering   = ordinal;
+    n.slug        = idAttr ?? ordinal;
+    n.permalinkId = idAttr ?? (parentId ? `${parentId}.${ordinal}` : `.${ordinal}`);
+    if (nodeMap) nodeMap[n.slug] = n;
+    assignOrdinals(n.children, nodeMap, n.permalinkId);
+  }
 }
 
 // ── resolveFile ───────────────────────────────────────────────────────────────

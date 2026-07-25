@@ -24,6 +24,10 @@
       "types": "./out/stringify.d.ts",
       "import": "./out/stringify.js"
     },
+    "./builder": {
+      "types": "./out/builder.d.ts",
+      "import": "./out/builder.js"
+    },
     "./package.json": "./package.json"
   },
   "engines": {

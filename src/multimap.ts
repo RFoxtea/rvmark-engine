@@ -18,6 +18,23 @@ export class Multimap {
     if (init) for (const [k, v] of init) this._entries.push([k, v]);
   }
 
+  /**
+   * Build a Multimap from a plain object, for the common builder case where an
+   * object literal is more ergonomic than a list of pairs. An array value emits
+   * one entry per element (in order), so repeated keys — e.g. two `on-select`
+   * handlers — are expressible: `{ 'on-select': ['&a<<', '&b<<'] }`. Non-string
+   * scalars are String()-coerced; null/undefined values are skipped.
+   */
+  static from(obj: Record<string, string | number | boolean | Array<string | number | boolean> | null | undefined>): Multimap {
+    const m = new Multimap();
+    for (const [k, v] of Object.entries(obj)) {
+      if (v == null) continue;
+      if (Array.isArray(v)) for (const el of v) { if (el != null) m.append(k, String(el)); }
+      else m.append(k, String(v));
+    }
+    return m;
+  }
+
   get(key: string): string | undefined {
     for (let i = this._entries.length - 1; i >= 0; i--) {
       if (this._entries[i][0] === key) return this._entries[i][1];
