@@ -432,7 +432,7 @@ export function staticMdToHtml(text: string): string {
 
 export function mdInline(text: string): string {
   return withSpanMap(() =>
-    sanitizeMdInline(text.split(/  \n/).map(s => getRuntimeMarked().parseInline(s)).join('<br>'))).result;
+    sanitizeMdInline(getRuntimeMarked().parseInline(text))).result;
 }
 
 export function mdInlineWithSpans(
@@ -440,7 +440,7 @@ export function mdInlineWithSpans(
   resolveUrl?: (url: string) => string | null,
 ): { html: string; spanMap: Map<number, ParsedSpanAttrs> } {
   const { result, spanMap } = withSpanMap(
-    () => sanitizeMdInline(text.split(/  \n/).map(s => getRuntimeMarked().parseInline(s)).join('<br>')),
+    () => sanitizeMdInline(getRuntimeMarked().parseInline(text)),
     resolveUrl,
   );
   return { html: result, spanMap };
@@ -456,7 +456,7 @@ export function mdInlineWithSpansContinued(
   resolveUrl?: (url: string) => string | null,
 ): { html: string; nextOrdinal: number } {
   const { result, spanMap: partial, endOrdinal } = withSpanMap(
-    () => sanitizeMdInline(text.split(/  \n/).map(s => getRuntimeMarked().parseInline(s)).join('<br>')),
+    () => sanitizeMdInline(getRuntimeMarked().parseInline(text)),
     resolveUrl,
     startOrdinal,
   );
@@ -466,5 +466,5 @@ export function mdInlineWithSpansContinued(
 
 export function staticMdInline(text: string): string {
   return withSpanMap(() =>
-    text.split(/  \n/).map(s => getStaticMarked().parseInline(s)).join('<br>')).result;
+    getStaticMarked().parseInline(text)).result;
 }
