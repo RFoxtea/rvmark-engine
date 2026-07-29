@@ -122,7 +122,7 @@ async function init(page: RvmarkPageContext): Promise<void> {
   for (const [key, value] of initParams.entries()) prerootFrame.declare(key, value);
 
   setMeta(sourceFile.meta);
-  initSearch(sourceFile);
+  initSearch();
 
   const hash  = page.anchor ?? (location.hash ? location.hash.slice(1) : null);
   const focus = page.focus  ?? new URLSearchParams(location.search).get('focus');

@@ -11,11 +11,20 @@
  *     29.2. {#search-child-collapsed} SEARCHABLE_COLLAPSED_PARENT (collapsed)
  *       29.2.1. {#search-grandchild-collapsed} SEARCHABLE_NEEDLE_TEXT (unmounted)
  *     29.3. {#search-child-unrelated} Nothing interesting here
+ *     29.4. {#search-child-tagged} [SearchTagVisible] [.searchtaghidden] — a
+ *           rendered chip and an implicitly-internal (chipless) tag
  *   30. {#search-unsearchable-node} SEARCHABLE_NEEDLE_TEXT (outside any {searchable} scope)
- *     30.1. {#search-unsearchable-child} Not covered by {searchable}
+ *     30.1. {#search-unsearchable-child} UNSEARCHABLE_HIDDEN_TEXT (unmounted,
+ *           and outside {searchable}, so never reached)
  *
  * tests/rvmark/searchable-dir/index.rvmark carries file-level {searchable}
- * in its meta block, inherited to every file under that directory.
+ * in its meta block, inherited to every file under that directory. It is also
+ * transcluded into tests/rvmark/other.rvmark (#other-mixed-host), which has no
+ * {searchable} of its own — the "mixed page" case, i.e. the site-index shape.
+ *
+ * {searchable} is not what makes search appear: the widget is on every page
+ * and always matches rendered content. {searchable} only extends matching past
+ * what is rendered, which is what produces the breadcrumb dots.
  */
 
 import { test, expect } from '@playwright/test';
@@ -32,13 +41,15 @@ async function nodeContent(page, id) {
 }
 
 test.describe('search widget presence', () => {
-  test('is absent on pages with no {searchable} scope', async ({ page }) => {
+  // {searchable} is not a switch that turns search on — it only extends reach
+  // past what is rendered. The widget is available on every interactive page.
+  test('is present on a page with no {searchable} scope at all', async ({ page }) => {
     await page.goto('/other/');
     await waitForTree(page);
-    await expect(page.locator('.search-widget')).toHaveCount(0);
+    await expect(page.locator('.search-widget')).toHaveCount(1);
   });
 
-  test('Ctrl+F is not intercepted on a page with no {searchable} scope', async ({ page }) => {
+  test('Ctrl+F is intercepted even with no {searchable} scope', async ({ page }) => {
     await page.goto('/other/');
     await waitForTree(page);
     const prevented = await page.evaluate(() => new Promise((resolve) => {
@@ -46,10 +57,19 @@ test.describe('search widget presence', () => {
       const evt = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, cancelable: true, bubbles: true });
       window.dispatchEvent(evt);
     }));
-    expect(prevented).toBe(false);
+    expect(prevented).toBe(true);
   });
 
-  test('is present (but inactive) on the index page, which has a {searchable} node', async ({ page }) => {
+  test('rendered content is matchable on a page with no {searchable} scope', async ({ page }) => {
+    await page.goto('/other/');
+    await waitForTree(page);
+    await page.keyboard.press('Control+f');
+    const text = await page.locator('li.node .node-label').first().textContent();
+    await page.locator('.search-input').fill(text.trim().slice(0, 12));
+    await expect(page.locator('.search-mark').first()).toBeVisible();
+  });
+
+  test('is present (but inactive) on the index page', async ({ page }) => {
     await page.goto('/');
     await waitForTree(page);
     await expect(page.locator('.search-widget')).toHaveCount(1);
@@ -125,17 +145,29 @@ test.describe('matching and stepping to results', () => {
     await expect(row).toBeFocused();
   });
 
-  test('a match outside any {searchable} scope is not found', async ({ page }) => {
+  // Outside {searchable}, search still sees everything rendered — a mounted
+  // node matches normally. What it must not do is reach past the render.
+  test('a mounted node outside {searchable} still matches and marks', async ({ page }) => {
     await page.goto('/');
     await waitForTree(page);
     await page.keyboard.press('Control+f');
     await page.locator('.search-input').fill('SEARCHABLE_NEEDLE_TEXT');
-    await page.keyboard.press('Enter');
 
-    // search-unsearchable-node contains this text too, but isn't in scope,
-    // so Enter must not have selected it.
     const row = await nodeContent(page, 'search-unsearchable-node');
-    await expect(row).not.toHaveAttribute('aria-selected', 'true');
+    await expect(row.locator('.search-mark')).toHaveCount(1);
+  });
+
+  // The other half: unmounted content outside {searchable} is not reachable,
+  // so it yields neither a match nor a breadcrumb dot on its collapsed parent.
+  test('unmounted content outside {searchable} is not reached', async ({ page }) => {
+    await page.goto('/');
+    await waitForTree(page);
+    await page.keyboard.press('Control+f');
+    await page.locator('.search-input').fill('UNSEARCHABLE_HIDDEN_TEXT');
+
+    await expect(page.locator('.search-input')).toHaveClass(/search-input--no-matches/);
+    const parent = await nodeContent(page, 'search-unsearchable-node');
+    await expect(parent.locator('.search-indicator')).toHaveCount(0);
   });
 
   test('a match under a collapsed node marks the ancestor toggle, without expanding it', async ({ page }) => {
@@ -148,10 +180,100 @@ test.describe('matching and stepping to results', () => {
     await page.keyboard.press('Control+f');
     await page.locator('.search-input').fill('SEARCHABLE_NEEDLE_TEXT');
 
-    await expect(collapsedRow.locator('.toggle')).toHaveClass(/toggle--has-match/);
+    // The indicator is a .search-indicator sibling of .toggle, not a class on
+    // .toggle itself — .toggle rotates when expanded and already owns an
+    // ::after badge, so the marker deliberately lives outside it.
+    await expect(collapsedRow.locator('.search-indicator')).toHaveCount(1);
     // Still collapsed — search must never force a reveal.
     await expect(collapsedRow).toHaveAttribute('aria-expanded', 'false');
     await expect(page.locator('#tree-root #search-grandchild-collapsed')).toHaveCount(0);
+  });
+
+  // Tags are stripped out of node.label by the parser, so matching them takes
+  // an explicit pass over node.tags — without it a chip sitting plainly on
+  // screen is unsearchable, while the same word in prose still matches.
+  test('a tag chip\'s visible text is matchable and gets marked', async ({ page }) => {
+    await page.goto('/');
+    await waitForTree(page);
+    await page.keyboard.press('Control+f');
+    await page.locator('.search-input').fill('SearchTagVisible');
+
+    const row = await nodeContent(page, 'search-child-tagged');
+    await expect(row.locator('.node-tag .search-mark')).toHaveCount(1);
+  });
+
+  // Dot-prefixed tags are implicitly `internal` and render no chip at all.
+  // Matching them would produce a hit with nothing highlighted on screen.
+  test('a tag that renders no chip is not matchable', async ({ page }) => {
+    await page.goto('/');
+    await waitForTree(page);
+    await page.keyboard.press('Control+f');
+    await page.locator('.search-input').fill('searchtaghidden');
+
+    await expect(page.locator('.search-input')).toHaveClass(/search-input--no-matches/);
+  });
+
+  // A block's text lives in a .md-body sibling of .node-label, so marking has
+  // to walk .node-content rather than .node-label alone.
+  test('text inside a block body is matchable and gets marked', async ({ page }) => {
+    await page.goto('/');
+    await waitForTree(page);
+    await page.keyboard.press('Control+f');
+    await page.locator('.search-input').fill('SEARCHABLE_BLOCK_TEXT');
+
+    const row = await nodeContent(page, 'search-child-block');
+    await expect(row.locator('.md-body .search-mark')).toHaveCount(1);
+  });
+
+  // table/tr rows have no .node-label at all — their cells are .tr-cell
+  // children of .node-content, which the old label-scoped marking skipped.
+  test('table header and row cells are matchable and get marked', async ({ page }) => {
+    await page.goto('/');
+    await waitForTree(page);
+    await page.keyboard.press('Control+f');
+
+    await page.locator('.search-input').fill('SEARCHABLE_CELL_TEXT');
+    const table = await nodeContent(page, 'search-child-table');
+    await expect(table.locator('.tr-cell .search-mark')).toHaveCount(1);
+
+    await page.locator('.search-input').fill('SEARCHABLE_ROW_TEXT');
+    const row = await nodeContent(page, 'search-child-tr');
+    await expect(row.locator('.tr-cell .search-mark')).toHaveCount(1);
+  });
+
+  // table/tr rows build their .toggle as a direct child of the <li>, not
+  // inside .node-content like every other node type, so an indicator anchored
+  // only within .node-content silently never appeared on a table.
+  test('a collapsed table gets a breadcrumb dot for a hidden row match', async ({ page }) => {
+    await page.goto('/');
+    await waitForTree(page);
+    await page.keyboard.press('Control+f');
+    await page.locator('.search-input').fill('SEARCHABLE_TABLE_DEEP_TEXT');
+
+    const row = await nodeContent(page, 'search-table-collapsed');
+    await expect(row).toHaveAttribute('aria-expanded', 'false');
+    const li = page.locator('li.node', { has: row }).first();
+    await expect(li.locator('.search-indicator')).toHaveCount(1);
+  });
+
+  // Marking mutates the tree the MutationObserver watches, so a mark write
+  // that is mistaken for a real tree change recomputes forever. Nothing else
+  // here would catch that — it fails no assertion, it just spins.
+  test('marking does not retrigger its own tree-change refresh', async ({ page }) => {
+    await page.goto('/');
+    await waitForTree(page);
+    await page.keyboard.press('Control+f');
+    await page.locator('.search-input').fill('SEARCHABLE_BLOCK_TEXT');
+    await expect(page.locator('.search-mark')).toHaveCount(1);
+
+    // If marking were self-retriggering, marks would be torn down and rebuilt
+    // on every frame; a stable element identity across frames proves it settled.
+    const stable = await page.evaluate(async () => {
+      const first = document.querySelector('.search-mark');
+      await new Promise(r => setTimeout(r, 500));
+      return first === document.querySelector('.search-mark');
+    });
+    expect(stable).toBe(true);
   });
 
   test('expanding the collapsed node then lets Enter select the newly-mounted match', async ({ page }) => {
@@ -175,6 +297,36 @@ test.describe('matching and stepping to results', () => {
 });
 
 test.describe('directory-level {searchable} inheritance', () => {
+  // The site-index shape: a page with no {searchable} of its own that
+  // transcludes a searchable file. The transcluded nodes belong to a different
+  // SourceFile and never appear in this page's roots, so a roots-based search
+  // found nothing here — the widget did not even mount.
+  test('transcluded searchable content is searchable on an unsearchable page', async ({ page }) => {
+    await page.goto('/other/');
+    await waitForTree(page);
+    await expect(page.locator('.search-widget')).toHaveCount(1);
+
+    await page.keyboard.press('Control+f');
+    await page.locator('.search-input').fill('SEARCHABLE_DIR_NEEDLE');
+
+    // Mounted transcluded content matches and marks.
+    const row = await nodeContent(page, 'search-dir-child');
+    await expect(row.locator('.search-mark')).toHaveCount(1);
+  });
+
+  // {searchable} travels with the transcluded file, so its deep reach works
+  // across the boundary too — a collapsed node inside it still gets a dot.
+  test('transcluded {searchable} still yields breadcrumbs for hidden matches', async ({ page }) => {
+    await page.goto('/other/');
+    await waitForTree(page);
+    await page.keyboard.press('Control+f');
+    await page.locator('.search-input').fill('SEARCHABLE_DIR_DEEP_TEXT');
+
+    const collapsed = await nodeContent(page, 'search-dir-collapsed');
+    await expect(collapsed).toHaveAttribute('aria-expanded', 'false');
+    await expect(collapsed.locator('.search-indicator')).toHaveCount(1);
+  });
+
   test('a file under searchable-dir/ is in scope without its own node-level flag', async ({ page }) => {
     await page.goto('/searchable-dir/');
     await waitForTree(page);

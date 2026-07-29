@@ -138,9 +138,15 @@ footer {
   color: var(--muted);
   cursor: pointer;
   user-select: none;
-  transition: transform 0.15s;
   display: inline-block;
   text-align: center;
+}
+/* The bullet glyph is what spins on expand — see the rotation rules below.
+   inline-block so the transform applies; the transition lives here rather than
+   on .toggle so only the glyph animates. */
+.toggle::before {
+  display: inline-block;
+  transition: transform 0.15s;
 }
 
 /* Symbol hierarchy — all visual, no JS involvement */
@@ -191,8 +197,13 @@ footer {
 }
 
 .toggle:hover { color: var(--accent); }
-.node-content[aria-expanded="true"]:not([style*="--node-bullet"]):not(.li) .toggle:not(.leaf),
-.node-content[aria-expanded="true"].node-content--bullet-spins .toggle:not(.leaf) { transform: rotate(90deg); }
+/* The expand spin is applied to the bullet glyph (::before), not to .toggle
+   itself. .toggle stays a stable, unrotated frame so markers positioned
+   against it — the ::after badge below, and search's .search-indicator — keep
+   their corner instead of being swung around the bullet for the duration of
+   every expand/collapse transition. */
+.node-content[aria-expanded="true"]:not([style*="--node-bullet"]):not(.li) .toggle:not(.leaf)::before,
+.node-content[aria-expanded="true"].node-content--bullet-spins .toggle:not(.leaf)::before { transform: rotate(90deg); }
 .toggle.leaf  { cursor: default; color: var(--muted); }
 .toggle.leaf:hover { color: var(--muted); }
 
@@ -515,40 +526,69 @@ footer .footer-section { white-space: nowrap; }
 }
 .search-input:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 
-.search-result-label {
-  font-size: 0.78rem;
-  color: var(--muted);
+/* Zero matches. Dimming the reader's own query says "nothing found" without a
+   label to read — the same channel the answer would have appeared in. Only the
+   text dims: the field keeps its normal border and background so it still
+   reads as an active, focused input rather than a disabled one. */
+.search-input--no-matches { color: var(--muted); }
+
+/* The dimmed input is a visual-only cue, so the same fact is announced here.
+   Visually hidden rather than display:none, which would not be announced. */
+.search-status {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
   white-space: nowrap;
+  border: 0;
 }
 
 /* Collapsed ancestor of an unmounted match — a breadcrumb, not a reveal.
    The reader decides whether to expand; search never does it for them.
-   A real element (search.ts inserts/removes it), not a pseudo-element on
-   .toggle: .toggle already owns its own ::after (the "expandable" subscript
-   badge on custom-bullet/{.li} nodes) and gets rotated on expand, so a
-   marker living on .toggle would collide with that badge and spin with the
-   bullet. Positioned against .node (position: relative), not .toggle, so it
-   never enters .toggle's rotated coordinate space. */
-.search-indicator {
+
+   The superscript counterpart to the subscript ▶ badge above: same box, same
+   corner, top instead of bottom, with the same halo so it stays legible over
+   any bullet. Positioned against .toggle (which is position: relative) exactly
+   as that badge is — the one anchor every layout agrees on, since .toggle is
+   always --bullet-w wide with its bullet centred, while a table row's own
+   .node generates no box at all (.tr-row is display: contents, so a dot
+   positioned against it escapes to the table's grid container and lands beside
+   the header rather than on its own row).
+
+   Like that badge it sits inside .toggle, which is a stable frame: the expand
+   spin is applied to the bullet glyph (.toggle::before), not to .toggle
+   itself, so neither marker is swung around the bullet during the transition.
+   .toggle is also the one anchor every layout agrees on — it is always
+   --bullet-w wide with its bullet centred, while a table row's own .node
+   generates no box at all (.tr-row is display: contents, so a marker
+   positioned against it escapes to the table's grid container and lands beside
+   the header rather than on its own row). */
+.toggle > .search-indicator {
   position: absolute;
-  top: 0.35em;
-  left: calc(var(--bullet-w) - 0.25em);
-  width: 0.25em;
-  height: 0.25em;
+  top: 0.05em;
+  right: -0.1em;
+  width: 0.3em;
+  height: 0.3em;
   border-radius: 50%;
-  background: var(--warning);
+  background: var(--accent);
   pointer-events: none;
+  box-shadow: 0 0 0.2em var(--bg), 0 0 0.2em var(--bg), 0 0 0.2em var(--bg);
 }
 
-/* Matched substrings, styled like a browser's own find-in-page highlight.
-   --warning (system Mark color) is the platform's own find/highlight token.
+/* Matched substrings, styled like a browser's own find-in-page highlight, but
+   tinted with the theme accent rather than the system Mark yellow. Accent at
+   full strength is a saturated link color, so it's mixed into the background
+   — the same way --surface/--highlight are derived. The mix ratio trades
+   off two failure modes: too low and marks vanish against the selected-row
+   background, too high and --fg text on top of them stops being legible.
    One consistent color for every match — no separate "current" tint tied to
    selection, since that would make marks change color as a side effect of
    selection changing for reasons unrelated to search (e.g. clicking
    elsewhere in the tree). */
 .search-mark {
-  background: var(--warning);
-  color: CanvasText;
+  background: color-mix(in srgb, var(--accent) 55%, var(--bg));
+  color: var(--fg);
   border-radius: 2px;
 }
 
@@ -1256,7 +1296,7 @@ body.exhibit-open .exhibit-panel {
 
 /* Toggle arrow: driven by aria-expanded on sibling .node-content */
 .tr-row:has(> .node-content[aria-expanded]) > .tr-toggle:not(.leaf)::before         { content: '▶'; }
-.tr-row:has(> .node-content[aria-expanded="true"]) > .tr-toggle:not(.leaf)          { transform: rotate(90deg); }
+.tr-row:has(> .node-content[aria-expanded="true"]) > .tr-toggle:not(.leaf)::before  { transform: rotate(90deg); }
 
 /* Recolor toggle on focus */
 .tr-row:has(> .node-content:focus) > .tr-toggle { color: var(--accent); cursor: pointer; }

@@ -1,6 +1,6 @@
 {title: Other Fixture; author: other-author}
 
-1. {#other-root} Other file root
+1. {#other-root; open} Other file root
   1. {#other-child} Other file child
     1. {#other-grandchild} Other file grandchild
     2. {#other-grandchild-2} Other file grandchild 2
@@ -9,6 +9,7 @@
   2. {#other-child-2} Other file child 2
     1. Other child-2 grandchild no-slug
   3. {#other-root-ai} [GlobalAI] AI-tagged child of other-root
+  4. {#other-mixed-host; open; => ./searchable-dir/#search-dir-root}
 
 2. {#other-container} Container in other file
   1. {#other-ai-node} [GlobalAI] AI-tagged node in other file

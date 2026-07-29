@@ -1,13 +1,20 @@
 /**
  * search.ts
  *
- * A small search widget scoped to {searchable} subtrees. Overloads Ctrl+F:
+ * A small search widget, present on every interactive page. Overloads Ctrl+F:
  * the first press focuses this widget instead of native find; a second
  * press (while already focused) falls through to the browser's own find.
  *
- * Matching runs over SourceNode structure (the authored tree — not
- * transclusion, not exhibits, not the DOM), so it can see into subtrees that
- * haven't been mounted yet. It never mounts or expands anything on its own.
+ * Matching starts from the mounted tree and reads SourceNode structure from
+ * there. Driving it from the DOM rather than from the page file's roots is
+ * what makes it work on mixed pages: transcluded content belongs to another
+ * SourceFile and never appears in the page file's roots, but it is mounted.
+ *
+ * {searchable} does not switch search on. Everywhere, search matches and
+ * highlights what is rendered — like a browser's own find-in-page. Under
+ * {searchable}, matching additionally descends into authored-but-unrendered
+ * children, which is what produces the breadcrumb dots below. It never mounts
+ * or expands anything on its own.
  *
  * Mounted matches get a native-find-style highlight: every match is wrapped
  * in a <mark class="search-mark">, one consistent color — there is no
@@ -15,12 +22,14 @@
  * result (Enter/Shift+Enter) just moves ordinary tree selection
  * (RenderNode.setSelection), and selection can change for reasons unrelated
  * to search (e.g. clicking elsewhere), so marks don't react to it.
- * Highlighting wraps the matched substring within a node's rendered
- * .node-label text; a match that spans an inline formatting boundary (e.g.
- * part bold, part not) still counts as a match but isn't wrapped, since
- * splitting across element boundaries safely would mean reimplementing a
- * layout-aware algorithm — accepted imprecision, same as everywhere else
- * this feature touches raw vs. rendered text.
+ * Highlighting wraps the matched substring anywhere in a node's own rendered
+ * .node-content — .node-label, a block's .md-body, or table/tr .tr-cells,
+ * since a row's visible text does not all live in .node-label. A match that
+ * spans an inline formatting boundary (e.g. part bold, part not) still counts
+ * as a match but isn't wrapped, since splitting across element boundaries
+ * safely would mean reimplementing a layout-aware algorithm — accepted
+ * imprecision, same as everywhere else this feature touches raw vs. rendered
+ * text.
  *
  * A match inside an unmounted node only marks its nearest mounted ancestor
  * with a "contains a match below" indicator (.search-indicator), leaving
@@ -33,8 +42,8 @@
  */
 
 import type { SourceNode } from './parser.js';
-import type { SourceFile } from './source-file.js';
 import { isSearchable, RenderNode } from './render-node.js';
+import { resolveTagDef } from './tags.js';
 
 interface SearchMatch {
   node:    SourceNode;
@@ -43,8 +52,29 @@ interface SearchMatch {
 
 // ── Matching ──────────────────────────────────────────────────────────────────
 
+// The text a tag actually puts on screen, or null if it renders no chip.
+// Mirrors buildTagChips: `internal` tags (including the automatic ones on
+// dot-prefixed names like .minor) render nothing, and a `label` prop replaces
+// the tag's name as the visible text. Search matches what the reader can see,
+// so it has to apply the same two rules rather than looking at tag.name —
+// otherwise queries would hit invisible styling tags and miss relabelled ones.
+function tagDisplayText(tag: SourceNode['tags'][number], node: SourceNode): string | null {
+  const def = resolveTagDef(tag.name, tag.props, node.sourceFile?.tagDefs);
+  if (def.has('internal')) return null;
+  return def.get('label') ?? tag.name;
+}
+
+// Tag chip text is matched alongside label/body text: the parser strips tags
+// out of the raw line into node.tags, so a chip's text appears in neither
+// node.label nor node.bodyLines. Without this, tags sitting plainly on screen
+// were unsearchable — confusingly so, since a query could still match the same
+// word in ordinary prose elsewhere, making the gaps look arbitrary.
+// Tag props other than `label` are not searched: they're configuration
+// (styling, links, tooltips), not reader-visible body content.
 function nodeTextMatches(node: SourceNode, needle: string): boolean {
   if (node.label && node.label.toLowerCase().includes(needle)) return true;
+  if (node.tags.some(tag => tagDisplayText(tag, node)?.toLowerCase().includes(needle)))
+    return true;
   return node.bodyLines.some(line => line.toLowerCase().includes(needle));
 }
 
@@ -58,87 +88,122 @@ function mountedNodes(): Map<SourceNode, HTMLElement> {
   return map;
 }
 
-function searchTree(roots: SourceNode[], query: string): SearchMatch[] {
+// Search always works over what is actually rendered — matching starts from
+// the mounted tree, not from any one file's roots. That is what makes it work
+// on a mixed page like a site index: transcluded content belongs to a
+// different SourceFile entirely and never appears in the page file's roots,
+// but it is mounted, so the DOM sees it.
+//
+// {searchable} is not a switch that turns search on. It licenses the *deep*
+// walk: descending past what is mounted into authored-but-unrendered children,
+// which is what produces the "match below — expand to view" breadcrumb dots.
+// Without it, a node contributes only itself, exactly like a browser's own
+// find-in-page. With it, its whole authored subtree becomes reachable.
+//
+// Unresolved transclusion hosts are a hard limit either way: their children do
+// not exist until they resolve, so nothing can see into them. Consistent with
+// search never mounting or expanding anything on its own.
+function searchTree(query: string): SearchMatch[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return [];
   const mounted = mountedNodes();
   const out: SearchMatch[] = [];
-  // A node is in scope if it (or its file) carries {searchable} itself, or
-  // an ancestor's {searchable} already covers this whole subtree.
-  const walk = (node: SourceNode, inScope: boolean) => {
-    const scope = inScope || isSearchable(node);
-    if (!scope) { for (const child of node.children) walk(child, false); return; }
+  const seen = new Set<SourceNode>();
+
+  const record = (node: SourceNode) => {
+    if (seen.has(node)) return;
+    seen.add(node);
     if (nodeTextMatches(node, needle)) out.push({ node, li: mounted.get(node) ?? null });
-    for (const child of node.children) walk(child, true);
   };
-  roots.forEach(node => walk(node, false));
+
+  // Descend into authored children — only reached under a {searchable} scope.
+  const walkDeep = (node: SourceNode) => {
+    record(node);
+    for (const child of node.children) walkDeep(child);
+  };
+
+  // {searchable} covers a whole subtree, so a mounted node also counts as in
+  // scope when a mounted *ancestor* carries it. Ancestry is read off the DOM
+  // (.node-children nesting) rather than SourceNode, which has no parent
+  // pointer and, across a transclusion boundary, no link to the host at all.
+  const inScope = (node: SourceNode, li: HTMLElement): boolean => {
+    if (isSearchable(node)) return true;
+    for (let el = li.parentElement?.closest('li.node'); el; el = el.parentElement?.closest('li.node')) {
+      const ancestor = (el as any)._renderNode?.sourceNode as SourceNode | undefined;
+      if (ancestor && isSearchable(ancestor)) return true;
+    }
+    return false;
+  };
+
+  for (const [node, li] of mounted) {
+    record(node);
+    // A mounted node's own children may themselves be mounted (visited by this
+    // same loop) or not (only reachable here, and only when licensed).
+    if (inScope(node, li)) for (const child of node.children) walkDeep(child);
+  }
   return out;
 }
 
-function anySearchable(roots: SourceNode[]): boolean {
-  return roots.some(function check(node): boolean {
-    if (isSearchable(node)) return true;
-    return node.children.some(check);
-  });
-}
-
-// SourceNode has no parent pointer, so "does this collapsed node's subtree
-// contain a match" is computed in the same top-down walk that visits every
-// node, rather than by climbing from a match upward.
-interface WalkResult {
-  ownMatch: boolean;      // this node's own text matched
-  hasDescendantMatch: boolean;
-}
-
-function markIndicators(roots: SourceNode[], query: string): void {
+// Breadcrumb dots are the visible half of {searchable}: they mark a collapsed
+// mounted node whose hidden subtree contains a match. Only mounted nodes can
+// carry one, so this is driven from the mounted set (the same reason
+// searchTree is — a page's own file roots cannot see transcluded content).
+//
+// A node's own match never warrants a dot: a collapsed node still shows its
+// own label, so its match already gets a real .search-mark. Only matches
+// strictly below the collapse point are hidden and need announcing — and a
+// node can both match itself and hide a separate match below.
+function markIndicators(results: SearchMatch[], query: string): void {
   const needle = query.trim().toLowerCase();
-  const mounted = mountedNodes();
+  if (!needle) return;
 
-  const walk = (node: SourceNode, inScope: boolean): WalkResult => {
-    const scope = inScope || isSearchable(node);
-    if (!scope) {
-      for (const child of node.children) walk(child, false);
-      return { ownMatch: false, hasDescendantMatch: false };
-    }
-    const ownMatch = needle.length > 0 && nodeTextMatches(node, needle);
-    let hasDescendantMatch = false;
+  // Matched nodes that are not themselves mounted — the ones a reader cannot
+  // see. Anything mounted is already visible (and marked), so it needs no dot.
+  const hiddenMatches = new Set(results.filter(r => !r.li).map(r => r.node));
+  if (!hiddenMatches.size) return;
+
+  const containsHidden = (node: SourceNode): boolean => {
     for (const child of node.children) {
-      const r = walk(child, true);
-      if (r.ownMatch || r.hasDescendantMatch) hasDescendantMatch = true;
+      if (hiddenMatches.has(child) || containsHidden(child)) return true;
     }
-
-    const li = mounted.get(node);
-    if (li) {
-      // Only collapsed nodes need the indicator, and only for matches
-      // hidden inside their (currently unmounted) children — the node's own
-      // label stays visible even while collapsed (collapse only hides
-      // .node-children), so its own match already gets a real .search-mark
-      // regardless. ownMatch must not suppress the indicator: a node can
-      // both match itself AND have a separate match hidden below it.
-      const content = li.querySelector<HTMLElement>(':scope > .node-content');
-      const collapsed = content?.getAttribute('aria-expanded') === 'false';
-      setIndicator(content, collapsed && hasDescendantMatch);
-    }
-
-    return { ownMatch, hasDescendantMatch };
+    return false;
   };
 
-  roots.forEach(node => walk(node, false));
+  for (const [node, li] of mountedNodes()) {
+    const content = li.querySelector<HTMLElement>(':scope > .node-content');
+    const collapsed = content?.getAttribute('aria-expanded') === 'false';
+    setIndicator(li, collapsed && containsHidden(node));
+  }
 }
 
-// The breadcrumb dot is a real sibling element next to .toggle, not a
-// pseudo-element on it — .toggle already owns an ::after (the "expandable"
-// subscript badge on custom-bullet/{.li} nodes) and gets rotated when
-// expanded, and a marker anchored via .toggle::after would collide with
-// that badge and spin along with the bullet. A sibling shares neither.
-function setIndicator(content: HTMLElement | null | undefined, show: boolean): void {
-  if (!content) return;
-  const toggle = content.querySelector<HTMLElement>(':scope > .toggle');
-  let dot = content.querySelector<HTMLElement>(':scope > .search-indicator');
+// The breadcrumb dot always goes inside .toggle — one placement for every node
+// type, so a single CSS rule positions it (see .toggle > .search-indicator).
+//
+// .toggle is the only element every layout agrees on: it is always exactly
+// --bullet-w wide with its bullet centred, so a fixed offset within it is
+// stable no matter which glyph the node uses. Positioning against anything
+// outside it does not generalise — .tr-row and the table's children container
+// are display: contents, so a table row's .node generates no box at all, and a
+// dot positioned against it escapes to the table's grid container and lands
+// beside the header instead of on its own row.
+//
+// It is a real element rather than a .toggle::after pseudo-element because
+// .toggle already owns its ::after (the "expandable" subscript badge on
+// custom-bullet/{.li} nodes).
+//
+// The toggle itself sits inside .node-content for ordinary nodes but directly
+// on the <li> for table/tr rows, so both spots are checked to find it.
+function setIndicator(li: HTMLElement, show: boolean): void {
+  const content = li.querySelector<HTMLElement>(':scope > .node-content');
+  const toggle = content?.querySelector<HTMLElement>(':scope > .toggle')
+              ?? li.querySelector<HTMLElement>(':scope > .toggle');
+  let dot = toggle?.querySelector<HTMLElement>(':scope > .search-indicator') ?? null;
+
   if (show && !dot) {
+    if (!toggle) return; // nothing to anchor to
     dot = document.createElement('span');
     dot.className = 'search-indicator';
-    toggle?.after(dot);
+    toggle.appendChild(dot);
   } else if (!show && dot) {
     dot.remove();
   }
@@ -191,10 +256,22 @@ function markTextNode(textNode: Text, needle: string): void {
   parent.replaceChild(frag, textNode);
 }
 
+// Marks are scoped to the node's own .node-content — not just its .node-label.
+// A row's visible text does not all live in .node-label: block bodies render
+// into a sibling .md-body, and table/tr rows have no .node-label at all (their
+// cells are .tr-cell children of .node-content). Walking .node-content covers
+// all three, and the `:scope >` keeps it to this node's own row — descendant
+// rows are separate <li>s and get marked from their own SearchMatch.
+// .search-indicator is skipped: it is our own injected element, not content.
 function markMatchesIn(li: HTMLElement, needle: string): void {
-  const label = li.querySelector<HTMLElement>(':scope > .node-content .node-label');
-  if (!label) return;
-  const walker = document.createTreeWalker(label, NodeFilter.SHOW_TEXT);
+  const content = li.querySelector<HTMLElement>(':scope > .node-content');
+  if (!content) return;
+  const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n: Node) =>
+      (n.parentElement?.closest('.search-indicator'))
+        ? NodeFilter.FILTER_REJECT
+        : NodeFilter.FILTER_ACCEPT,
+  });
   const textNodes: Text[] = [];
   let n: Node | null;
   while ((n = walker.nextNode())) textNodes.push(n as Text);
@@ -209,10 +286,9 @@ function applyMarks(results: SearchMatch[], needle: string): void {
 
 // ── Widget state ──────────────────────────────────────────────────────────────
 
-let _sourceFile:      SourceFile | null = null;
 let _widget:          HTMLElement | null = null;
 let _input:           HTMLInputElement | null = null;
-let _resultLabel:     HTMLElement | null = null;
+let _status:          HTMLElement | null = null;
 let _results:         SearchMatch[] = [];
 // Index into _results of the match last stepped to via Enter/Shift+Enter —
 // not "the first match," and not updated by typing alone.
@@ -226,13 +302,12 @@ function recomputeResults(): void {
   clearIndicators();
   clearMarks();
 
-  if (!_sourceFile) { _results = []; updateResultLabel(); return; }
   const query = _input?.value ?? '';
   const needle = query.trim().toLowerCase();
-  _results = searchTree(_sourceFile.roots, query);
-  markIndicators(_sourceFile.roots, query);
+  _results = searchTree(query);
+  markIndicators(_results, query);
   if (needle) applyMarks(_results, needle);
-  updateResultLabel();
+  updateResultState();
 }
 
 // Recompute for a new query (typing). Unlike recomputeResults, this resets
@@ -256,14 +331,18 @@ function refreshForTreeChange(): void {
   recomputeResults();
 }
 
-function updateResultLabel(): void {
-  if (!_resultLabel) return;
-  if (!_input?.value.trim()) { _resultLabel.textContent = ''; return; }
-  const mountedCount = _results.filter(r => r.li).length;
-  if (!_results.length) { _resultLabel.textContent = 'No matches'; return; }
-  _resultLabel.textContent = mountedCount
-    ? `${_steppedIndex + 1 <= 0 ? 0 : _steppedIndex + 1} of ${mountedCount} visible`
-    : `${_results.length} below — expand to view`;
+// Zero matches is signalled by dimming the query text itself, not by a label.
+// Matches are shown in place (marks, breadcrumb dots), so their absence is
+// most legible in the same place the reader is already looking — their own
+// query — and it needs no reading. Deliberately not a count: any count would
+// be either over mounted matches (which shifts as the reader expands or
+// collapses, for reasons unrelated to the query) or over all matches (a number
+// that can't be reconciled with the marks actually on screen).
+function updateResultState(): void {
+  if (!_input) return;
+  const empty = !!_input.value.trim() && !_results.length;
+  _input.classList.toggle('search-input--no-matches', empty);
+  if (_status) _status.textContent = empty ? 'No matches' : '';
 }
 
 // Step to the next/previous mounted match and select it exactly as a click
@@ -280,7 +359,6 @@ function stepActive(dir: 1 | -1): void {
     ? (dir === 1 ? 0 : mountedIdxs.length - 1)
     : (curPos + dir + mountedIdxs.length) % mountedIdxs.length;
   _steppedIndex = mountedIdxs[nextPos];
-  updateResultLabel();
 
   const match = _results[_steppedIndex];
   const rn: RenderNode | undefined = (match?.li as any)?._renderNode;
@@ -304,9 +382,14 @@ function buildWidget(): HTMLElement {
   input.setAttribute('aria-label', 'Search this page');
   widget.appendChild(input);
 
-  const resultLabel = document.createElement('span');
-  resultLabel.className = 'search-result-label';
-  widget.appendChild(resultLabel);
+  // The dimmed-input cue is visual only, so the same fact goes to assistive
+  // tech through a live region. Visually hidden, not display:none — a
+  // display:none region is not announced.
+  const status = document.createElement('span');
+  status.className = 'search-status';
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
+  widget.appendChild(status);
 
   input.addEventListener('input', () => {
     applyResults();
@@ -346,7 +429,7 @@ function buildWidget(): HTMLElement {
   });
 
   _input = input;
-  _resultLabel = resultLabel;
+  _status = status;
   return widget;
 }
 
@@ -377,10 +460,13 @@ function isWidgetFocused(): boolean {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-export function initSearch(sourceFile: SourceFile): void {
-  _sourceFile = sourceFile;
-  if (!anySearchable(sourceFile.roots)) return; // nothing in scope — stay a no-op
-
+// The widget mounts on every interactive page. It is not gated on {searchable}
+// anywhere in the document: search over rendered content works everywhere, and
+// {searchable} only adds reach past what is rendered (see searchTree). Gating
+// on it made search vanish entirely on mixed pages like a site index, where
+// the searchable material arrives by transclusion and so never appears in the
+// page file's own roots.
+export function initSearch(): void {
   const anchor = document.getElementById('search-root');
   if (!anchor) return;
 
@@ -422,24 +508,32 @@ function observeTreeShape(): void {
     requestAnimationFrame(() => { pending = false; refreshForTreeChange(); });
   };
 
-  // Our own writes only ever happen inside .node-label (mark wrapping) or as
-  // .search-indicator siblings of .toggle — anything there is our own
-  // recompute, not a real tree-shape change, so it's excluded to avoid
-  // retriggering ourselves.
-  const isOwnWrite = (node: Node): boolean => {
-    const el = node instanceof HTMLElement ? node : node.parentElement;
-    return !!el?.closest('.node-label, .search-indicator');
+  // Our own writes are mark wrapping and the .search-indicator dots — both are
+  // recomputes, not real tree-shape changes, so they must not retrigger us.
+  // Identified by the injected elements themselves (.search-mark /
+  // .search-indicator) rather than by which container they landed in: marks go
+  // wherever a node's visible text lives (.node-label, .md-body, .tr-cell …),
+  // so a container-based check would silently miss cases and self-retrigger.
+  const isOwnWrite = (m: MutationRecord): boolean => {
+    const el = m.target instanceof HTMLElement ? m.target : m.target.parentElement;
+    if (el?.closest('.search-mark, .search-indicator')) return true;
+    // A mark being wrapped/unwrapped shows up as added/removed nodes on the
+    // surrounding container; the container itself is ordinary content.
+    const touched = [...m.addedNodes, ...m.removedNodes];
+    return touched.length > 0 && touched.every(n =>
+      n instanceof HTMLElement
+        ? n.matches('.search-mark, .search-indicator')
+        : n.nodeType === Node.TEXT_NODE); // text left behind by clearMarks()
   };
 
   new MutationObserver((mutations) => {
     const relevant = mutations.some(m => {
       if (m.type === 'attributes') {
-        return m.attributeName === 'aria-expanded' && !isOwnWrite(m.target);
+        return m.attributeName === 'aria-expanded' && !isOwnWrite(m);
       }
-      // childList: a real tree mount/unmount touches .node-children/.tree,
-      // never .node-label — our own writes are always inside .node-label.
-      if (isOwnWrite(m.target)) return false;
-      return true;
+      // childList: a real tree mount/unmount adds/removes rows and containers,
+      // which never look like a pure mark/indicator write.
+      return !isOwnWrite(m);
     });
     if (relevant) scheduleRefresh();
   }).observe(treeRoot, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-expanded'] });

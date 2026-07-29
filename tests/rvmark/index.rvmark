@@ -41,8 +41,17 @@
     2. {#search-child-collapsed} SEARCHABLE_COLLAPSED_PARENT, has a match below
       1. {#search-grandchild-collapsed} SEARCHABLE_NEEDLE_TEXT nested under a collapsed node
     3. {#search-child-unrelated} Nothing interesting here
+    4. {#search-child-tagged} [SearchTagVisible] [.searchtaghidden] Tag search fixture
+    5. {#search-child-block; = block}
+        ~~~
+        SEARCHABLE_BLOCK_TEXT inside a block body.
+        ~~~
+    6. {#search-child-table; = table; open} SEARCHABLE_CELL_TEXT | Col B
+      1. {#search-child-tr; = tr} SEARCHABLE_ROW_TEXT | r2
+    7. {#search-table-collapsed; = table} Collapsed table | Col B
+      1. {#search-table-hidden-row; = tr} SEARCHABLE_TABLE_DEEP_TEXT | h2
   19. {#search-unsearchable-node} SEARCHABLE_NEEDLE_TEXT outside any searchable scope
-    1. {#search-unsearchable-child} Not covered by {searchable}
+    1. {#search-unsearchable-child} UNSEARCHABLE_HIDDEN_TEXT, not covered by {searchable}
 
 2. {#embed-target} Embed target node
   1. Embed target child A

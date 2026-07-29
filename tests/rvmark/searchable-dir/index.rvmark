@@ -2,3 +2,5 @@
 
 1. {#search-dir-root; open} Search dir fixture SEARCHABLE_DIR_TEXT
   1. {#search-dir-child} SEARCHABLE_DIR_NEEDLE inherited from directory meta
+  2. {#search-dir-collapsed} Collapsed parent inside a searchable file
+    1. {#search-dir-deep} SEARCHABLE_DIR_DEEP_TEXT, unmounted until expanded
