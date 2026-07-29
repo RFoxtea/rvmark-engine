@@ -36,6 +36,13 @@
   15. {#child-exhibit; exhibit: ./other#other-root; action: exhibit} Exhibit node
   16. {#child-remote-embed; => https://test.invalid/remote.rvmark#remote-root} Remote embed
   17. {#embed-ai-node; => #embed-ai-target} Embed of AI-tagged node
+  18. {#search-root-node; searchable; open} Search fixture SEARCHABLE_TOP_TEXT
+    1. {#search-child-visible} SEARCHABLE_VISIBLE_TEXT child, matchable while mounted
+    2. {#search-child-collapsed} SEARCHABLE_COLLAPSED_PARENT, has a match below
+      1. {#search-grandchild-collapsed} SEARCHABLE_NEEDLE_TEXT nested under a collapsed node
+    3. {#search-child-unrelated} Nothing interesting here
+  19. {#search-unsearchable-node} SEARCHABLE_NEEDLE_TEXT outside any searchable scope
+    1. {#search-unsearchable-child} Not covered by {searchable}
 
 2. {#embed-target} Embed target node
   1. Embed target child A

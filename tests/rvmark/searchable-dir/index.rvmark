@@ -1,0 +1,4 @@
+{searchable}
+
+1. {#search-dir-root; open} Search dir fixture SEARCHABLE_DIR_TEXT
+  1. {#search-dir-child} SEARCHABLE_DIR_NEEDLE inherited from directory meta

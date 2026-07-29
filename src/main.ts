@@ -15,6 +15,7 @@ import { resolveSlugInFile, parseCompoundSlug, resolveFocusSlug } from './shared
 import type { SourceFile } from './source-file.js';
 import { loadPageFile, setPageContext } from './loader.js';
 import { setMeta, setFooter, setViewTarget, clearTree, showError } from './shell.js';
+import { initSearch } from './search.js';
 import { waitForPageContext, initPrerootListeners } from './iframe-guest.js';
 import { MOUNT_SETTLE_MS } from './constants.js';
 // Side-effect imports: register all built-in types via factoryRegister
@@ -121,6 +122,7 @@ async function init(page: RvmarkPageContext): Promise<void> {
   for (const [key, value] of initParams.entries()) prerootFrame.declare(key, value);
 
   setMeta(sourceFile.meta);
+  initSearch(sourceFile);
 
   const hash  = page.anchor ?? (location.hash ? location.hash.slice(1) : null);
   const focus = page.focus  ?? new URLSearchParams(location.search).get('focus');

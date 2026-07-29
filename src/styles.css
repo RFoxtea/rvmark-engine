@@ -84,6 +84,10 @@ header {
   margin-bottom: 1rem;
   border-bottom: 1px solid var(--border);
   padding-bottom: 0.6rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
 header h1 {
@@ -469,6 +473,83 @@ footer .footer-section { white-space: nowrap; }
   color: var(--fg);
   border-radius: 3px;
   outline: none;
+}
+
+/* ── Search ── */
+/* Empty when nothing on the page is {searchable} (search.ts stays a no-op),
+   so it takes no space and needs no visibility rule of its own then. */
+#search-root:empty { display: none; }
+
+.search-widget {
+  display: none;
+  align-items: center;
+  gap: 0.4rem;
+}
+.search-widget--active { display: flex; }
+
+/* #search-root sits in <header>, which can scroll out of view (#tree-scroll
+   is the page's own scroller) — search.ts toggles this class via an
+   IntersectionObserver on <header> so the widget re-docks as a floating
+   control fixed to the viewport whenever its header isn't visible. */
+#search-root.search-root--floating {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 30;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 0.3rem 0.5rem;
+  border-radius: 3px;
+}
+
+.search-input {
+  font: inherit;
+  font-size: 0.85rem;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.2rem 0.4rem;
+  width: 14rem;
+  max-width: 40vw;
+}
+.search-input:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+
+.search-result-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Collapsed ancestor of an unmounted match — a breadcrumb, not a reveal.
+   The reader decides whether to expand; search never does it for them.
+   A real element (search.ts inserts/removes it), not a pseudo-element on
+   .toggle: .toggle already owns its own ::after (the "expandable" subscript
+   badge on custom-bullet/{.li} nodes) and gets rotated on expand, so a
+   marker living on .toggle would collide with that badge and spin with the
+   bullet. Positioned against .node (position: relative), not .toggle, so it
+   never enters .toggle's rotated coordinate space. */
+.search-indicator {
+  position: absolute;
+  top: 0.35em;
+  left: calc(var(--bullet-w) - 0.25em);
+  width: 0.25em;
+  height: 0.25em;
+  border-radius: 50%;
+  background: var(--warning);
+  pointer-events: none;
+}
+
+/* Matched substrings, styled like a browser's own find-in-page highlight.
+   --warning (system Mark color) is the platform's own find/highlight token.
+   One consistent color for every match — no separate "current" tint tied to
+   selection, since that would make marks change color as a side effect of
+   selection changing for reasons unrelated to search (e.g. clicking
+   elsewhere in the tree). */
+.search-mark {
+  background: var(--warning);
+  color: CanvasText;
+  border-radius: 2px;
 }
 
 /* ── Transclusion error ── */

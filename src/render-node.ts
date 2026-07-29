@@ -190,6 +190,16 @@ export function isHiddenByModifier(attrs: NodeAttrs): boolean {
   return attrs.has('draft');
 }
 
+// Returns true if the node is in scope for search — either the node itself
+// carries {searchable} (which extends to its whole subtree, since callers
+// walk children recursively), or its containing file does (via {searchable}
+// in a file's own head meta, or inherited from a directory's index.rvmark
+// through the existing resolveInheritedHead chain).
+export function isSearchable(node: SourceNode): boolean {
+  const attrs = mergeNodeAttrs(tagsNodeAttrs(node.tags, node.sourceFile?.tagDefs), node.attrs);
+  return attrs.has('searchable') || (node.sourceFile?.meta.has('searchable') ?? false);
+}
+
 // ── buildRenderNode ───────────────────────────────────────────────────────────
 // Build one RenderNode from a SourceNode. Used by RenderNode.setChildren and
 // by the renderer bootstrap. Exported so handlers can call it for transclusion
