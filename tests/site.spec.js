@@ -51,6 +51,18 @@ async function waitForTree(page) {
   });
 }
 
+/**
+ * Open the footer view menu, which holds the show-hidden toggle.
+ * Idempotent: a <details> already open is left alone.
+ */
+async function openViewMenu(page) {
+  const menu = page.locator('footer .view-menu');
+  if (!(await menu.evaluate(el => el.open))) {
+    await menu.locator('summary').click();
+  }
+  await expect(page.locator('footer .view-menu-items')).toBeVisible();
+}
+
 /** The currently-selected row. */
 function selectedRow(page) {
   return page.locator('.node-content[aria-selected="true"]');
@@ -441,6 +453,8 @@ test.describe('footer and metadata', () => {
   test('footer shows "show hidden" toggle', async ({ page }) => {
     await page.goto('/');
     await waitForTree(page);
+    // It lives in the footer view menu, so it is visible once that is open.
+    await openViewMenu(page);
     await expect(page.locator('footer .show-hidden-toggle')).toBeVisible();
   });
 
@@ -662,11 +676,13 @@ test.describe('[.hidden] tag', () => {
 
   test('"show hidden" checkbox makes [.hidden] nodes appear', async ({ page }) => {
     await expect(await tryNodeContent(page, 'child-hidden')).toBeNull();
+    await openViewMenu(page);
     await page.locator('.show-hidden-toggle').click();
     await expect(await waitForNode(page, 'child-hidden')).toBeVisible();
   });
 
   test('unchecking "show hidden" removes [.hidden] nodes again', async ({ page }) => {
+    await openViewMenu(page);
     await page.locator('.show-hidden-toggle').click();
     await expect(await waitForNode(page, 'child-hidden')).toBeVisible();
     await page.locator('.show-hidden-toggle').click();

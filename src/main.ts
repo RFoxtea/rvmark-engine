@@ -14,7 +14,7 @@ import { buildRenderNode, RenderNode } from './render-node.js';
 import { resolveSlugInFile, parseCompoundSlug, resolveFocusSlug } from './shared.js';
 import type { SourceFile } from './source-file.js';
 import { loadPageFile, setPageContext } from './loader.js';
-import { setMeta, setFooter, clearTree, showError } from './shell.js';
+import { setMeta, setFooter, setViewTarget, clearTree, showError } from './shell.js';
 import { waitForPageContext, initPrerootListeners } from './iframe-guest.js';
 import { MOUNT_SETTLE_MS } from './constants.js';
 // Side-effect imports: register all built-in types via factoryRegister
@@ -85,6 +85,21 @@ async function init(page: RvmarkPageContext): Promise<void> {
   const staticEl = document.getElementById('static-content');
   const treeEl   = document.getElementById('tree-scroll');
 
+  // ?--static — show the build-time static rendering that normally only
+  // <noscript> readers see, and skip building the tree entirely. The static
+  // <li>s carry permalinkId as their id, so any #fragment still anchors.
+  // Deliberately before the fetch: this view needs nothing the interactive one
+  // loads.
+  if (new URLSearchParams(location.search).has('--static')) {
+    if (staticEl) staticEl.style.display = 'block';
+    if (treeEl) treeEl.style.display = 'none';
+    if (location.hash) {
+      document.getElementById(location.hash.slice(1))
+        ?.scrollIntoView({ block: 'center' });
+    }
+    return;
+  }
+
   let sourceFile: SourceFile;
   try {
     setPageContext(page.file, basePath);
@@ -99,8 +114,10 @@ async function init(page: RvmarkPageContext): Promise<void> {
     return;
   }
 
+  // Engine-reserved params — they select a view, they are not page state.
   const initParams = new URLSearchParams(location.search);
   initParams.delete('focus');
+  initParams.delete('--static');
   for (const [key, value] of initParams.entries()) prerootFrame.declare(key, value);
 
   setMeta(sourceFile.meta);
@@ -119,6 +136,7 @@ async function init(page: RvmarkPageContext): Promise<void> {
   const treeRoot = document.getElementById('tree-root') as HTMLElement;
   treeRoot.addEventListener('rvmark-select', (e) => {
     setFooter((e as CustomEvent).detail.meta);
+    setViewTarget(RenderNode.currentSelection);
   });
   treeRoot.addEventListener('rvmark-deselect', () => {
     // Reset to page-level meta. On a normal A→B move this runs first and the
@@ -126,6 +144,7 @@ async function init(page: RvmarkPageContext): Promise<void> {
     // no flash). When selection goes to nothing, no select follows and the
     // page-meta footer stands.
     setFooter(null);
+    setViewTarget(null);
   });
 
   window.addEventListener('message', (e: MessageEvent) => {

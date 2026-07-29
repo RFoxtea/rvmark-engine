@@ -380,9 +380,96 @@ footer .footer-section { white-space: nowrap; }
   white-space: nowrap;
   border: 0;
 }
-.show-hidden-toggle::before { content: '[ ] '; }
-.show-hidden-toggle:has(input:checked)::before { content: '[×] '; }
+/* The brackets are static text; only the tick cell between them changes. That
+   cell reserves a fixed 1ch whether or not it holds a '×', so ticking the box
+   cannot change the marker's width and shove the label sideways. */
+.show-hidden-toggle .tick {
+  display: inline-block;
+  width: 1ch;
+  text-align: center;
+}
+.show-hidden-toggle:has(input:checked) .tick::before { content: '×'; }
+/* Matches whether the label itself is the focus target (in the view menu, where
+   it carries tabindex) or the checkbox inside it is. */
+.show-hidden-toggle:focus-visible,
 .show-hidden-toggle:has(input:focus-visible) { outline: 1px solid var(--accent); outline-offset: 1px; }
+
+/* ── View menu (footer drop-up) ── */
+/* Opens upward: the footer is the last thing on the page, so a downward menu
+   would open off-screen. */
+.view-menu { position: relative; display: inline-block; }
+.view-menu > summary {
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  padding: 0 0.25rem;
+  line-height: 1;
+  color: var(--muted);
+}
+.view-menu > summary::-webkit-details-marker { display: none; }
+/* Points the way the menu opens. ▲ is drawn upward in the font rather than
+   being a rotated ▶, so it keeps its intended baseline and optical centre.
+   Static: here the direction is the affordance, so it must not move. */
+.view-menu > summary::before {
+  content: '▲';
+  font-family: monospace;
+  font-size: 0.85em;
+}
+.view-menu > summary:hover { color: var(--accent); }
+.view-menu > summary:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+
+.view-menu-items {
+  position: absolute;
+  bottom: calc(100% + 0.2rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: max-content;
+  padding: 0.15rem 0;
+  line-height: 1.3;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  text-align: left;
+}
+/* Rows sit at the footer's own muted weight; hover lifts one to full contrast
+   rather than every row shouting at once. */
+.view-menu-items a {
+  padding: 0.1rem 0.5rem;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+/* Same highlight as a selected row in the tree. */
+.view-menu-items a:hover,
+.view-menu-items a:focus-visible {
+  background: var(--surface-2);
+  color: var(--fg);
+  border-radius: 3px;
+  outline: none;
+}
+
+.view-menu-sep {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 0.15rem 0;
+}
+
+/* The show-hidden toggle keeps its [ ]/[×] marker, but sits as a menu row. */
+.view-menu-items .show-hidden-toggle {
+  padding: 0.1rem 0.5rem;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.view-menu-items .show-hidden-toggle:hover,
+.view-menu-items .show-hidden-toggle:focus-visible,
+.view-menu-items .show-hidden-toggle:has(input:focus-visible) {
+  background: var(--surface-2);
+  color: var(--fg);
+  border-radius: 3px;
+  outline: none;
+}
 
 /* ── Transclusion error ── */
 /* A broken/timed-out transclusion renders as an ordinary row with a distinct

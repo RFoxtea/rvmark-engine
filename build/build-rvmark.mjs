@@ -626,7 +626,6 @@ for (const [relPath, sourceFile] of sourceFiles) {
   const description = meta?.get('description') || 'A tree-structured website powered by rvmark — expand nodes to explore.';
   const license     = meta?.get('license') ?? '';
   const author      = meta?.get('author') ?? '';
-  const showHiddenToggle = !meta?.has('no-hidden-toggle');
   const footerLabel = meta?.get('footer-label') ?? 'rvmark';
 
   const staticHtml = renderStaticNodes(sourceFile.roots, sourceFile);
@@ -638,16 +637,20 @@ for (const [relPath, sourceFile] of sourceFiles) {
   html = html.replaceAll('{{RVMARK_FILE}}',   relPath);
   html = html.replaceAll('{{SITE_MAP_JSON}}', siteMapJson);
   {
-    // The template places these four chips back-to-back with no separator of
+    // The template places these three chips back-to-back with no separator of
     // its own, and any chip (including footerLabel) may be empty — so each
     // chip after the first present one needs a leading " · ".
+    //
+    // No show-hidden toggle here: it drives runtime state, so in the static
+    // rendering it would be an inert control. The hydrated footer builds its
+    // own (inside the view menu); the static view has no use for one, and
+    // renders [.hidden] nodes unconditionally anyway.
     let seenChip = false;
     const sep = () => { const s = seenChip ? ' · ' : ''; seenChip = true; return s; };
 
     html = html.replaceAll('{{FOOTER_LABEL}}', footerLabel ? `${sep()}<span class="footer-section">${staticMdInline(footerLabel)}</span>` : '');
     html = html.replaceAll('{{LICENSE}}',      license ? `${sep()}<span class="footer-section">${staticMdInline(license)}</span>` : '');
     html = html.replaceAll('{{AUTHOR}}',       author  ? `${sep()}<span class="footer-section">${staticMdInline(author)}</span>` : '');
-    html = html.replaceAll('{{SHOW_HIDDEN_TOGGLE}}', showHiddenToggle ? `${sep()}<label class="show-hidden-toggle footer-section"><input type="checkbox" id="show-hidden-cb"> show hidden</label>` : '');
   }
   html = html.replace('{{STATIC_HTML}}', () => staticHtml);
 
