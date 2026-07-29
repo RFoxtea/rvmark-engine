@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Expanded-state favicon: the same ▶ rotated 90° into ▼, matching what the
+       tree's own toggle does on expand. template.html swaps this in while the
+       tab is the active one, so the tab you are looking at reads as expanded
+       and the ones you leave collapse back to ▶.
+       Geometry is favicon.svg's path rotated about (16,16); fill tracks the
+       colour scheme the same way, see the note there.
+
+       A site can override this by shipping its own
+       _assets/favicon-expanded.svg. -->
+  <style>
+    path { fill: #ee0000; }
+    @media (prefers-color-scheme: dark) { path { fill: #ff6666; } }
+  </style>
+  <path d="M6 11 L26 11 L16 25 Z"/>
+</svg>

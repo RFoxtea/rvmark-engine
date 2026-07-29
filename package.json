@@ -41,6 +41,8 @@
     "scripts/static-server.mjs",
     "src/template.html",
     "src/styles.css",
+    "src/favicon.svg",
+    "src/favicon-expanded.svg",
     "src/types/*.css"
   ],
   "scripts": {

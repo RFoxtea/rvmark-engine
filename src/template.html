@@ -18,6 +18,33 @@
     form-action 'self';
   ">
   <title>{{TITLE}}</title>
+  <link rel="icon" href="{{BASE}}_assets/favicon.svg" type="image/svg+xml">
+  <script>
+    // The favicon is the tree's own ▶ bullet, and it toggles with tab
+    // visibility: the tab you are looking at is ▼ (expanded), and tabs you
+    // leave collapse back to ▶. Favicons render as static images, so this is a
+    // swap of the href rather than anything animated.
+    //
+    // The markup's own href stays the collapsed ▶ — that is what crawlers,
+    // bookmarks and link previews read, since none of them run this. The
+    // expanded state exists only for a live, focused tab.
+    //
+    // Inline and in <head> so a tab restored in the background never flashes
+    // the wrong state. Silently inert if a site ships no
+    // favicon-expanded.svg — the browser just keeps the icon it has.
+    (function () {
+      var link = document.querySelector('link[rel="icon"]');
+      if (!link) return;
+      var collapsed = link.getAttribute('href');
+      var expanded  = collapsed.replace(/favicon\.svg$/, 'favicon-expanded.svg');
+      if (expanded === collapsed) return;
+      var sync = function () {
+        link.setAttribute('href', document.hidden ? collapsed : expanded);
+      };
+      document.addEventListener('visibilitychange', sync);
+      sync();
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap">

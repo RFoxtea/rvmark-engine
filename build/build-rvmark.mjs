@@ -693,6 +693,19 @@ for (const [relPath, sourceFile] of sourceFiles) {
   cpSync(requireFromEngine.resolve('marked/marked.min.js'), join(VENDOR_DIR, 'marked.min.js'));
   cpSync(requireFromEngine.resolve('dompurify/dist/purify.min.js'), join(VENDOR_DIR, 'purify.min.js'));
 
+  // Default favicons → _assets/. Written before the user assets copy below, so
+  // a site shipping its own _assets/favicon.svg (or -expanded) simply
+  // overwrites these. The engine ships defaults because template.html always
+  // emits the <link> and the visibility swap — without a file behind them,
+  // every site would start with a broken icon reference.
+  {
+    const ASSETS_DIR = join(DIST_DIR, '_assets');
+    mkdirSync(ASSETS_DIR, { recursive: true });
+    for (const f of ['favicon.svg', 'favicon-expanded.svg']) {
+      cpSync(enginePath('src', f), join(ASSETS_DIR, f));
+    }
+  }
+
   // User assets dir (e.g. ./assets) → dist/_assets/ (contents copied in).
   if (assetsDir && existsSync(assetsDir)) cpSync(assetsDir, join(DIST_DIR, '_assets'), { recursive: true });
 

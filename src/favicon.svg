@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Default favicon: the ▶ bullet of a collapsed node, the tree's own mark.
+       Also the static icon: what crawlers, bookmarks and link previews get,
+       since they never run the visibilitychange swap in template.html.
+
+       Accent red, matching what the accent token resolves to (ActiveText):
+       #ee0000 in light, #ff6666 in dark. A favicon renders outside the page
+       and cannot read the page's CSS custom properties, so the values are
+       restated here; the embedded media query picks between them, which SVG
+       favicons honour and re-evaluate when the OS theme changes. Falls back to
+       the light value where that is unsupported.
+
+       A site can override this by shipping its own _assets/favicon.svg. -->
+  <style>
+    path { fill: #ee0000; }
+    @media (prefers-color-scheme: dark) { path { fill: #ff6666; } }
+  </style>
+  <path d="M11 6 L25 16 L11 26 Z"/>
+</svg>
