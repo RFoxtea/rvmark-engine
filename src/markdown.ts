@@ -41,23 +41,33 @@ function mdEscHtml(s: string): string {
 
 // ── Sanitizer ──────────────────────────────────────────────────────────────────
 
-const SANITIZE_TAGS = [
-  // Block
-  'p', 'br', 'hr', 'blockquote', 'pre', 'div',
+// Tag groups. The block and inline sanitizers differ only in whether the
+// block-level tags are allowed — everything else is shared, so math/SVG support
+// can't drift between the two lists (it did once: the KaTeX SVG group was added
+// to the block list only, silently eating every radical in inline math).
+const BLOCK_TAGS = [
+  'p', 'hr', 'blockquote', 'pre', 'div',
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
   'ul', 'ol', 'li',
   'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td',
-  // Inline
+];
+
+const INLINE_TAGS = [
   'a', 'strong', 'em', 'b', 'i', 'code', 'del', 's', 'sup', 'sub',
-  'span', 'img', 'ruby', 'rt', 'rp',
+  'span', 'img', 'ruby', 'rt', 'rp', 'br',
+];
+
+const MATH_TAGS = [
   // KaTeX / MathML
   'math', 'mrow', 'mi', 'mo', 'mn', 'msup', 'msub', 'msubsup',
   'mfrac', 'msqrt', 'mroot', 'mtext', 'mspace', 'mover', 'munder',
   'munderover', 'mtable', 'mtr', 'mtd', 'mpadded', 'mphantom',
-  'semantics', 'annotation',
+  'mstyle', 'semantics', 'annotation',
   // KaTeX SVG (radical sign, extensible arrows, etc.)
   'svg', 'path', 'line', 'rect', 'circle', 'g',
 ];
+
+const SANITIZE_TAGS = [...BLOCK_TAGS, ...INLINE_TAGS, ...MATH_TAGS];
 
 const SANITIZE_ATTRS = [
   'href', 'src', 'alt', 'title', 'class', 'id', 'draggable', 'loading',
@@ -116,14 +126,9 @@ export function sanitizeMd(html: string): string {
   return DOMPurify.sanitize(html, makeSanitizeConfig(SANITIZE_TAGS, SANITIZE_ATTRS));
 }
 
-const SANITIZE_INLINE_TAGS = [
-  'a', 'strong', 'em', 'b', 'i', 'code', 'del', 's', 'sup', 'sub', 'span', 'br', 'img', 'ruby', 'rt', 'rp',
-  // KaTeX / MathML
-  'math', 'mrow', 'mi', 'mo', 'mn', 'msup', 'msub', 'msubsup',
-  'mfrac', 'msqrt', 'mroot', 'mtext', 'mspace', 'mover', 'munder',
-  'munderover', 'mtable', 'mtr', 'mtd', 'mpadded', 'mphantom',
-  'semantics', 'annotation',
-];
+// Same as SANITIZE_TAGS minus BLOCK_TAGS: parseInline() output lands inside an
+// existing element, so a block tag there could break out of its container.
+const SANITIZE_INLINE_TAGS = [...INLINE_TAGS, ...MATH_TAGS];
 
 function sanitizeMdInline(html: string): string {
   return DOMPurify.sanitize(html, makeSanitizeConfig(SANITIZE_INLINE_TAGS, SANITIZE_ATTRS));
