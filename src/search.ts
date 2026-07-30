@@ -43,6 +43,7 @@
 
 import type { SourceNode } from './parser.js';
 import { isSearchable, RenderNode } from './render-node.js';
+import { scrollRowIntoMiddle } from './scroll.js';
 import { resolveTagDef } from './tags.js';
 
 interface SearchMatch {
@@ -144,6 +145,32 @@ function searchTree(query: string): SearchMatch[] {
   return out;
 }
 
+// Mounted nodes whose subtree contains a hidden (unmounted) match — the ones
+// eligible for a breadcrumb dot once also collapsed. Shared by markIndicators
+// (which draws the dot) and stepTargets (which also treats these as stepping
+// stops, in document order alongside real .search-marks — see stepTargets).
+function nodesWithHiddenMatch(results: SearchMatch[]): Map<SourceNode, HTMLElement> {
+  const mounted = mountedNodes();
+  const out = new Map<SourceNode, HTMLElement>();
+
+  // Matched nodes that are not themselves mounted — the ones a reader cannot
+  // see. Anything mounted is already visible (and marked), so it needs no dot.
+  const hiddenMatches = new Set(results.filter(r => !r.li).map(r => r.node));
+  if (!hiddenMatches.size) return out;
+
+  const containsHidden = (node: SourceNode): boolean => {
+    for (const child of node.children) {
+      if (hiddenMatches.has(child) || containsHidden(child)) return true;
+    }
+    return false;
+  };
+
+  for (const [node, li] of mounted) {
+    if (containsHidden(node)) out.set(node, li);
+  }
+  return out;
+}
+
 // Breadcrumb dots are the visible half of {searchable}: they mark a collapsed
 // mounted node whose hidden subtree contains a match. Only mounted nodes can
 // carry one, so this is driven from the mounted set (the same reason
@@ -157,22 +184,11 @@ function markIndicators(results: SearchMatch[], query: string): void {
   const needle = query.trim().toLowerCase();
   if (!needle) return;
 
-  // Matched nodes that are not themselves mounted — the ones a reader cannot
-  // see. Anything mounted is already visible (and marked), so it needs no dot.
-  const hiddenMatches = new Set(results.filter(r => !r.li).map(r => r.node));
-  if (!hiddenMatches.size) return;
-
-  const containsHidden = (node: SourceNode): boolean => {
-    for (const child of node.children) {
-      if (hiddenMatches.has(child) || containsHidden(child)) return true;
-    }
-    return false;
-  };
-
+  const withHidden = nodesWithHiddenMatch(results);
   for (const [node, li] of mountedNodes()) {
     const content = li.querySelector<HTMLElement>(':scope > .node-content');
     const collapsed = content?.getAttribute('aria-expanded') === 'false';
-    setIndicator(li, collapsed && containsHidden(node));
+    setIndicator(li, collapsed && withHidden.has(node));
   }
 }
 
@@ -290,14 +306,12 @@ let _widget:          HTMLElement | null = null;
 let _input:           HTMLInputElement | null = null;
 let _status:          HTMLElement | null = null;
 let _results:         SearchMatch[] = [];
-// Index into _results of the match last stepped to via Enter/Shift+Enter —
-// not "the first match," and not updated by typing alone.
-let _steppedIndex:    number = -1;
 let _preActivationFocus: HTMLElement | null = null;
 
-// Recompute matches/indicators/marks for the current query, keeping
-// _steppedIndex (and therefore selection) untouched — used when the tree's
-// shape changes under an unchanged query (see refreshForTreeChange below).
+// Recompute matches/indicators/marks for the current query. Selection is left
+// untouched — stepActive derives its position from the live tree selection
+// (RenderNode.currentSelection) rather than any state tracked here, so there
+// is nothing else to reset or preserve across a recompute.
 function recomputeResults(): void {
   clearIndicators();
   clearMarks();
@@ -310,11 +324,8 @@ function recomputeResults(): void {
   updateResultState();
 }
 
-// Recompute for a new query (typing). Unlike recomputeResults, this resets
-// _steppedIndex — a new query has no "current" match yet until the reader
-// steps to one.
+// Recompute for a new query (typing).
 function applyResults(): void {
-  _steppedIndex = -1;
   recomputeResults();
 }
 
@@ -324,8 +335,8 @@ function applyResults(): void {
 // Global rerun rather than diffing the changed subtree: cost is bounded by
 // however much is currently mounted (only what the reader has expanded),
 // not by document size, so scoping it would save little for real added
-// complexity. Selection/_steppedIndex are left alone — a shape change is
-// not the reader committing to a different result.
+// complexity. Selection is left alone — a shape change is not the reader
+// committing to a different result.
 function refreshForTreeChange(): void {
   if (!_input?.value.trim()) return; // nothing to refresh without a query
   recomputeResults();
@@ -345,26 +356,85 @@ function updateResultState(): void {
   if (_status) _status.textContent = empty ? 'No matches' : '';
 }
 
-// Step to the next/previous mounted match and select it exactly as a click
-// would (RenderNode.setSelection + focus) — there is no separate "search
-// result" visual state, a stepped-to match just becomes the selection.
-// Marks themselves don't change appearance based on which one this is —
-// that would make them shift color as a side effect of selection changing
-// for any other reason (e.g. clicking elsewhere in the tree).
-function stepActive(dir: 1 | -1): void {
-  const mountedIdxs = _results.map((r, i) => r.li ? i : -1).filter(i => i >= 0);
-  if (!mountedIdxs.length) return;
-  const curPos = mountedIdxs.indexOf(_steppedIndex);
-  const nextPos = curPos === -1
-    ? (dir === 1 ? 0 : mountedIdxs.length - 1)
-    : (curPos + dir + mountedIdxs.length) % mountedIdxs.length;
-  _steppedIndex = mountedIdxs[nextPos];
+// Rows Enter/Shift+Enter can land on: every mounted match's <li>, plus every
+// collapsed ancestor carrying a breadcrumb dot (nodesWithHiddenMatch) — a dot
+// means a match exists below that the reader cannot otherwise reach without
+// first finding and expanding that exact row, so stepping treats it as a stop
+// in its own right rather than only ever landing on real .search-marks.
+// Deduplicated and put in document order (mountedNodes() preserves
+// querySelectorAll order) since a direct match and a dot can interleave freely
+// — e.g. a collapsed node can itself match *and* hide a further match below.
+function stepTargets(results: SearchMatch[]): HTMLElement[] {
+  const ordered = mountedNodes();
+  const withHidden = nodesWithHiddenMatch(results);
+  const direct = new Set(results.filter(r => r.li).map(r => r.node));
+  const out: HTMLElement[] = [];
+  for (const [node, li] of ordered) {
+    if (direct.has(node)) { out.push(li); continue; }
+    // Only a node that's *actually showing* a dot right now is a target —
+    // matching markIndicators' own condition. An expanded ancestor in
+    // withHidden has no dot (its hidden descendant may since have been
+    // mounted, or a still-collapsed descendant carries the dot instead), so
+    // stepping onto it would be a stop with nothing to show for it.
+    const content = li.querySelector<HTMLElement>(':scope > .node-content');
+    const collapsed = content?.getAttribute('aria-expanded') === 'false';
+    if (collapsed && withHidden.has(node)) out.push(li);
+  }
+  return out;
+}
 
-  const match = _results[_steppedIndex];
-  const rn: RenderNode | undefined = (match?.li as any)?._renderNode;
+// Step to the next/previous target and select it exactly as a click would
+// (RenderNode.setSelection) — there is no separate "search result" visual
+// state, a stepped-to row just becomes the selection. Marks themselves don't
+// change appearance based on which one this is — that would make them shift
+// color as a side effect of selection changing for any other reason (e.g.
+// clicking elsewhere in the tree).
+//
+// Deliberately does not move DOM focus to the row (unlike a plain click,
+// which focuses via focusin): Enter is typed from the search input, and
+// stepping through results should keep it focused so the reader can keep
+// pressing Enter/Shift+Enter without refocusing the widget. aria-selected
+// styling doesn't depend on focus (see .node-content[aria-selected="true"] in
+// styles.css), so the row still shows as current; scrollRowIntoMiddle is
+// called directly since that scroll normally rides along with focus().
+//
+// Steps from the *current tree selection*, not from a private bookmark — the
+// reader can change selection some other way (e.g. clicking a different row)
+// while the widget stays focused, and the next Enter should continue from
+// there rather than jumping back to wherever this widget last left off.
+//
+// The selection is often not itself a target — most notably right after
+// expanding a breadcrumb-only stop: that reveals its child as a real match,
+// but the just-expanded row drops out of stepTargets entirely (it's neither a
+// direct match nor collapsed anymore), while staying selected. So rather than
+// requiring an exact match, curPos is "the last target at or before the
+// selection" in document order — one rule that covers both cases: an exact
+// match is trivially at-or-before itself (yielding its own index), and a
+// non-target selection resolves to whatever target precedes it, so stepping
+// forward continues on to the next one instead of restarting from the top.
+function stepActive(dir: 1 | -1): void {
+  const targets = stepTargets(_results);
+  if (!targets.length) return;
+  const selectionLi = RenderNode.currentSelection?.li ?? null;
+
+  let curPos = -1;
+  if (selectionLi) {
+    for (let i = 0; i < targets.length; i++) {
+      const rel = selectionLi.compareDocumentPosition(targets[i]);
+      const targetIsAfter = targets[i] !== selectionLi && !!(rel & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (targetIsAfter) break;
+      curPos = i;
+    }
+  }
+  const nextPos = curPos === -1
+    ? (dir === 1 ? 0 : targets.length - 1)
+    : (curPos + dir + targets.length) % targets.length;
+  const li = targets[nextPos];
+
+  const rn: RenderNode | undefined = (li as any)._renderNode;
   if (rn) {
     RenderNode.setSelection(rn);
-    rn.contentEl.focus();
+    scrollRowIntoMiddle(rn.contentEl);
   }
 }
 
@@ -397,9 +467,9 @@ function buildWidget(): HTMLElement {
   });
 
   // Captured on every focus-in, not just the first Ctrl+F — the input can
-  // regain focus later (e.g. clicking back into it after Enter moved focus
-  // into the tree), and Escape should always return to wherever focus was
-  // immediately before that, not to a stale one-time snapshot.
+  // regain focus later (e.g. clicking back into it), and Escape should
+  // fall back to wherever focus was immediately before that when there's no
+  // current tree selection to prefer instead (see the Escape handler below).
   //
   // relatedTarget can be <body> (or null) rather than something meaningful —
   // e.g. pressing Ctrl+F as the very first action on a freshly-loaded page,
@@ -413,7 +483,7 @@ function buildWidget(): HTMLElement {
   });
 
   // Losing focus with an empty query hides the widget; losing focus with
-  // text still in it (e.g. after Enter moves focus into the tree) does not.
+  // text still in it (e.g. after Enter selects a match) does not.
   input.addEventListener('focusout', () => updateVisibility());
 
   input.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -424,7 +494,15 @@ function buildWidget(): HTMLElement {
       e.preventDefault();
       // Only return focus — the widget, its query, its marks and indicators
       // all stay exactly as they were. Clearing the query is what hides it.
-      _preActivationFocus?.focus();
+      //
+      // Prefer the current tree selection over _preActivationFocus: since
+      // Enter no longer moves DOM focus (see stepActive), _preActivationFocus
+      // stays stuck at whatever was focused before the widget was activated.
+      // Reading RenderNode.currentSelection live (rather than the search
+      // widget's own stepped-to match) also follows selection changes made
+      // some other way — e.g. a click into the tree — while the widget kept
+      // focus. Falls back to _preActivationFocus when there's no selection.
+      (RenderNode.currentSelection?.contentEl ?? _preActivationFocus)?.focus();
     }
   });
 
