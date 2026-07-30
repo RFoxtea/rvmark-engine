@@ -422,11 +422,11 @@ footer .footer-section { white-space: nowrap; }
   color: var(--muted);
 }
 .view-menu > summary::-webkit-details-marker { display: none; }
-/* Points the way the menu opens. ▲ is drawn upward in the font rather than
-   being a rotated ▶, so it keeps its intended baseline and optical centre.
-   Static: here the direction is the affordance, so it must not move. */
+/* Reads as "menu" rather than as a direction: the drop-up always opens the one
+   way it can, so the arrow was spending its meaning on something the user has
+   no choice about. Static: the mark is the affordance, so it must not move. */
 .view-menu > summary::before {
-  content: '▲';
+  content: '≡';
   font-family: monospace;
   font-size: 0.85em;
 }
