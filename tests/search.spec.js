@@ -133,7 +133,7 @@ test.describe('matching and stepping to results', () => {
     expect(after).toBe(before);
   });
 
-  test('Enter selects the first mounted match, same as a click would', async ({ page }) => {
+  test('Enter selects the first mounted match, but leaves focus in the search input', async ({ page }) => {
     await page.goto('/');
     await waitForTree(page);
     await page.keyboard.press('Control+f');
@@ -142,7 +142,7 @@ test.describe('matching and stepping to results', () => {
 
     const row = await nodeContent(page, 'search-child-visible');
     await expect(row).toHaveAttribute('aria-selected', 'true');
-    await expect(row).toBeFocused();
+    await expect(page.locator('.search-input')).toBeFocused();
   });
 
   // Outside {searchable}, search still sees everything rendered — a mounted
@@ -187,6 +187,50 @@ test.describe('matching and stepping to results', () => {
     // Still collapsed — search must never force a reveal.
     await expect(collapsedRow).toHaveAttribute('aria-expanded', 'false');
     await expect(page.locator('#tree-root #search-grandchild-collapsed')).toHaveCount(0);
+  });
+
+  // A breadcrumb dot means a match exists below that the reader cannot yet
+  // see — Enter should be able to land there directly, not only on rows with
+  // a real .search-mark, otherwise reaching a hidden match requires first
+  // finding and expanding the exact right collapsed ancestor by hand.
+  test('Enter can step onto a collapsed node carrying only a breadcrumb dot', async ({ page }) => {
+    await page.goto('/');
+    await waitForTree(page);
+    await page.keyboard.press('Control+f');
+    await page.locator('.search-input').fill('SEARCHABLE_NEEDLE_TEXT');
+    await page.keyboard.press('Enter');
+
+    const collapsedRow = await nodeContent(page, 'search-child-collapsed');
+    await expect(collapsedRow).toHaveAttribute('aria-selected', 'true');
+    // Selecting it must not force it open.
+    await expect(collapsedRow).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  // Regression: expanding a breadcrumb-only stop drops it out of the target
+  // list entirely (it has no match of its own, and it is no longer
+  // collapsed), while it stays selected. Stepping again must resume from that
+  // now-stale selection's position — landing on the just-revealed match right
+  // after it — not treat the non-target selection as "nothing selected" and
+  // restart from the very first result.
+  test('stepping again after expanding a breadcrumb stop continues to the revealed match', async ({ page }) => {
+    await page.goto('/');
+    await waitForTree(page);
+    await page.keyboard.press('Control+f');
+    await page.locator('.search-input').fill('SEARCHABLE_NEEDLE_TEXT');
+    await page.keyboard.press('Enter');
+
+    const collapsedRow = await nodeContent(page, 'search-child-collapsed');
+    await expect(collapsedRow).toHaveAttribute('aria-selected', 'true');
+
+    await collapsedRow.locator('.toggle').click();
+    await expect(collapsedRow).toHaveAttribute('aria-expanded', 'true');
+
+    await page.locator('.search-input').focus();
+    await page.keyboard.press('Enter');
+
+    const grandchild = await nodeContent(page, 'search-grandchild-collapsed');
+    await expect(grandchild).toHaveAttribute('aria-selected', 'true');
+    await expect(collapsedRow).not.toHaveAttribute('aria-selected', 'true');
   });
 
   // Tags are stripped out of node.label by the parser, so matching them takes
