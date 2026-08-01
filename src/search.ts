@@ -44,7 +44,8 @@
 import type { SourceNode } from './parser.js';
 import { isSearchable, RenderNode } from './render-node.js';
 import { scrollRowIntoMiddle } from './scroll.js';
-import { resolveTagDef } from './tags.js';
+import { resolveTagDef, mergeNodeAttrs, tagsNodeAttrs } from './tags.js';
+import { resolveSlugInFile } from './shared.js';
 
 interface SearchMatch {
   node:    SourceNode;
@@ -104,6 +105,27 @@ function mountedNodes(): Map<SourceNode, HTMLElement> {
 // Unresolved transclusion hosts are a hard limit either way: their children do
 // not exist until they resolve, so nothing can see into them. Consistent with
 // search never mounting or expanding anything on its own.
+// A same-file `{=> #id}` target, or null when the ref is cross-file or
+// unresolvable. Transclusion hosts are otherwise opaque to search: their
+// children do not exist until they resolve at expand time, so the deep walk
+// would stop at the host and miss content that is authored, addressable, and
+// — once expanded — visible. Resolving the local case is a synchronous nodeMap
+// lookup (no fetch, nothing mounted), which keeps the "search never mounts or
+// expands anything" contract intact.
+//
+// Deliberately local-only for now: a cross-file ref would need its file loaded,
+// and a miss there is indistinguishable from a broken ref.
+function localTranscludeTarget(node: SourceNode): SourceNode | null {
+  const attrs = mergeNodeAttrs(tagsNodeAttrs(node.tags, node.sourceFile?.tagDefs), node.attrs);
+  const raw = attrs.get('transclude');
+  // Only a single bare `#id`. A list, a `*`, or any path-bearing ref is
+  // cross-file or children-mode and out of scope here.
+  if (!raw || !raw.startsWith('#') || raw.includes(',')) return null;
+  const sf = node.sourceFile;
+  if (!sf) return null;
+  return resolveSlugInFile({ nodeMap: sf.nodeMap, roots: sf.roots }, raw.slice(1))?.node ?? null;
+}
+
 function searchTree(query: string): SearchMatch[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return [];
@@ -118,9 +140,19 @@ function searchTree(query: string): SearchMatch[] {
   };
 
   // Descend into authored children — only reached under a {searchable} scope.
-  const walkDeep = (node: SourceNode) => {
+  // `activeRefs` guards the transclusion hops: transclusions may be recursive
+  // (the tree is really a graph), so a ref already being walked on this path is
+  // skipped rather than followed into an infinite regress.
+  const walkDeep = (node: SourceNode, activeRefs: Set<SourceNode>) => {
     record(node);
-    for (const child of node.children) walkDeep(child);
+    for (const child of node.children) walkDeep(child, activeRefs);
+
+    const target = localTranscludeTarget(node);
+    if (target && !activeRefs.has(target)) {
+      activeRefs.add(target);
+      walkDeep(target, activeRefs);
+      activeRefs.delete(target);
+    }
   };
 
   // {searchable} covers a whole subtree, so a mounted node also counts as in
@@ -140,7 +172,12 @@ function searchTree(query: string): SearchMatch[] {
     record(node);
     // A mounted node's own children may themselves be mounted (visited by this
     // same loop) or not (only reachable here, and only when licensed).
-    if (inScope(node, li)) for (const child of node.children) walkDeep(child);
+    if (inScope(node, li)) {
+      for (const child of node.children) walkDeep(child, new Set([node]));
+      // The mounted node may itself be an unexpanded transclusion host.
+      const target = localTranscludeTarget(node);
+      if (target) walkDeep(target, new Set([node, target]));
+    }
   }
   return out;
 }
@@ -158,15 +195,25 @@ function nodesWithHiddenMatch(results: SearchMatch[]): Map<SourceNode, HTMLEleme
   const hiddenMatches = new Set(results.filter(r => !r.li).map(r => r.node));
   if (!hiddenMatches.size) return out;
 
-  const containsHidden = (node: SourceNode): boolean => {
+  // Mirrors searchTree's walk, transclusion hop included: a match reached only
+  // through a `{=> #id}` still needs the host to carry the dot, or it would be
+  // counted as a result with nothing on screen pointing at it.
+  const containsHidden = (node: SourceNode, activeRefs: Set<SourceNode>): boolean => {
     for (const child of node.children) {
-      if (hiddenMatches.has(child) || containsHidden(child)) return true;
+      if (hiddenMatches.has(child) || containsHidden(child, activeRefs)) return true;
+    }
+    const target = localTranscludeTarget(node);
+    if (target && !activeRefs.has(target)) {
+      activeRefs.add(target);
+      const hit = hiddenMatches.has(target) || containsHidden(target, activeRefs);
+      activeRefs.delete(target);
+      if (hit) return true;
     }
     return false;
   };
 
   for (const [node, li] of mounted) {
-    if (containsHidden(node)) out.set(node, li);
+    if (containsHidden(node, new Set([node]))) out.set(node, li);
   }
   return out;
 }

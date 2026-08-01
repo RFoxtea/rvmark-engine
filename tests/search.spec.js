@@ -300,6 +300,47 @@ test.describe('matching and stepping to results', () => {
     await expect(li.locator('.search-indicator')).toHaveCount(1);
   });
 
+  // A `{=> #id}` host has no children until it resolves at expand time, so the
+  // deep walk used to stop dead at the host — content that is authored,
+  // addressable and (once expanded) visible was unreachable. Under
+  // {searchable}, search now follows a same-file ref to find it.
+  test('a match behind an unexpanded transclusion is found', async ({ page }) => {
+    await page.goto('/');
+    await waitForTree(page);
+    await page.keyboard.press('Control+f');
+    await page.locator('.search-input').fill('SEARCHABLE_TRANSCLUDED_TEXT');
+
+    await expect(page.locator('.search-status')).not.toHaveText('No matches');
+  });
+
+  // Finding the match is only half of it: the reader needs somewhere to click.
+  // The host carries the dot, since the match itself is not mounted.
+  test('a transclusion host gets a breadcrumb dot for a match behind the ref', async ({ page }) => {
+    await page.goto('/');
+    await waitForTree(page);
+    await page.keyboard.press('Control+f');
+    await page.locator('.search-input').fill('SEARCHABLE_TRANSCLUDED_TEXT');
+
+    const row = await nodeContent(page, 'search-transclude-host');
+    const li = page.locator('li.node', { has: row }).first();
+    await expect(li.locator('.search-indicator')).toHaveCount(1);
+  });
+
+  // Transclusions may be recursive — the tree is really a graph. An unguarded
+  // walk would not fail an assertion here, it would hang the page.
+  test('a recursive transclusion does not hang the search walk', async ({ page }) => {
+    await page.goto('/');
+    await waitForTree(page);
+    await page.keyboard.press('Control+f');
+    await page.locator('.search-input').fill('SEARCHABLE_VISIBLE_TEXT');
+
+    // The walk crosses the cyclic host on its way through the tree. If the
+    // guard failed the main thread would never come back, so any assertion
+    // requiring a round-trip to the page is the real check here.
+    await expect(page.locator('.search-mark').first()).toBeVisible({ timeout: 5000 });
+    expect(await page.evaluate(() => 1 + 1)).toBe(2);
+  });
+
   // Marking mutates the tree the MutationObserver watches, so a mark write
   // that is mistaken for a real tree change recomputes forever. Nothing else
   // here would catch that — it fails no assertion, it just spins.

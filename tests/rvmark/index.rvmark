@@ -50,8 +50,17 @@
       1. {#search-child-tr; = tr} SEARCHABLE_ROW_TEXT | r2
     7. {#search-table-collapsed; = table} Collapsed table | Col B
       1. {#search-table-hidden-row; = tr} SEARCHABLE_TABLE_DEEP_TEXT | h2
+    8. {#search-transclude-host; = table} Transcluding table | Col B
+      1. {=> #search-transcluded-row}
+    9. {#search-transclude-cycle} Cyclic transclusion host
+      1. {=> #search-cycle-target}
   19. {#search-unsearchable-node} SEARCHABLE_NEEDLE_TEXT outside any searchable scope
     1. {#search-unsearchable-child} UNSEARCHABLE_HIDDEN_TEXT, not covered by {searchable}
+
+29. {#search-transcluded-row; = tr} SEARCHABLE_TRANSCLUDED_TEXT | t2
+
+30. {#search-cycle-target} Cycle target, transcludes its own host back
+  1. {=> #search-transclude-cycle}
 
 2. {#embed-target} Embed target node
   1. Embed target child A
