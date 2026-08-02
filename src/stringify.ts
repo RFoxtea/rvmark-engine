@@ -8,9 +8,9 @@
  * Not a lossless round-trip. Formatting is normalized on every stringify:
  *   - fixed indent (INDENT spaces per depth level)
  *   - attr blocks re-emitted via canonical sigil shorthand where applicable
- *     (id → #, type → =, transclude → =>, class → ., on-spawn/show-when →
- *     &/?), plain `key: val` otherwise — entry order is preserved from the
- *     Multimap, but exact source spacing/quoting is not
+ *     (id → #, type → =, transclude → =>, class → .), the bare keyword form for
+ *     on-spawn `let` / on-action `set`, plain `key: val` otherwise — entry order
+ *     is preserved from the Multimap, but exact source spacing/quoting is not
  *   - ordinal marker is '-' for nodes with node.auto === true, otherwise the
  *     explicit `numbering` value followed by '.'
  * Scripts that need byte-for-byte fidelity for untouched nodes should not
@@ -35,8 +35,13 @@ function stringifyAttrEntry(key: string, val: string): string {
     case 'class':       return val ? `.${val}` : '.';
     case 'type':        return `= ${val}`;
     case 'transclude':  return `=> ${val}`;
-    case 'on-spawn':    return val; // raw segment already includes its own '&'/'!&'
-    case 'show-when':   return `?${val}`;
+    // State attrs keep their keyword-led text verbatim. `on-spawn`/`on-action`
+    // drop back to the bare form only when the value's keyword matches the
+    // default event for that attr — `{let …}` means on-spawn and `{set …}`
+    // means on-action, so emitting the bare form in any other pairing would
+    // silently change which event it fires on.
+    case 'on-spawn':    return /^let\b/.test(val)             ? val : `${key}: ${val}`;
+    case 'on-action':   return /^(set|unset)\b/.test(val)     ? val : `${key}: ${val}`;
     default:            return val === '' ? key : `${key}: ${val}`;
   }
 }

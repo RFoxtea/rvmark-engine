@@ -16,7 +16,7 @@
  *   setExtIconSvg(svg)    — called by renderer.ts to inject the external link icon
  */
 
-import { parseOnSpawn } from './parser.js';
+import { parseStateEntries, splitSegments } from './parser.js';
 import type { StateEntry } from './parser.js';
 
 // marked is loaded as a classic <script> before this module at runtime, and
@@ -251,7 +251,7 @@ export interface ParsedSpanAttrs {
 
 export function parseInlineSpanParams(raw: string): ParsedSpanAttrs {
   const result: ParsedSpanAttrs = { extra: {} };
-  for (const part of raw.split(';')) {
+  for (const part of splitSegments(raw)) {
     const trimmed = part.trim();
     if (!trimmed) continue;
     // '=>' transclusion ref — rest of token is the ref value
@@ -259,9 +259,11 @@ export function parseInlineSpanParams(raw: string): ParsedSpanAttrs {
       result.transclude = trimmed.slice(2).trim();
       continue;
     }
-    // '&...' or '!&...' state assignment — same grammar as node-level on-spawn/on-select
-    if (trimmed.startsWith('&') || trimmed.startsWith('!&')) {
-      const entries = parseOnSpawn(trimmed);
+    // 'let'/'set'/'unset' state mutation — same grammar as node-level attrs.
+    // On a span the mutation fires when the span is activated, so a bare `let`
+    // here is an activation-time declaration rather than a spawn-time one.
+    if (/^(let|set|unset)\b/.test(trimmed)) {
+      const entries = parseStateEntries(trimmed);
       if (entries.length) {
         if (!result.stateAssignments) result.stateAssignments = [];
         result.stateAssignments.push(...entries);

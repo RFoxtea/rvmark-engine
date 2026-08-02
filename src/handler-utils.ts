@@ -16,7 +16,7 @@ import { addressToHref } from './shared.js';
 import { tagsNodeAttrs, mergeNodeAttrs, resolveTagDef } from './tags.js';
 import { scrollRowIntoMiddle } from './scroll.js';
 import type { SourceNode } from './parser.js';
-import { parseOnSpawn } from './parser.js';
+import { parseStateEntries } from './parser.js';
 import { Multimap } from './multimap.js';
 import type { ResolvedAttrs } from './render-node.js';
 import { RenderNode } from './render-node.js';
@@ -244,10 +244,10 @@ export function resolveStateVal(val: string | undefined, state: StateNode): stri
   return String(val ?? '');
 }
 
-// Call at handler construction to process the {&} / on-spawn attr.
+// Call at handler construction to process the bare-`let` / on-spawn attr.
 export function applyOnSpawn(attrs: ResolvedAttrs, rn: RenderNode): void {
   for (const raw of attrs.getAll('on-spawn')) {
-    for (const entry of parseOnSpawn(raw)) {
+    for (const entry of parseStateEntries(raw)) {
       if (entry.op === 'delete')   rn.state.delete(entry.key);
       else if (entry.op === 'set') rn.state.set(entry.key, resolveStateVal(entry.val, rn.state));
       else                         rn.state.declare(entry.key, resolveStateVal(entry.val, rn.state));
@@ -260,7 +260,7 @@ export function applyOnSpawn(attrs: ResolvedAttrs, rn: RenderNode): void {
 // Apply state mutations for a given event attribute (on-select, on-expand, etc.).
 export function applyEventAttr(attrVal: string | undefined, rn: RenderNode): void {
   if (!attrVal) return;
-  for (const entry of parseOnSpawn(attrVal)) {
+  for (const entry of parseStateEntries(attrVal)) {
     if (entry.op === 'delete')   rn.state.delete(entry.key);
     else if (entry.op === 'set') rn.state.set(entry.key, resolveStateVal(entry.val, rn.state));
     else                         rn.state.declare(entry.key, resolveStateVal(entry.val, rn.state));
