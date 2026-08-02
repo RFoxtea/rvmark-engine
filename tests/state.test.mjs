@@ -405,8 +405,8 @@ test('parseStateEntries: set &key = "val" → set (mutate upward)', () => {
   assert.deepEqual(parseStateEntries('set &foo = "bar"'), [{ key: 'foo', op: 'set', val: 'bar' }]);
 });
 
-test('parseStateEntries: unset &key → delete', () => {
-  assert.deepEqual(parseStateEntries('unset &foo'), [{ key: 'foo', op: 'delete' }]);
+test('parseStateEntries: remove &key → delete', () => {
+  assert.deepEqual(parseStateEntries('remove &foo'), [{ key: 'foo', op: 'delete' }]);
 });
 
 test('parseStateEntries: bare numbers and identifiers need no quotes', () => {
@@ -430,7 +430,7 @@ test('parseStateEntries: explicit empty string blanks a variable', () => {
 });
 
 test('parseStateEntries: semicolon-separated multiple entries', () => {
-  assert.deepEqual(parseStateEntries('let &a = 1; set &b = 2; unset &c; let &d'), [
+  assert.deepEqual(parseStateEntries('let &a = 1; set &b = 2; remove &c; let &d'), [
     { key: 'a', op: 'declare', val: '1' },
     { key: 'b', op: 'set',     val: '2' },
     { key: 'c', op: 'delete'            },
@@ -439,7 +439,7 @@ test('parseStateEntries: semicolon-separated multiple entries', () => {
 });
 
 test('parseStateEntries: a missing keyword is an error, not a silent no-op', () => {
-  assert.throws(() => parseStateEntries('&foo = "bar"'), /must start with 'let', 'set', or 'unset'/);
+  assert.throws(() => parseStateEntries('&foo = "bar"'), /must start with 'let', 'set', or 'remove'/);
 });
 
 test('parseStateEntries: unquoted multi-word value is an error', () => {
@@ -482,7 +482,7 @@ test('parseStateEntries: let does declare on own frame, not ancestor', () => {
 test('parseAttrBlock: bare let → on-spawn, bare set → on-action', () => {
   assert.deepEqual(parseAttrBlock('let &x = "1"').allEntries(), [['on-spawn', 'let &x = "1"']]);
   assert.deepEqual(parseAttrBlock('set &x = "2"').allEntries(), [['on-action', 'set &x = "2"']]);
-  assert.deepEqual(parseAttrBlock('unset &x').allEntries(),     [['on-action', 'unset &x']]);
+  assert.deepEqual(parseAttrBlock('remove &x').allEntries(),     [['on-action', 'remove &x']]);
 });
 
 test('parseAttrBlock: explicit event attr keeps the keyword meaning', () => {

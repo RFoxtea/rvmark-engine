@@ -259,10 +259,10 @@ export function parseInlineSpanParams(raw: string): ParsedSpanAttrs {
       result.transclude = trimmed.slice(2).trim();
       continue;
     }
-    // 'let'/'set'/'unset' state mutation — same grammar as node-level attrs.
+    // 'let'/'set'/'remove' state mutation — same grammar as node-level attrs.
     // On a span the mutation fires when the span is activated, so a bare `let`
     // here is an activation-time declaration rather than a spawn-time one.
-    if (/^(let|set|unset)\b/.test(trimmed)) {
+    if (/^(let|set|remove)\b/.test(trimmed)) {
       const entries = parseStateEntries(trimmed);
       if (entries.length) {
         if (!result.stateAssignments) result.stateAssignments = [];

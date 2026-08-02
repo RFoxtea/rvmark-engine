@@ -145,7 +145,14 @@ export function parseShowWhen(raw: string): StateCondition[] {
 //   let &key = "val"   → declare in this node's own frame
 //   set &key = "val"   → assign, walking up the frame chain to the owner
 //   let &key           → declare with value "1"
-//   unset &key         → delete
+//   remove &key        → remove the binding from this node's own frame
+//
+// `let` and `remove` both act on the node's *own* frame; only `set` walks up the
+// chain. That is why the removal keyword is `remove` rather than `unset`: it is
+// the counterpart of `let`, not of `set`. And it is `remove` rather than
+// `delete` because nothing is wiped globally — it writes a tombstone that
+// shadows the ancestor for this subtree, leaving the ancestor's own value intact
+// (see StateFrame.delete).
 //
 // The keyword is what distinguishes declaration from assignment; there is no
 // sigil form. Keys are always '&'-prefixed. Anything else throws, so a typo
@@ -156,16 +163,16 @@ export function parseStateEntries(raw: string): StateEntry[] {
     const s = part.trim();
     if (!s) continue;
 
-    const kw = s.match(/^(let|set|unset)\b\s*/);
+    const kw = s.match(/^(let|set|remove)\b\s*/);
     if (!kw) {
       throw new Error(
-        `rvmark: state entry must start with 'let', 'set', or 'unset', got: ${s}`,
+        `rvmark: state entry must start with 'let', 'set', or 'remove', got: ${s}`,
       );
     }
     const keyword = kw[1];
     const rest = s.slice(kw[0].length).trim();
 
-    if (keyword === 'unset') {
+    if (keyword === 'remove') {
       if (!/^&[\w-]+$/.test(rest)) {
         throw new Error(`rvmark: state key must be &-prefixed, got: ${s}`);
       }
@@ -241,7 +248,7 @@ export interface RawFile {
   nodeMap: Record<string, RawNode>;
 }
 
-// Every event attribute that carries state mutations. A bare `let`/`set`/`unset`
+// Every event attribute that carries state mutations. A bare `let`/`set`/`remove`
 // in an attr block is sugar for one of these; writing the attribute explicitly
 // (`on-expand: let &x = "1"`) is always available and means the same thing.
 export const STATE_EVENT_ATTRS = new Set([
@@ -257,7 +264,7 @@ export const STATE_EVENT_ATTRS = new Set([
 //   => value   → transclude
 //   let …      → on-spawn  (declaration defaults to spawn time)
 //   set …      → on-action (assignment defaults to the node's action)
-//   unset …    → on-action
+//   remove …   → on-action
 //   key: val   → key
 //   key        → key with empty value
 //
@@ -273,7 +280,7 @@ export function parseAttrBlock(raw: string): Multimap {
     if (p.startsWith('.'))  { const c = p.slice(1).trim(); if (c) out.append('class', c); continue; }
     if (p.startsWith('=>')) { out.append('transclude', p.slice(2).trim()); continue; }
     if (p.startsWith('='))  { out.append('type', p.slice(1).trim()); continue; }
-    const kw = p.match(/^(let|set|unset)\b/);
+    const kw = p.match(/^(let|set|remove)\b/);
     if (kw) { out.append(kw[1] === 'let' ? 'on-spawn' : 'on-action', p); continue; }
     // Retired sigil syntax. Without this guard a leftover `{&x=1}` or `{?&x==1}`
     // would parse as an attribute literally named "&x=1" and then be silently

@@ -41,7 +41,7 @@ function stringifyAttrEntry(key: string, val: string): string {
     // means on-action, so emitting the bare form in any other pairing would
     // silently change which event it fires on.
     case 'on-spawn':    return /^let\b/.test(val)             ? val : `${key}: ${val}`;
-    case 'on-action':   return /^(set|unset)\b/.test(val)     ? val : `${key}: ${val}`;
+    case 'on-action':   return /^(set|remove)\b/.test(val)    ? val : `${key}: ${val}`;
     default:            return val === '' ? key : `${key}: ${val}`;
   }
 }

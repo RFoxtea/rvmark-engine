@@ -19,8 +19,8 @@ test('parseInlineSpanParams: let &key bare → declare with val 1', () => {
   assert.deepEqual(result.stateAssignments, [{ key: 'key', op: 'declare', val: '1' }]);
 });
 
-test('parseInlineSpanParams: unset &key → delete op', () => {
-  const result = parseInlineSpanParams('unset &key');
+test('parseInlineSpanParams: remove &key → delete op', () => {
+  const result = parseInlineSpanParams('remove &key');
   assert.deepEqual(result.stateAssignments, [{ key: 'key', op: 'delete' }]);
 });
 
