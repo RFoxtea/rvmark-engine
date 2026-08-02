@@ -106,62 +106,62 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
 
 18. {#pass-root; open} State pass fixture root
   1. {#pass-scope-read; let &passvar = 0; open} pass-scope-read
-    1. {#pass-host-read; on-action: set &passvar = 1; => ./other#pass-read-target; children-pass: passvar} pass-host-read
+    1. {#pass-host-read; on-action: set &passvar = 1; => ./other#pass-read-target; children-pass: &passvar} pass-host-read
   2. {#pass-scope-blocked; let &passvar = 0; open} pass-scope-blocked
     1. {#pass-host-blocked; on-action: set &passvar = 1; => ./other#pass-blocked-target} pass-host-blocked
   3. {#pass-scope-rw; let &passvar = 0; open} pass-scope-rw
-    1. {#pass-host-rw; => ./other#pass-rw-target; children-pass: passvar rw} pass-host-rw
+    1. {#pass-host-rw; => ./other#pass-rw-target; children-pass: &passvar rw} pass-host-rw
     2. {#pass-host-rw-indicator; show-when: &passvar == 1} pass-host-rw-written
   4. {#pass-scope-wo; let &passvar = 0; open} pass-scope-wo
-    1. {#pass-host-wo; => ./other#pass-wo-target; children-pass: passvar w} pass-host-wo
+    1. {#pass-host-wo; => ./other#pass-wo-target; children-pass: &passvar w} pass-host-wo
     2. {#pass-host-wo-indicator; show-when: &passvar == 1} pass-host-wo-written
   5. {#pass-scope-rename; let &passvar = 0; open} pass-scope-rename
-    1. {#pass-host-rename; on-action: set &passvar = 1; => ./other#pass-rename-target; children-pass: remotevar=passvar} pass-host-rename
+    1. {#pass-host-rename; on-action: set &passvar = 1; => ./other#pass-rename-target; children-pass: &remotevar=&passvar} pass-host-rename
   6. {#pass-scope-dash; let &--dashvar = 0; open} pass-scope-dash
     1. {#pass-host-dash; on-action: set &--dashvar = 1; => ./other#pass-dash-target} pass-host-dash
   7. {#pass-scope-exhibit; let &exvar = 0; open} pass-scope-exhibit
-    1. {#pass-exhibit-host; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: exvar rw} pass-exhibit-host
+    1. {#pass-exhibit-host; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: &exvar rw} pass-exhibit-host
     2. {#pass-exhibit-host-indicator; show-when: &exvar == 1} pass-exhibit-written
   8. {#pass-scope-exhibit-blocked; let &exvar = 0; open} pass-scope-exhibit-blocked
     1. {#pass-exhibit-blocked-host; exhibit: ./other#pass-exhibit-blocked-target; action: exhibit} pass-exhibit-blocked-host
   9. {#pass-scope-exhibit-ro; let &exvar = 0; open} pass-scope-exhibit-ro
-    1. {#pass-exhibit-ro-host; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: exvar} pass-exhibit-ro-host
+    1. {#pass-exhibit-ro-host; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: &exvar} pass-exhibit-ro-host
   10. {#pass-scope-r-write-blocked; let &passvar = 0; open} pass-scope-r-write-blocked
-    1. {#pass-host-r-write-blocked; => ./other#pass-r-write-blocked-target; children-pass: passvar} pass-host-r-write-blocked
+    1. {#pass-host-r-write-blocked; => ./other#pass-r-write-blocked-target; children-pass: &passvar} pass-host-r-write-blocked
     2. {#pass-host-r-write-blocked-indicator; show-when: &passvar == 1} pass-r-write-blocked-host-written
   11. {#pass-scope-reactive; let &passvar = 0; open} pass-scope-reactive
-    1. {#pass-host-reactive; => ./other#pass-read-target; children-pass: passvar} pass-host-reactive
+    1. {#pass-host-reactive; => ./other#pass-read-target; children-pass: &passvar} pass-host-reactive
     2. {#pass-scope-reactive-trigger; on-action: set &passvar = 1} pass-reactive-trigger
   12. {#pass-scope-multi; let &avar = 0; let &bvar = 0; open} pass-scope-multi
-    1. {#pass-host-multi; => ./other#pass-multi-target; children-pass: avar, bvar w} pass-host-multi
+    1. {#pass-host-multi; => ./other#pass-multi-target; children-pass: &avar, &bvar w} pass-host-multi
     2. {#pass-host-multi-indicator; show-when: &bvar == 1} pass-multi-host-written
   13. {#pass-scope-unknown-key; let &passvar = 0; open} pass-scope-unknown-key
-    1. {#pass-host-unknown-key; => ./other#pass-unknown-key-target; children-pass: passvar} pass-host-unknown-key
+    1. {#pass-host-unknown-key; => ./other#pass-unknown-key-target; children-pass: &passvar} pass-host-unknown-key
   14. {#pass-scope-exhibit-reactive; let &exvar = 0; open} pass-scope-exhibit-reactive
-    1. {#pass-exhibit-reactive-host; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: exvar rw} [zero]{set &exvar = 0} [one]{set &exvar = 1}
+    1. {#pass-exhibit-reactive-host; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: &exvar rw} [zero]{set &exvar = 0} [one]{set &exvar = 1}
   15. {#pass-scope-exhibit-rename; let &exlocal = 0; open} pass-scope-exhibit-rename
-    1. {#pass-exhibit-rename-host; exhibit: ./other#pass-exhibit-rename-target; action: exhibit; exhibit-pass: exvar=exlocal rw} pass-exhibit-rename-host
+    1. {#pass-exhibit-rename-host; exhibit: ./other#pass-exhibit-rename-target; action: exhibit; exhibit-pass: &exvar=&exlocal rw} pass-exhibit-rename-host
     2. {#pass-exhibit-rename-indicator; show-when: &exlocal == 1} pass-exhibit-rename-written
   16. {#pass-scope-exhibit-preroot; open} pass-scope-exhibit-preroot
     1. {#pass-exhibit-preroot-host; exhibit: ./other#pass-exhibit-preroot-target; action: exhibit} pass-exhibit-preroot-host
   17. {#pass-scope-exhibit-rewire-a; let &exvar = 0; open} pass-scope-exhibit-rewire-a
-    1. {#pass-exhibit-rewire-host-a; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: exvar rw} pass-exhibit-rewire-host-a
+    1. {#pass-exhibit-rewire-host-a; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: &exvar rw} pass-exhibit-rewire-host-a
     2. {#pass-exhibit-rewire-a-indicator; show-when: &exvar == 1} pass-exhibit-rewire-a-written
   18. {#pass-scope-exhibit-rewire-b; let &exvar = 0; open} pass-scope-exhibit-rewire-b
-    1. {#pass-exhibit-rewire-host-b; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: exvar rw} pass-exhibit-rewire-host-b
+    1. {#pass-exhibit-rewire-host-b; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: &exvar rw} pass-exhibit-rewire-host-b
     2. {#pass-exhibit-rewire-b-indicator; show-when: &exvar == 1} pass-exhibit-rewire-b-written
 23. {#iframe-pass-root; open} iframe-pass fixture root
   1. {#iframe-pass-scope-rw; let &iframevar = 0; open} iframe-pass-scope-rw
-    1. {#iframe-pass-host-rw; = iframe; iframe-pass: iframevar rw} ./iframe-fixture.html
+    1. {#iframe-pass-host-rw; = iframe; iframe-pass: &iframevar rw} ./iframe-fixture.html
     2. {#iframe-pass-host-rw-indicator; show-when: &iframevar == 1} iframe-pass-rw-written
   2. {#iframe-pass-scope-r; let &iframevar = 0; open} iframe-pass-scope-r
-    1. {#iframe-pass-host-r; = iframe; iframe-pass: iframevar} ./iframe-fixture.html
+    1. {#iframe-pass-host-r; = iframe; iframe-pass: &iframevar} ./iframe-fixture.html
     2. {#iframe-pass-host-r-indicator; show-when: &iframevar == 1} iframe-pass-r-written
   3. {#iframe-pass-scope-reactive; let &iframevar = 0; open} iframe-pass-scope-reactive
-    1. {#iframe-pass-host-reactive; = iframe; iframe-pass: iframevar rw} ./iframe-fixture.html
+    1. {#iframe-pass-host-reactive; = iframe; iframe-pass: &iframevar rw} ./iframe-fixture.html
     2. {#iframe-pass-reactive-trigger; on-action: set &iframevar = 1} iframe-pass-reactive-trigger
   4. {#iframe-pass-scope-rename; let &iframelocal = 0; open} iframe-pass-scope-rename
-    1. {#iframe-pass-host-rename; = iframe; iframe-pass: iframeremote=iframelocal rw} ./iframe-fixture.html
+    1. {#iframe-pass-host-rename; = iframe; iframe-pass: &iframeremote=&iframelocal rw} ./iframe-fixture.html
     2. {#iframe-pass-rename-indicator; show-when: &iframelocal == 1} iframe-pass-rename-written
 
 21. {#table-root; open} table fixture root
@@ -202,6 +202,9 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
   4. {#event-expand-parent; let &expanded-flag = 0; on-expand: set &expanded-flag = 1; on-collapse: set &expanded-flag = 0} on-expand parent
     1. {#event-expand-child} Expand child
     2. {#event-expand-indicator; show-when: &expanded-flag == 1} Expand indicator visible
+  5. {#event-action-leaf-root; let &leaf-acted = 0} on-action leaf root
+    1. {#event-action-leaf; set &leaf-acted = 1} on-action leaf (bare `set` = on-action; no children, so re-click has no type-specific gesture)
+    2. {#event-action-leaf-indicator; show-when: &leaf-acted == 1} Leaf action indicator visible
 
 24. {#envoy-root; open} Custom-type envoy fixture root
   1. {#envoy-echo-a; = echo} Echo node A passed through the envoy

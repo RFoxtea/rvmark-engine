@@ -466,15 +466,10 @@ test.describe('footer and metadata', () => {
     await expect(page.locator('footer')).toContainText('AI Author');
   });
 
-  test('[AI] tag meta cascades to children', async ({ page }) => {
-    await page.goto('/');
-    await waitForTree(page);
-    const row = await nodeContent(page, 'child-tagged');
-    await row.focus();
-    await row.press('ArrowRight'); // expand
-    await row.press('ArrowRight'); // into child
-    await expect(page.locator('footer')).toContainText('AI Author');
-  });
+  // How meta resolves — file defaults, tag overrides, subtree cascade, attr
+  // precedence, cross-file inheritance — is covered in tests/meta.test.mjs
+  // against resolveFile(). What stays here is that selection drives the footer:
+  // that the resolved author reaches the element, and follows the selected node.
 
   test('footer reverts to global author when leaving [AI]-tagged subtree', async ({ page }) => {
     await page.goto('/');
@@ -502,28 +497,6 @@ test.describe('footer and metadata', () => {
     await row.press('ArrowRight'); // expand — borrows embed-ai-target's children
     await row.press('ArrowRight'); // into first child — inherits AI meta
     await expect(page.locator('footer')).toContainText('AI Author');
-  });
-
-  test('[GlobalAI] tag (from config.rvconf) provides meta.author when node is focused', async ({ page }) => {
-    // Navigate directly to child-global-ai; expand and move into child then back up to fire rvmark-select on it
-    await page.goto('/#child-global-ai');
-    await waitForTree(page);
-    const row = await nodeContent(page, 'child-global-ai');
-    await row.focus();
-    await row.press('ArrowRight'); // expand
-    await row.press('ArrowRight'); // into child (GlobalAI meta cascades, footer should show)
-    await row.press('ArrowLeft');  // back to child-global-ai — fires rvmark-select
-    await expect(page.locator('footer')).toContainText('Global AI Author');
-  });
-
-  test('[GlobalAI] tag meta cascades to children', async ({ page }) => {
-    await page.goto('/#child-global-ai');
-    await waitForTree(page);
-    const row = await nodeContent(page, 'child-global-ai');
-    await row.focus();
-    await row.press('ArrowRight'); // expand
-    await row.press('ArrowRight'); // into child
-    await expect(page.locator('footer')).toContainText('Global AI Author');
   });
 
   test('[GlobalAI] tag on transcluded node (via {=>}) updates footer', async ({ page }) => {
@@ -595,64 +568,30 @@ test.describe('tag chips', () => {
     await expect(chip).toHaveText('AI');
   });
 
-  test('tag chip has --tag-color CSS variable set', async ({ page }) => {
+  // Which props a tag resolves to — registry lookup, inline overrides, internal,
+  // node.* projection — is covered in tests/tags.test.mjs against resolveTagDef().
+  // What stays here is that buildTagChips() puts resolved props onto real
+  // elements: color reaches a CSS variable, tip reaches a title, a label
+  // overrides the chip text, and an internal tag produces no chip at all.
+
+  test('resolved tag props reach the chip element', async ({ page }) => {
     const chip = (await nodeContent(page, 'child-tagged')).locator('.node-tag').first();
+    await expect(chip).toBeVisible();
+    await expect(chip).toHaveAttribute('title', 'AI tip');
     const color = await chip.evaluate(el => el.style.getPropertyValue('--tag-color'));
-    expect(color).toBeTruthy();
+    expect(color).toBe('#9e9bc4ff');
   });
 
-  test('tag chip has tooltip from tip param', async ({ page }) => {
-    const chip = (await nodeContent(page, 'child-tagged')).locator('.node-tag').first();
-    const title = await chip.getAttribute('title');
-    expect(title).toContain('AI tip');
-  });
-
-  test('[WIP] tag chip is visible on #child-wip', async ({ page }) => {
-    const chip = (await nodeContent(page, 'child-wip')).locator('.node-tag').first();
-    await expect(chip).toBeVisible();
-    await expect(chip).toHaveText('WIP');
-  });
-
-  test('[Internal] tag with internal:true does not get a link chip', async ({ page }) => {
-    const linkChips = (await nodeContent(page, 'child-internal')).locator('.node-tag--link');
-    await expect(linkChips).toHaveCount(0);
-  });
-
-  test('[AI {color: #ff0000}] inline prop overrides registry color', async ({ page }) => {
-    await page.goto('/#child-tag-inline-color');
-    await waitForTree(page);
-    const chip = (await nodeContent(page, 'child-tag-inline-color')).locator('.node-tag').first();
-    await expect(chip).toBeVisible();
-    await expect(chip).toHaveText('AI');
-    const color = await chip.evaluate(el => el.style.getPropertyValue('--tag-color'));
-    expect(color).toBe('#ff0000');
-  });
-
-  test('[AI {tip: inline tip}] inline prop overrides registry tip', async ({ page }) => {
-    await page.goto('/#child-tag-inline-color');
-    await waitForTree(page);
-    const chip = (await nodeContent(page, 'child-tag-inline-color')).locator('.node-tag').first();
-    await expect(chip).toBeVisible();
-    const title = await chip.getAttribute('title');
-    expect(title).toBe('inline tip');
-  });
-
-  test('[Anon {color: #123456}] inline-only tag renders with inline color', async ({ page }) => {
-    await page.goto('/#child-tag-inline-anon');
-    await waitForTree(page);
-    const chip = (await nodeContent(page, 'child-tag-inline-anon')).locator('.node-tag').first();
-    await expect(chip).toBeVisible();
-    await expect(chip).toHaveText('Anon');
-    const color = await chip.evaluate(el => el.style.getPropertyValue('--tag-color'));
-    expect(color).toBe('#123456');
-  });
-
-  test('[WIP {label: W.I.P.}] renders chip with custom label text', async ({ page }) => {
+  test('inline label overrides the chip text', async ({ page }) => {
     await page.goto('/#child-tag-inline-label');
     await waitForTree(page);
     const chip = (await nodeContent(page, 'child-tag-inline-label')).locator('.node-tag').first();
-    await expect(chip).toBeVisible();
     await expect(chip).toHaveText('W.I.P.');
+  });
+
+  test('internal tag renders no chip', async ({ page }) => {
+    const chips = (await nodeContent(page, 'child-internal')).locator('.node-tag');
+    await expect(chips).toHaveCount(0);
   });
 });
 
@@ -928,17 +867,20 @@ test.describe('inline markdown in labels', () => {
     await expect(em).toHaveText('italic');
   });
 
-  test('external links get ext-icon', async ({ page }) => {
+  test('external links open in a new tab, safely', async ({ page }) => {
     await page.goto('/');
     await waitForTree(page);
-    // Select #child-link to put it in doc zone (tabindex=0)
-    const childLink = await nodeContent(page, 'child-link');
-    await childLink.click();
-    const extIcons = childLink.locator('.ext-icon');
-    if (await extIcons.count() > 0) {
-      await expect(extIcons.first()).toBeVisible();
-    }
+    const link = (await nodeContent(page, 'child-link')).locator('a').first();
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', /noopener/);
   });
+
+  // NOTE: markdown.ts supports an external-link icon (setExtIconSvg →
+  // extLinkSuffix, styled by .ext-icon in styles.css), but nothing calls
+  // setExtIconSvg, so the suffix is always empty and no .ext-icon is ever
+  // rendered. The test that used to live here asserted the icon only when
+  // present, so it passed vacuously. Wire up setExtIconSvg and this is worth
+  // a real assertion.
 });
 
 // ── Static (no-JS) fallback ───────────────────────────────────────────────────
@@ -989,105 +931,37 @@ test.describe('{draft} modifier', () => {
     await waitForTree(page);
   });
 
-  test('draft node is absent from the JS tree', async ({ page }) => {
+  // Pruning, build output, site map and served source are covered exhaustively
+  // in tests/draft.test.mjs, which reads the parser and tests/dist/ directly.
+  // These two smoke tests keep one end-to-end check per surface — that pruning
+  // survives rendering, and survives the no-JS path.
+
+  test('draft nodes and their children are absent from the rendered tree', async ({ page }) => {
     await expect(page.locator('#draft-node')).toHaveCount(0);
-  });
-
-  test('draft node children are absent from the JS tree', async ({ page }) => {
     await expect(page.locator('#draft-child')).toHaveCount(0);
-  });
-
-  test('draft node label text is absent from the JS tree', async ({ page }) => {
+    await expect(page.locator('#draft-nested')).toHaveCount(0);
     await expect(page.locator('#tree-root')).not.toContainText('DRAFT_NODE_LABEL');
-    await expect(page.locator('#tree-root')).not.toContainText('DRAFT_CHILD_LABEL');
-    await expect(page.locator('#tree-root')).not.toContainText('DRAFT_GRANDCHILD_LABEL');
-    await expect(page.locator('#tree-root')).not.toContainText('DRAFT_BODY_CONTENT');
-    await expect(page.locator('#tree-root')).not.toContainText('DRAFT_TOP_BODY_CONTENT');
-  });
-
-  test('siblings of draft node are present', async ({ page }) => {
+    await expect(page.locator('#tree-root')).not.toContainText('DRAFT_NESTED_LABEL');
+    // Siblings on both sides survive, so this is pruning and not a parse failure.
     await expect(page.locator('#draft-sibling-before')).toHaveCount(1);
     await expect(page.locator('#draft-sibling-after')).toHaveCount(1);
+    await expect(page.locator('#draft-nested-sibling-after')).toHaveCount(1);
   });
 
-  test('draft node is absent from static HTML', async ({ browser }) => {
+  test('draft content is absent from the no-JS static fallback', async ({ browser }) => {
     const ctx = await browser.newContext({ javaScriptEnabled: false });
     const page = await ctx.newPage();
     await page.goto('/');
     await expect(page.locator('#static-content #draft-node')).toHaveCount(0);
-    await ctx.close();
-  });
-
-  test('draft node children are absent from static HTML', async ({ browser }) => {
-    const ctx = await browser.newContext({ javaScriptEnabled: false });
-    const page = await ctx.newPage();
-    await page.goto('/');
-    await expect(page.locator('#static-content #draft-child')).toHaveCount(0);
-    await ctx.close();
-  });
-
-  test('draft content is absent from static HTML text', async ({ browser }) => {
-    const ctx = await browser.newContext({ javaScriptEnabled: false });
-    const page = await ctx.newPage();
-    await page.goto('/');
-    const html = await page.locator('#static-content').innerHTML();
-    expect(html).not.toContain('DRAFT_NODE_LABEL');
-    expect(html).not.toContain('DRAFT_CHILD_LABEL');
-    expect(html).not.toContain('DRAFT_GRANDCHILD_LABEL');
-    expect(html).not.toContain('DRAFT_BODY_CONTENT');
-    expect(html).not.toContain('DRAFT_TOP_BODY_CONTENT');
-    await ctx.close();
-  });
-
-  test('draft content is absent from the served .rvmark source', async ({ page }) => {
-    await page.goto('/');
-    const src = await page.evaluate(() => fetch('/rvmark/index.rvmark').then(r => r.text()));
-    expect(src).not.toContain('DRAFT_NODE_LABEL');
-    expect(src).not.toContain('DRAFT_CHILD_LABEL');
-    expect(src).not.toContain('DRAFT_GRANDCHILD_LABEL');
-    expect(src).not.toContain('DRAFT_BODY_CONTENT');
-    expect(src).not.toContain('DRAFT_TOP_BODY_CONTENT');
-    expect(src).not.toContain('DRAFT_CONTINUATION_TEXT');
-    expect(src).not.toContain('DRAFT_NESTED_LABEL');
-    expect(src).not.toContain('DRAFT_NESTED_CHILD_LABEL');
-  });
-
-  test('draft continuation text is absent from static HTML', async ({ browser }) => {
-    const ctx = await browser.newContext({ javaScriptEnabled: false });
-    const page = await ctx.newPage();
-    await page.goto('/');
-    const html = await page.locator('#static-content').innerHTML();
-    expect(html).not.toContain('DRAFT_CONTINUATION_TEXT');
-    await ctx.close();
-  });
-
-  test('nested draft node is absent but its siblings are present', async ({ page }) => {
-    await expect(page.locator('#draft-nested')).toHaveCount(0);
-    await expect(page.locator('#tree-root')).not.toContainText('DRAFT_NESTED_LABEL');
-    await expect(page.locator('#tree-root')).not.toContainText('DRAFT_NESTED_CHILD_LABEL');
-    // Non-draft siblings of nested draft should be present
-    await expect(page.locator('#draft-nested-sibling-before')).toHaveCount(1);
-    await expect(page.locator('#draft-nested-sibling-after')).toHaveCount(1);
-  });
-
-  test('nested draft is absent from static HTML but its siblings are present', async ({ browser }) => {
-    const ctx = await browser.newContext({ javaScriptEnabled: false });
-    const page = await ctx.newPage();
-    await page.goto('/');
     await expect(page.locator('#static-content #draft-nested')).toHaveCount(0);
-    await expect(page.locator('#static-content #draft-nested-sibling-before')).toHaveCount(1);
+    const html = await page.locator('#static-content').innerHTML();
+    for (const s of ['DRAFT_NODE_LABEL', 'DRAFT_CHILD_LABEL', 'DRAFT_GRANDCHILD_LABEL',
+                     'DRAFT_BODY_CONTENT', 'DRAFT_TOP_BODY_CONTENT',
+                     'DRAFT_CONTINUATION_TEXT', 'DRAFT_NESTED_LABEL']) {
+      expect(html).not.toContain(s);
+    }
     await expect(page.locator('#static-content #draft-nested-sibling-after')).toHaveCount(1);
     await ctx.close();
-  });
-
-  test('draft file has no built page', async ({ page }) => {
-    const res = await page.goto('/draft-file/');
-    expect(res.status()).toBe(404);
-  });
-
-  test('draft file is absent from site map', async ({ page }) => {
-    const siteMap = await page.evaluate(() => window.__RVMARK_SITE_MAP__);
-    expect(Object.keys(siteMap)).not.toContain('draft-file');
   });
 });
 
@@ -1148,6 +1022,51 @@ test.describe('event attributes', () => {
     await parent.press('Enter'); // fires on-action → acted<<1; node becomes toggleable
     await parent.press('Enter'); // now toggleable, expand to show children
     await expect(await waitForNode(page, 'event-action-indicator')).toBeVisible();
+  });
+
+  // Action is one concept with two gestures: Enter/Space, and re-clicking an
+  // already-selected node (wireSelectThenAction). These assert the click gesture
+  // reaches on-action too — it previously fired only from the keyboard.
+  test('on-action fires when an already-selected node is re-clicked', async ({ page }) => {
+    const parent = await nodeContent(page, 'event-action-parent');
+    expect(await tryNodeContent(page, 'event-action-indicator')).toBeNull();
+    await parent.click(); // first click only selects
+    await parent.click(); // re-click = action → acted=1; node becomes toggleable
+    await parent.click(); // now toggleable, expand to reveal the child indicator
+    await expect(await waitForNode(page, 'event-action-indicator')).toBeVisible();
+  });
+
+  test('on-action fires on a leaf node when re-clicked', async ({ page }) => {
+    // A leaf has no expand/exhibit behaviour, so on-action is the *only* thing
+    // its action gesture does — the case that had no click wiring at all.
+    const root = await nodeContent(page, 'event-action-leaf-root');
+    await root.focus();
+    await root.press('ArrowRight'); // expand so the leaf mounts
+    const leaf = await waitForNode(page, 'event-action-leaf');
+    expect(await tryNodeContent(page, 'event-action-leaf-indicator')).toBeNull();
+    await leaf.click(); // selects
+    await leaf.click(); // re-click = action
+    await expect(await waitForNode(page, 'event-action-leaf-indicator')).toBeVisible();
+  });
+
+  test('on-action fires on a leaf node when Enter is pressed', async ({ page }) => {
+    const root = await nodeContent(page, 'event-action-leaf-root');
+    await root.focus();
+    await root.press('ArrowRight');
+    const leaf = await waitForNode(page, 'event-action-leaf');
+    expect(await tryNodeContent(page, 'event-action-leaf-indicator')).toBeNull();
+    await leaf.press('Enter');
+    await expect(await waitForNode(page, 'event-action-leaf-indicator')).toBeVisible();
+  });
+
+  test('on-action does not fire on the first click that merely selects', async ({ page }) => {
+    const root = await nodeContent(page, 'event-action-leaf-root');
+    await root.focus();
+    await root.press('ArrowRight');
+    const leaf = await waitForNode(page, 'event-action-leaf');
+    expect(await tryNodeContent(page, 'event-action-leaf-indicator')).toBeNull();
+    await leaf.click(); // selection only — must not act
+    expect(await tryNodeContent(page, 'event-action-leaf-indicator')).toBeNull();
   });
 
   test('on-expand fires state change when node is expanded', async ({ page }) => {

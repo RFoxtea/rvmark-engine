@@ -207,37 +207,64 @@ test('StatePass rename: _set translates remote key to local key', () => {
 // ── parsePass ──────────────────────────────────────────────────────────────────
 
 test('parsePass: bare key defaults to r', () => {
-  const entries = parsePass('foo');
+  const entries = parsePass('&foo');
+  assert.deepEqual(entries, [{ childKey: 'foo', parentKey: 'foo', mode: 'r' }]);
+});
+
+test('parsePass: explicit r suffix', () => {
+  const entries = parsePass('&foo r');
   assert.deepEqual(entries, [{ childKey: 'foo', parentKey: 'foo', mode: 'r' }]);
 });
 
 test('parsePass: w suffix', () => {
-  const entries = parsePass('foo w');
+  const entries = parsePass('&foo w');
   assert.deepEqual(entries, [{ childKey: 'foo', parentKey: 'foo', mode: 'w' }]);
 });
 
 test('parsePass: rw suffix', () => {
-  const entries = parsePass('foo rw');
+  const entries = parsePass('&foo rw');
   assert.deepEqual(entries, [{ childKey: 'foo', parentKey: 'foo', mode: 'rw' }]);
 });
 
 test('parsePass: rename', () => {
-  const entries = parsePass('remote=local');
+  const entries = parsePass('&remote=&local');
   assert.deepEqual(entries, [{ childKey: 'remote', parentKey: 'local', mode: 'r' }]);
 });
 
 test('parsePass: rename with mode', () => {
-  const entries = parsePass('remote=local rw');
+  const entries = parsePass('&remote=&local rw');
   assert.deepEqual(entries, [{ childKey: 'remote', parentKey: 'local', mode: 'rw' }]);
 });
 
 test('parsePass: comma-separated entries', () => {
-  const entries = parsePass('foo, bar w, baz=qux rw');
+  const entries = parsePass('&foo, &bar w, &baz=&qux rw');
   assert.deepEqual(entries, [
     { childKey: 'foo', parentKey: 'foo', mode: 'r' },
     { childKey: 'bar', parentKey: 'bar', mode: 'w' },
     { childKey: 'baz', parentKey: 'qux', mode: 'rw' },
   ]);
+});
+
+test('parsePass: "--" prefixed keys keep their dashes', () => {
+  const entries = parsePass('&--dashvar');
+  assert.deepEqual(entries, [{ childKey: '--dashvar', parentKey: '--dashvar', mode: 'r' }]);
+});
+
+test('parsePass: unprefixed key throws', () => {
+  assert.throws(() => parsePass('foo'), /pass key must be &-prefixed/);
+});
+
+test('parsePass: unprefixed key on either side of a rename throws', () => {
+  assert.throws(() => parsePass('&remote=local'), /pass key must be &-prefixed/);
+  assert.throws(() => parsePass('remote=&local'), /pass key must be &-prefixed/);
+});
+
+test('parsePass: unrecognised mode throws rather than defaulting to r', () => {
+  assert.throws(() => parsePass('&foo x'), /pass mode must be/);
+});
+
+test('parsePass: trailing junk throws', () => {
+  assert.throws(() => parsePass('&foo rw extra'), /unexpected text after pass mode/);
 });
 
 // ── buildStatePass ─────────────────────────────────────────────────────────────
@@ -509,4 +536,69 @@ test('parseShowWhen: truthy, negation, and comparison', () => {
 
 test('parseShowWhen: quoted comparison value may contain ;', () => {
   assert.deepEqual(parseShowWhen('&x == "a; b"'), [{ key: 'x', op: '==', val: 'a; b' }]);
+});
+
+// ── StatePass: keys outside the permission map ────────────────────────────────
+
+test('StatePass blocks a key that is not in the permission map', () => {
+  const parent = new StateFrame();
+  parent.declare('allowed', 'yes');
+  parent.declare('secret', 'no');
+  const pass = buildStatePass(parent, parsePass('&allowed'));
+  const child = new StateFrame(pass);
+  assert.equal(child.get('allowed'), 'yes');
+  assert.equal(child.get('secret'), undefined);
+});
+
+test('StatePass blocks a write to a key outside the permission map', () => {
+  const parent = new StateFrame();
+  parent.declare('allowed', 'yes');
+  parent.declare('secret', 'original');
+  const pass = buildStatePass(parent, parsePass('&allowed rw'));
+  const child = new StateFrame(pass);
+  child.set('secret', 'hacked');
+  assert.equal(parent.get('secret'), 'original');
+});
+
+test('StatePass carries several keys with independent modes', () => {
+  const parent = new StateFrame();
+  parent.declare('a', 'avalue');
+  parent.declare('b', 'bvalue');
+  const pass = buildStatePass(parent, parsePass('&a, &b w'));
+  const child = new StateFrame(pass);
+  assert.equal(child.get('a'), 'avalue');
+  assert.equal(child.get('b'), undefined);  // w-only: not readable
+  child.set('b', 'written');
+  assert.equal(parent.get('b'), 'written');
+});
+
+test('a child declaring a passed key shadows it without touching the host', () => {
+  const parent = new StateFrame();
+  parent.declare('x', 'host');
+  const pass = buildStatePass(parent, parsePass('&x rw'));
+  const child = new StateFrame(pass);
+  child.declare('x', 'local');
+  assert.equal(child.get('x'), 'local');
+  assert.equal(parent.get('x'), 'host');
+});
+
+// ── StatePass: prototype-pollution style keys ─────────────────────────────────
+
+test('a prototype key is not readable through a pass that does not grant it', () => {
+  const parent = new StateFrame();
+  const pass = buildStatePass(parent, parsePass('&safe'));
+  const child = new StateFrame(pass);
+  assert.equal(child.get('__proto__'), undefined);
+  assert.equal(child.get('constructor'), undefined);
+  assert.equal(child.get('prototype'), undefined);
+});
+
+test('writing a prototype key through a pass does not pollute Object.prototype', () => {
+  const parent = new StateFrame();
+  const pass = buildStatePass(parent, parsePass('&safe rw'));
+  const child = new StateFrame(pass);
+  child.set('__proto__', 'polluted');
+  child.set('constructor', 'polluted');
+  assert.equal({}.polluted, undefined);
+  assert.equal(({}).__proto__, Object.prototype);
 });

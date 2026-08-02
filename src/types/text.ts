@@ -8,7 +8,7 @@
 import type { NodeTypeFactory, SourceNode, ResolvedAttrs } from '../render-node.js';
 import { factoryRegister, RenderNode } from '../render-node.js';
 
-import { resolveAttrs, buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyExhibit, applyEventAttr, expandNode, exhibitOpenFromNode, prewarmToggleFonts, applyBulletProps, applyListItemProps } from '../handler-utils.js';
+import { resolveAttrs, buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyExhibit, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, prewarmToggleFonts, applyBulletProps, applyListItemProps } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';
@@ -174,16 +174,22 @@ class TextTypeHandler extends BaseTypeHandler {
     }
 
     // Re-click wiring: exhibit opens the exhibit; otherwise toggle expand/collapse.
+    // Every branch fires on-action too, so re-clicking a selected node matches
+    // what Enter/Space already do in buildKeyboardHandler.
+    const notTog = (el: HTMLElement) => el === tog || tog.contains(el);
     if (exhibitButton) {
       lbl.style.cursor = 'pointer';
-      wireSelectThenAction(content, () => exhibitOpenFromNode(rn), content, (el) => el === tog || tog.contains(el));
+      wireSelectThenAction(content, () => { exhibitOpenFromNode(rn); applyOnAction(rn); }, content, notTog);
     } else if (expandable && !alwaysOpen) {
       wireSelectThenAction(content, (expand) => {
         if (rn.toggleable) this.doToggle(expand, { scroll: false });
         else content.focus();
-      }, content, (el) => el === tog || tog.contains(el));
+        applyOnAction(rn);
+      }, content, notTog);
     } else {
-      lbl.addEventListener('click', (e) => { if ((e.target as HTMLElement).tagName === 'A') return; content.focus(); });
+      // Leaf (or always-open) node: nothing type-specific happens on re-click,
+      // but it is still an action gesture, so on-action must fire here as well.
+      wireSelectThenAction(content, () => { applyOnAction(rn); }, content, notTog);
     }
   }
 
@@ -205,14 +211,14 @@ class TextTypeHandler extends BaseTypeHandler {
           if (expandable && !alwaysOpen && rn.toggleable) {
             this.doToggle();
           }
-          for (const v of rn.sourceNode.attrs.getAll('on-action')) applyEventAttr(v, rn);
+          applyOnAction(rn);
           e.preventDefault();
           break;
         }
         case ' ': {
           if (inMode) break;
           if (expandable && !alwaysOpen && rn.toggleable) this.doToggle();
-          for (const v of rn.sourceNode.attrs.getAll('on-action')) applyEventAttr(v, rn);
+          applyOnAction(rn);
           e.preventDefault();
           break;
         }
