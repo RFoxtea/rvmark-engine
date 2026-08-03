@@ -4,39 +4,47 @@ import { parseInlineSpanParams } from '../out/markdown.js';
 
 // ── parseInlineSpanParams: state assignments ───────────────────────────────────
 
-test('parseInlineSpanParams: &key<<val → set op', () => {
-  const result = parseInlineSpanParams('&key<<val');
+test('parseInlineSpanParams: set &key = "val" → set op', () => {
+  const result = parseInlineSpanParams('set &key = "val"');
   assert.deepEqual(result.stateAssignments, [{ key: 'key', op: 'set', val: 'val' }]);
 });
 
-test('parseInlineSpanParams: &key=val → declare op', () => {
-  const result = parseInlineSpanParams('&key=val');
+test('parseInlineSpanParams: let &key = "val" → declare op', () => {
+  const result = parseInlineSpanParams('let &key = "val"');
   assert.deepEqual(result.stateAssignments, [{ key: 'key', op: 'declare', val: 'val' }]);
 });
 
-test('parseInlineSpanParams: &key bare → declare with val 1', () => {
-  const result = parseInlineSpanParams('&key');
+test('parseInlineSpanParams: let &key bare → declare with val 1', () => {
+  const result = parseInlineSpanParams('let &key');
   assert.deepEqual(result.stateAssignments, [{ key: 'key', op: 'declare', val: '1' }]);
 });
 
-test('parseInlineSpanParams: !&key → delete op', () => {
-  const result = parseInlineSpanParams('!&key');
+test('parseInlineSpanParams: remove &key → delete op', () => {
+  const result = parseInlineSpanParams('remove &key');
   assert.deepEqual(result.stateAssignments, [{ key: 'key', op: 'delete' }]);
 });
 
-test('parseInlineSpanParams: multiple state assignments via semicolons in & token', () => {
-  const result = parseInlineSpanParams('&a<<1; b<<2');
-  // only the &-prefixed token is a state assignment; b<<2 falls through to extra
-  assert.deepEqual(result.stateAssignments, [{ key: 'a', op: 'set', val: '1' }]);
+test('parseInlineSpanParams: multiple state mutations via semicolons', () => {
+  const result = parseInlineSpanParams('set &a = 1; set &b = 2');
+  assert.deepEqual(result.stateAssignments, [
+    { key: 'a', op: 'set', val: '1' },
+    { key: 'b', op: 'set', val: '2' },
+  ]);
 });
 
-test('parseInlineSpanParams: & combined with option', () => {
-  const result = parseInlineSpanParams('&step<<0; option');
+test('parseInlineSpanParams: a quoted ; stays inside one value', () => {
+  const result = parseInlineSpanParams('set &a = "x; y"; option');
+  assert.equal(result.option, true);
+  assert.deepEqual(result.stateAssignments, [{ key: 'a', op: 'set', val: 'x; y' }]);
+});
+
+test('parseInlineSpanParams: keyword combined with option', () => {
+  const result = parseInlineSpanParams('set &step = 0; option');
   assert.equal(result.option, true);
   assert.deepEqual(result.stateAssignments, [{ key: 'step', op: 'set', val: '0' }]);
 });
 
-test('parseInlineSpanParams: no & prefix → no stateAssignments', () => {
+test('parseInlineSpanParams: no keyword → no stateAssignments', () => {
   const result = parseInlineSpanParams('option');
   assert.equal(result.stateAssignments, undefined);
   assert.equal(result.option, true);

@@ -17,48 +17,48 @@
 
 3. {#pass-read-target} Pass read-only target
   1. {#pass-read-anchor} pass-read-anchor
-  2. {#pass-read-indicator; ? &passvar==1} pass-read-visible
+  2. {#pass-read-indicator; show-when: &passvar == 1} pass-read-visible
 
 4. {#pass-blocked-target} Pass blocked target
   1. {#pass-blocked-anchor} pass-blocked-anchor
-  2. {#pass-blocked-indicator; ? &passvar==1} pass-blocked-visible
+  2. {#pass-blocked-indicator; show-when: &passvar == 1} pass-blocked-visible
 
 5. {#pass-rw-target} Pass read-write target
-  1. {#pass-rw-indicator; ? &passvar==1} pass-rw-visible
-  2. {#pass-rw-writer; on-action: &passvar<<1} pass-rw-writer
+  1. {#pass-rw-indicator; show-when: &passvar == 1} pass-rw-visible
+  2. {#pass-rw-writer; on-action: set &passvar = 1} pass-rw-writer
 
 6. {#pass-wo-target} Pass write-only target
-  1. {#pass-wo-blocked-indicator; ? &passvar==1} pass-wo-blocked-visible
-  2. {#pass-wo-writer; on-action: &passvar<<1} pass-wo-writer
+  1. {#pass-wo-blocked-indicator; show-when: &passvar == 1} pass-wo-blocked-visible
+  2. {#pass-wo-writer; on-action: set &passvar = 1} pass-wo-writer
 
 7. {#pass-rename-target} Pass rename target
-  1. {#pass-rename-indicator; ? &remotevar==1} pass-rename-visible
+  1. {#pass-rename-indicator; show-when: &remotevar == 1} pass-rename-visible
 
 8. {#pass-dash-target} Pass double-dash target
-  1. {#pass-dash-indicator; ? &--dashvar==1} pass-dash-visible
-  2. {#pass-dash-write-node; on-action: &--dashvar<<99} pass-dash-write-attempt
+  1. {#pass-dash-indicator; show-when: &--dashvar == 1} pass-dash-visible
+  2. {#pass-dash-write-node; on-action: set &--dashvar = 99} pass-dash-write-attempt
 
 9. {#pass-exhibit-target} Pass exhibit target
-  1. {#pass-exhibit-indicator; ? &exvar==1} pass-exhibit-visible
-  2. {#pass-exhibit-writer; on-action: &exvar<<1} pass-exhibit-writer
+  1. {#pass-exhibit-indicator; show-when: &exvar == 1} pass-exhibit-visible
+  2. {#pass-exhibit-writer; on-action: set &exvar = 1} pass-exhibit-writer
 
 10. {#pass-exhibit-blocked-target} Pass exhibit blocked target
-  1. {#pass-exhibit-blocked-indicator; ? &exvar==1} pass-exhibit-blocked-visible
+  1. {#pass-exhibit-blocked-indicator; show-when: &exvar == 1} pass-exhibit-blocked-visible
 
 11. {#pass-r-write-blocked-target} Pass r-only write-blocked target
-  1. {#pass-r-write-blocked-writer; on-action: &passvar<<1} pass-r-write-blocked-writer
+  1. {#pass-r-write-blocked-writer; on-action: set &passvar = 1} pass-r-write-blocked-writer
 
 12. {#pass-multi-target} Pass multi-var target
-  1. {#pass-multi-avar-indicator; ? &avar==1} pass-multi-avar-visible
-  2. {#pass-multi-bvar-writer; on-action: &bvar<<1} pass-multi-bvar-writer
+  1. {#pass-multi-avar-indicator; show-when: &avar == 1} pass-multi-avar-visible
+  2. {#pass-multi-bvar-writer; on-action: set &bvar = 1} pass-multi-bvar-writer
 
 13. {#pass-unknown-key-target} Pass unknown key target
-  1. {#pass-unknown-key-indicator; ? &unknownvar==1} pass-unknown-key-visible
+  1. {#pass-unknown-key-indicator; show-when: &unknownvar == 1} pass-unknown-key-visible
 
 14. {#pass-exhibit-rename-target} Pass exhibit rename target
-  1. {#pass-exhibit-rename-indicator; ? &exvar==1} pass-exhibit-rename-visible
-  2. {#pass-exhibit-rename-writer; on-action: &exvar<<1} pass-exhibit-rename-writer
+  1. {#pass-exhibit-rename-indicator; show-when: &exvar == 1} pass-exhibit-rename-visible
+  2. {#pass-exhibit-rename-writer; on-action: set &exvar = 1} pass-exhibit-rename-writer
 
 15. {#pass-exhibit-preroot-target} Pass exhibit preroot target
-  1. {#pass-exhibit-preroot-indicator; ? &prerootvar==1} pass-exhibit-preroot-visible
+  1. {#pass-exhibit-preroot-indicator; show-when: &prerootvar == 1} pass-exhibit-preroot-visible
 

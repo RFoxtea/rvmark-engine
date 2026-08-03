@@ -47,13 +47,12 @@
   ],
   "scripts": {
     "build": "node build/build.mjs",
-    "test": "node build/build.mjs --test && playwright test --config playwright.config.js",
+    "test": "node build/build.mjs --test && node --test tests/*.test.mjs && playwright test --config playwright.config.js",
+    "test:unit": "node build/build.mjs --test && node --test tests/*.test.mjs",
     "prepare": "node build/build.mjs"
   },
   "dependencies": {
-    "brace-expansion": "^5.0.7",
     "dompurify": "^3.4.12",
-    "fast-xml-parser": "^5.4.1",
     "marked": "^15.0.12",
     "typescript": "^6.0.2"
   },

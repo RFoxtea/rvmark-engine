@@ -16,7 +16,7 @@ import { addressToHref } from './shared.js';
 import { tagsNodeAttrs, mergeNodeAttrs, resolveTagDef } from './tags.js';
 import { scrollRowIntoMiddle } from './scroll.js';
 import type { SourceNode } from './parser.js';
-import { parseOnSpawn } from './parser.js';
+import { parseStateEntries } from './parser.js';
 import { Multimap } from './multimap.js';
 import type { ResolvedAttrs } from './render-node.js';
 import { RenderNode } from './render-node.js';
@@ -29,11 +29,24 @@ export { exhibitOpenFromNode };
 // ── parsePass ──────────────────────────────────────────────────────────────
 // Parse a `pass` or `children-pass` attribute value into PassEntry[].
 // Grammar per entry (comma-separated):
-//   foo          → remoteKey=foo, localKey=foo, mode=r
-//   foo w        → mode=w
-//   foo rw       → mode=rw
-//   remote=local → remoteKey=remote, localKey=local, mode=r
-//   remote=local rw → mode=rw
+//   &foo           → remoteKey=foo, localKey=foo, mode=r
+//   &foo w         → mode=w
+//   &foo rw        → mode=rw
+//   &remote=&local → remoteKey=remote, localKey=local, mode=r
+//   &remote=&local rw → mode=rw
+//
+// Keys are always '&'-prefixed, as in let/set/remove and show-when; the sigil is
+// stripped here because state keys are stored bare. An unprefixed key or an
+// unrecognised mode throws, so a typo surfaces as a parse error rather than as a
+// silently read-only (or silently absent) permission.
+
+const PASS_KEY_RE = /^&([\w-]+)$/;
+
+function passKey(tok: string, whole: string): string {
+  const m = tok.match(PASS_KEY_RE);
+  if (!m) throw new Error(`rvmark: pass key must be &-prefixed, got: ${whole}`);
+  return m[1];
+}
 
 export function parsePass(raw: string): PassEntry[] {
   const result: PassEntry[] = [];
@@ -41,14 +54,23 @@ export function parsePass(raw: string): PassEntry[] {
     const s = part.trim();
     if (!s) continue;
     const tokens = s.split(/\s+/);
+    if (tokens.length > 2) throw new Error(`rvmark: unexpected text after pass mode in: ${s}`);
     const keyPart = tokens[0];
-    const modePart = tokens[1] as PassMode | undefined;
-    const mode: PassMode = (modePart === 'w' || modePart === 'rw') ? modePart : 'r';
+    const modePart = tokens[1];
+    if (modePart !== undefined && modePart !== 'r' && modePart !== 'w' && modePart !== 'rw') {
+      throw new Error(`rvmark: pass mode must be 'r', 'w', or 'rw', got: ${s}`);
+    }
+    const mode: PassMode = modePart ?? 'r';
     const eqIdx = keyPart.indexOf('=');
     if (eqIdx !== -1) {
-      result.push({ childKey: keyPart.slice(0, eqIdx), parentKey: keyPart.slice(eqIdx + 1), mode });
+      result.push({
+        childKey:  passKey(keyPart.slice(0, eqIdx), s),
+        parentKey: passKey(keyPart.slice(eqIdx + 1), s),
+        mode,
+      });
     } else {
-      result.push({ childKey: keyPart, parentKey: keyPart, mode });
+      const key = passKey(keyPart, s);
+      result.push({ childKey: key, parentKey: key, mode });
     }
   }
   return result;
@@ -170,7 +192,7 @@ export function listboxKeydown(
 
   if (e.key === 'Enter' && e.target === content && listboxNav.activeIdx() >= 0) {
     listboxNav.activate();
-    for (const v of rn.sourceNode.attrs.getAll('on-action')) applyEventAttr(v, rn);
+    applyOnAction(rn);
     e.preventDefault();
     return true;
   }
@@ -200,7 +222,7 @@ export function actionKeydown(e: KeyboardEvent, rn: RenderNode): boolean {
     if (e.key === 'Enter' || e.key === ' ') {
       if (e.target !== content) return false;
       exhibitOpenFromNode(rn);
-      for (const v of rn.sourceNode.attrs.getAll('on-action')) applyEventAttr(v, rn);
+      applyOnAction(rn);
       e.preventDefault();
       return true;
     }
@@ -217,7 +239,7 @@ export function actionKeydown(e: KeyboardEvent, rn: RenderNode): boolean {
       const a   = lbl?.querySelector<HTMLElement>('a:not(.node-tag)');
       if (a) {
         a.focus();
-        for (const v of rn.sourceNode.attrs.getAll('on-action')) applyEventAttr(v, rn);
+        applyOnAction(rn);
         e.preventDefault();
         return true;
       }
@@ -244,10 +266,10 @@ export function resolveStateVal(val: string | undefined, state: StateNode): stri
   return String(val ?? '');
 }
 
-// Call at handler construction to process the {&} / on-spawn attr.
+// Call at handler construction to process the bare-`let` / on-spawn attr.
 export function applyOnSpawn(attrs: ResolvedAttrs, rn: RenderNode): void {
   for (const raw of attrs.getAll('on-spawn')) {
-    for (const entry of parseOnSpawn(raw)) {
+    for (const entry of parseStateEntries(raw)) {
       if (entry.op === 'delete')   rn.state.delete(entry.key);
       else if (entry.op === 'set') rn.state.set(entry.key, resolveStateVal(entry.val, rn.state));
       else                         rn.state.declare(entry.key, resolveStateVal(entry.val, rn.state));
@@ -260,11 +282,21 @@ export function applyOnSpawn(attrs: ResolvedAttrs, rn: RenderNode): void {
 // Apply state mutations for a given event attribute (on-select, on-expand, etc.).
 export function applyEventAttr(attrVal: string | undefined, rn: RenderNode): void {
   if (!attrVal) return;
-  for (const entry of parseOnSpawn(attrVal)) {
+  for (const entry of parseStateEntries(attrVal)) {
     if (entry.op === 'delete')   rn.state.delete(entry.key);
     else if (entry.op === 'set') rn.state.set(entry.key, resolveStateVal(entry.val, rn.state));
     else                         rn.state.declare(entry.key, resolveStateVal(entry.val, rn.state));
   }
+}
+
+// Fire a node's `on-action` mutations.
+//
+// "Action" is one concept with two gestures: Enter/Space on the keyboard, and
+// re-clicking an already-selected node (see wireSelectThenAction). Both must run
+// this, or a bare `{set &x = "1"}` would work for only one kind of user. Call it
+// from every doAction callback and every keyboard action path.
+export function applyOnAction(rn: RenderNode): void {
+  for (const v of rn.sourceNode.attrs.getAll('on-action')) applyEventAttr(v, rn);
 }
 
 // ── Tag class application ──────────────────────────────────────────────────

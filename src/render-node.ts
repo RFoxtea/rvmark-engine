@@ -219,7 +219,7 @@ export function buildRenderNode(
 
   const rn = new RenderNode(node, parentState);
   rn.permalinkId = permalinkBase ?? '';
-  if ('draft' in attrs) rn.li.classList.add('node--draft');
+  if (isHiddenByModifier(attrs)) rn.li.classList.add('node--draft');
 
   blastocyteFactory.create(rn);
   rn.meta = { ...parentMeta, ...rn.meta };

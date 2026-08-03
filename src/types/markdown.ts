@@ -20,7 +20,7 @@
 
 import type { NodeTypeFactory, SourceNode, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyExhibit, applyEventAttr, expandNode, exhibitOpenFromNode } from '../handler-utils.js';
+import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyExhibit, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';
@@ -91,9 +91,9 @@ class MarkdownTypeHandler extends BaseTypeHandler {
 
     this._actionVal = attrs.get('action') ?? null;
     if (this._actionVal === 'exhibit') {
-      wireSelectThenAction(content, () => exhibitOpenFromNode(rn));
+      wireSelectThenAction(content, () => { exhibitOpenFromNode(rn); applyOnAction(rn); });
     } else {
-      wireSelectThenAction(content, () => {});
+      wireSelectThenAction(content, () => { applyOnAction(rn); });
     }
 
     const { url, sectionSlug, bodyText } = this.resolveSrc(attrs, sourceNode);
@@ -202,7 +202,7 @@ class MarkdownTypeHandler extends BaseTypeHandler {
         case ' ':
           this.focusBody();
           e.preventDefault();
-          for (const v of this.rn.sourceNode.attrs.getAll('on-action')) applyEventAttr(v, this.rn);
+          applyOnAction(this.rn);
           return;
         case 'ArrowRight': {
           this.focusBody();

@@ -13,10 +13,9 @@
  *   staticMdToHtml(text)  — build-time block markdown → HTML string (no DOM, no KaTeX)
  *   mdInline(text)        — runtime inline markdown → HTML string
  *   staticMdInline(text)  — build-time inline markdown → HTML string
- *   setExtIconSvg(svg)    — called by renderer.ts to inject the external link icon
  */
 
-import { parseOnSpawn } from './parser.js';
+import { parseStateEntries, splitSegments } from './parser.js';
 import type { StateEntry } from './parser.js';
 
 // marked is loaded as a classic <script> before this module at runtime, and
@@ -172,14 +171,12 @@ let _currentUrlResolver: ((url: string) => string | null) | null = null;
 interface MarkedOpts {
   renderMathBlock: (src: string) => string;
   renderMathInline: (src: string, display: boolean) => string;
-  extLinkSuffix?: string;
 }
 
 function makeMarked(opts: MarkedOpts) {
   const {
     renderMathBlock,
     renderMathInline,
-    extLinkSuffix = '',
   } = opts;
 
   const instance = new marked.Marked();
@@ -219,7 +216,7 @@ function makeMarked(opts: MarkedOpts) {
         }
         const proto = (href.match(/^([a-zA-Z][a-zA-Z0-9+\-.]*):/) ?? [])[1]?.toLowerCase();
         if (proto && !['http', 'https', 'mailto'].includes(proto)) return text;
-        return `<a href="${mdEscHtml(href)}" target="_blank" rel="noopener noreferrer">${text}${extLinkSuffix}</a>`;
+        return `<a href="${mdEscHtml(href)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
       },
     },
   });
@@ -251,7 +248,7 @@ export interface ParsedSpanAttrs {
 
 export function parseInlineSpanParams(raw: string): ParsedSpanAttrs {
   const result: ParsedSpanAttrs = { extra: {} };
-  for (const part of raw.split(';')) {
+  for (const part of splitSegments(raw)) {
     const trimmed = part.trim();
     if (!trimmed) continue;
     // '=>' transclusion ref — rest of token is the ref value
@@ -259,9 +256,11 @@ export function parseInlineSpanParams(raw: string): ParsedSpanAttrs {
       result.transclude = trimmed.slice(2).trim();
       continue;
     }
-    // '&...' or '!&...' state assignment — same grammar as node-level on-spawn/on-select
-    if (trimmed.startsWith('&') || trimmed.startsWith('!&')) {
-      const entries = parseOnSpawn(trimmed);
+    // 'let'/'set'/'remove' state mutation — same grammar as node-level attrs.
+    // On a span the mutation fires when the span is activated, so a bare `let`
+    // here is an activation-time declaration rather than a spawn-time one.
+    if (/^(let|set|remove)\b/.test(trimmed)) {
+      const entries = parseStateEntries(trimmed);
       if (entries.length) {
         if (!result.stateAssignments) result.stateAssignments = [];
         result.stateAssignments.push(...entries);
@@ -358,11 +357,6 @@ const rvmarkSpanExtension = {
   },
 };
 
-// ── External link icon ─────────────────────────────────────────────────────────
-
-let _extIconSvg = '';
-export function setExtIconSvg(svg: string): void { _extIconSvg = svg; _runtimeMarked = null; }
-
 // ── Math fallbacks (no KaTeX) ──────────────────────────────────────────────────
 
 function mathBlockFallback(src: string): string         { return `<pre class="md-math-block">${mdEscHtml(src)}</pre>`; }
@@ -378,7 +372,6 @@ function getStaticMarked() {
     _staticMarked = makeMarked({
       renderMathBlock:  mathBlockFallback,
       renderMathInline: mathInlineFallback,
-      extLinkSuffix: '',
     });
   }
   return _staticMarked;
@@ -398,7 +391,6 @@ function getRuntimeMarked() {
           return katex.renderToString(src, { displayMode: display, throwOnError: false });
         return mathInlineFallback(src, display);
       },
-      extLinkSuffix: _extIconSvg,
     });
   }
   return _runtimeMarked;

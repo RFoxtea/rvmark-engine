@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { StateFrame, StatePass, buildStatePass } from '../out/state.js';
 import { parsePass } from '../out/handler-utils.js';
-import { parseOnSpawn } from '../out/parser.js';
+import { parseStateEntries, parseShowWhen, parseAttrBlock } from '../out/parser.js';
 
 // ── StateFrame basics ──────────────────────────────────────────────────────────
 
@@ -207,37 +207,64 @@ test('StatePass rename: _set translates remote key to local key', () => {
 // ── parsePass ──────────────────────────────────────────────────────────────────
 
 test('parsePass: bare key defaults to r', () => {
-  const entries = parsePass('foo');
+  const entries = parsePass('&foo');
+  assert.deepEqual(entries, [{ childKey: 'foo', parentKey: 'foo', mode: 'r' }]);
+});
+
+test('parsePass: explicit r suffix', () => {
+  const entries = parsePass('&foo r');
   assert.deepEqual(entries, [{ childKey: 'foo', parentKey: 'foo', mode: 'r' }]);
 });
 
 test('parsePass: w suffix', () => {
-  const entries = parsePass('foo w');
+  const entries = parsePass('&foo w');
   assert.deepEqual(entries, [{ childKey: 'foo', parentKey: 'foo', mode: 'w' }]);
 });
 
 test('parsePass: rw suffix', () => {
-  const entries = parsePass('foo rw');
+  const entries = parsePass('&foo rw');
   assert.deepEqual(entries, [{ childKey: 'foo', parentKey: 'foo', mode: 'rw' }]);
 });
 
 test('parsePass: rename', () => {
-  const entries = parsePass('remote=local');
+  const entries = parsePass('&remote=&local');
   assert.deepEqual(entries, [{ childKey: 'remote', parentKey: 'local', mode: 'r' }]);
 });
 
 test('parsePass: rename with mode', () => {
-  const entries = parsePass('remote=local rw');
+  const entries = parsePass('&remote=&local rw');
   assert.deepEqual(entries, [{ childKey: 'remote', parentKey: 'local', mode: 'rw' }]);
 });
 
 test('parsePass: comma-separated entries', () => {
-  const entries = parsePass('foo, bar w, baz=qux rw');
+  const entries = parsePass('&foo, &bar w, &baz=&qux rw');
   assert.deepEqual(entries, [
     { childKey: 'foo', parentKey: 'foo', mode: 'r' },
     { childKey: 'bar', parentKey: 'bar', mode: 'w' },
     { childKey: 'baz', parentKey: 'qux', mode: 'rw' },
   ]);
+});
+
+test('parsePass: "--" prefixed keys keep their dashes', () => {
+  const entries = parsePass('&--dashvar');
+  assert.deepEqual(entries, [{ childKey: '--dashvar', parentKey: '--dashvar', mode: 'r' }]);
+});
+
+test('parsePass: unprefixed key throws', () => {
+  assert.throws(() => parsePass('foo'), /pass key must be &-prefixed/);
+});
+
+test('parsePass: unprefixed key on either side of a rename throws', () => {
+  assert.throws(() => parsePass('&remote=local'), /pass key must be &-prefixed/);
+  assert.throws(() => parsePass('remote=&local'), /pass key must be &-prefixed/);
+});
+
+test('parsePass: unrecognised mode throws rather than defaulting to r', () => {
+  assert.throws(() => parsePass('&foo x'), /pass mode must be/);
+});
+
+test('parsePass: trailing junk throws', () => {
+  assert.throws(() => parsePass('&foo rw extra'), /unexpected text after pass mode/);
 });
 
 // ── buildStatePass ─────────────────────────────────────────────────────────────
@@ -391,46 +418,72 @@ test('subscribeAny callback receives undefined value on delete', () => {
   assert.equal(receivedVal, undefined);
 });
 
-// ── parseOnSpawn ───────────────────────────────────────────────────────────────
+// ── parseStateEntries ─────────────────────────────────────────────────────────
 
-test('parseOnSpawn: bare key → declare with val 1', () => {
-  const entries = parseOnSpawn('&foo');
-  assert.deepEqual(entries, [{ key: 'foo', op: 'declare', val: '1' }]);
+test('parseStateEntries: let &key → declare with val 1', () => {
+  assert.deepEqual(parseStateEntries('let &foo'), [{ key: 'foo', op: 'declare', val: '1' }]);
 });
 
-test('parseOnSpawn: key=val → declare', () => {
-  const entries = parseOnSpawn('&foo=bar');
-  assert.deepEqual(entries, [{ key: 'foo', op: 'declare', val: 'bar' }]);
+test('parseStateEntries: let &key = "val" → declare', () => {
+  assert.deepEqual(parseStateEntries('let &foo = "bar"'), [{ key: 'foo', op: 'declare', val: 'bar' }]);
 });
 
-test('parseOnSpawn: key<<val → set (mutate upward)', () => {
-  const entries = parseOnSpawn('&foo<<bar');
-  assert.deepEqual(entries, [{ key: 'foo', op: 'set', val: 'bar' }]);
+test('parseStateEntries: set &key = "val" → set (mutate upward)', () => {
+  assert.deepEqual(parseStateEntries('set &foo = "bar"'), [{ key: 'foo', op: 'set', val: 'bar' }]);
 });
 
-test('parseOnSpawn: !key → delete', () => {
-  const entries = parseOnSpawn('!&foo');
-  assert.deepEqual(entries, [{ key: 'foo', op: 'delete' }]);
+test('parseStateEntries: remove &key → delete', () => {
+  assert.deepEqual(parseStateEntries('remove &foo'), [{ key: 'foo', op: 'delete' }]);
 });
 
-test('parseOnSpawn: semicolon-separated multiple entries', () => {
-  const entries = parseOnSpawn('&a=1; &b<<2; !&c; &d');
-  assert.deepEqual(entries, [
+test('parseStateEntries: bare numbers and identifiers need no quotes', () => {
+  assert.deepEqual(parseStateEntries('let &n = 42'), [{ key: 'n', op: 'declare', val: '42' }]);
+});
+
+test('parseStateEntries: &ref value passes through unquoted', () => {
+  assert.deepEqual(parseStateEntries('set &a = &b'), [{ key: 'a', op: 'set', val: '&b' }]);
+});
+
+test('parseStateEntries: quoted value may contain the ; separator', () => {
+  assert.deepEqual(parseStateEntries('let &msg = "a; b"'), [{ key: 'msg', op: 'declare', val: 'a; b' }]);
+});
+
+test('parseStateEntries: escaped quote inside a value', () => {
+  assert.deepEqual(parseStateEntries('let &q = "say \\"hi\\""'), [{ key: 'q', op: 'declare', val: 'say "hi"' }]);
+});
+
+test('parseStateEntries: explicit empty string blanks a variable', () => {
+  assert.deepEqual(parseStateEntries('set &x = ""'), [{ key: 'x', op: 'set', val: '' }]);
+});
+
+test('parseStateEntries: semicolon-separated multiple entries', () => {
+  assert.deepEqual(parseStateEntries('let &a = 1; set &b = 2; remove &c; let &d'), [
     { key: 'a', op: 'declare', val: '1' },
     { key: 'b', op: 'set',     val: '2' },
-    { key: 'c', op: 'delete'             },
+    { key: 'c', op: 'delete'            },
     { key: 'd', op: 'declare', val: '1' },
   ]);
 });
 
-test('parseOnSpawn: << does set on owning ancestor, not declare', () => {
+test('parseStateEntries: a missing keyword is an error, not a silent no-op', () => {
+  assert.throws(() => parseStateEntries('&foo = "bar"'), /must start with 'let', 'set', or 'remove'/);
+});
+
+test('parseStateEntries: unquoted multi-word value is an error', () => {
+  assert.throws(() => parseStateEntries('let &x = some variable'), /must be quoted/);
+});
+
+test('parseStateEntries: unterminated string literal is an error', () => {
+  assert.throws(() => parseStateEntries('let &x = "oops'), /unterminated string literal/);
+});
+
+test('parseStateEntries: set does set on owning ancestor, not declare', () => {
   const parent = new StateFrame();
   parent.declare('x', 'original');
   const child = new StateFrame(parent);
   // simulate what applyEventAttr does with op='set'
-  const entries = parseOnSpawn('&x<<mutated');
-  for (const e of entries) {
-    if (e.op === 'set')     child.set(e.key, e.val);
+  for (const e of parseStateEntries('set &x = "mutated"')) {
+    if (e.op === 'set')          child.set(e.key, e.val);
     else if (e.op === 'declare') child.declare(e.key, e.val);
     else if (e.op === 'delete')  child.delete(e.key);
   }
@@ -438,16 +491,114 @@ test('parseOnSpawn: << does set on owning ancestor, not declare', () => {
   assert.equal(child.get('x'), 'mutated');
 });
 
-test('parseOnSpawn: = does declare on own frame, not ancestor', () => {
+test('parseStateEntries: let does declare on own frame, not ancestor', () => {
   const parent = new StateFrame();
   parent.declare('x', 'original');
   const child = new StateFrame(parent);
-  const entries = parseOnSpawn('&x=shadow');
-  for (const e of entries) {
-    if (e.op === 'set')      child.set(e.key, e.val);
+  for (const e of parseStateEntries('let &x = "shadow"')) {
+    if (e.op === 'set')          child.set(e.key, e.val);
     else if (e.op === 'declare') child.declare(e.key, e.val);
     else if (e.op === 'delete')  child.delete(e.key);
   }
   assert.equal(child.get('x'), 'shadow');
   assert.equal(parent.get('x'), 'original'); // parent unchanged
+});
+
+// ── attr-block keyword sugar ──────────────────────────────────────────────────
+
+test('parseAttrBlock: bare let → on-spawn, bare set → on-action', () => {
+  assert.deepEqual(parseAttrBlock('let &x = "1"').allEntries(), [['on-spawn', 'let &x = "1"']]);
+  assert.deepEqual(parseAttrBlock('set &x = "2"').allEntries(), [['on-action', 'set &x = "2"']]);
+  assert.deepEqual(parseAttrBlock('remove &x').allEntries(),     [['on-action', 'remove &x']]);
+});
+
+test('parseAttrBlock: explicit event attr keeps the keyword meaning', () => {
+  const attrs = parseAttrBlock('on-expand: set &x = "1"');
+  assert.deepEqual(attrs.allEntries(), [['on-expand', 'set &x = "1"']]);
+  assert.deepEqual(parseStateEntries(attrs.get('on-expand')), [{ key: 'x', op: 'set', val: '1' }]);
+});
+
+test('parseAttrBlock: a quoted ; does not split the attr block', () => {
+  assert.deepEqual(parseAttrBlock('#one; let &m = "a; b"').allEntries(), [
+    ['id', 'one'],
+    ['on-spawn', 'let &m = "a; b"'],
+  ]);
+});
+
+// ── parseShowWhen ─────────────────────────────────────────────────────────────
+
+test('parseShowWhen: truthy, negation, and comparison', () => {
+  assert.deepEqual(parseShowWhen('&x'),  [{ key: 'x', op: 'truthy' }]);
+  assert.deepEqual(parseShowWhen('!&x'), [{ key: 'x', op: '!truthy' }]);
+  assert.deepEqual(parseShowWhen('&x == "1"'), [{ key: 'x', op: '==', val: '1' }]);
+  assert.deepEqual(parseShowWhen('&x >= 25'),  [{ key: 'x', op: '>=', val: '25' }]);
+});
+
+test('parseShowWhen: quoted comparison value may contain ;', () => {
+  assert.deepEqual(parseShowWhen('&x == "a; b"'), [{ key: 'x', op: '==', val: 'a; b' }]);
+});
+
+// ── StatePass: keys outside the permission map ────────────────────────────────
+
+test('StatePass blocks a key that is not in the permission map', () => {
+  const parent = new StateFrame();
+  parent.declare('allowed', 'yes');
+  parent.declare('secret', 'no');
+  const pass = buildStatePass(parent, parsePass('&allowed'));
+  const child = new StateFrame(pass);
+  assert.equal(child.get('allowed'), 'yes');
+  assert.equal(child.get('secret'), undefined);
+});
+
+test('StatePass blocks a write to a key outside the permission map', () => {
+  const parent = new StateFrame();
+  parent.declare('allowed', 'yes');
+  parent.declare('secret', 'original');
+  const pass = buildStatePass(parent, parsePass('&allowed rw'));
+  const child = new StateFrame(pass);
+  child.set('secret', 'hacked');
+  assert.equal(parent.get('secret'), 'original');
+});
+
+test('StatePass carries several keys with independent modes', () => {
+  const parent = new StateFrame();
+  parent.declare('a', 'avalue');
+  parent.declare('b', 'bvalue');
+  const pass = buildStatePass(parent, parsePass('&a, &b w'));
+  const child = new StateFrame(pass);
+  assert.equal(child.get('a'), 'avalue');
+  assert.equal(child.get('b'), undefined);  // w-only: not readable
+  child.set('b', 'written');
+  assert.equal(parent.get('b'), 'written');
+});
+
+test('a child declaring a passed key shadows it without touching the host', () => {
+  const parent = new StateFrame();
+  parent.declare('x', 'host');
+  const pass = buildStatePass(parent, parsePass('&x rw'));
+  const child = new StateFrame(pass);
+  child.declare('x', 'local');
+  assert.equal(child.get('x'), 'local');
+  assert.equal(parent.get('x'), 'host');
+});
+
+// ── StatePass: prototype-pollution style keys ─────────────────────────────────
+
+test('a prototype key is not readable through a pass that does not grant it', () => {
+  const parent = new StateFrame();
+  const pass = buildStatePass(parent, parsePass('&safe'));
+  const child = new StateFrame(pass);
+  assert.equal(child.get('__proto__'), undefined);
+  assert.equal(child.get('constructor'), undefined);
+  assert.equal(child.get('prototype'), undefined);
+});
+
+test('writing a prototype key through a pass does not pollute Object.prototype', () => {
+  const parent = new StateFrame();
+  const pass = buildStatePass(parent, parsePass('&safe rw'));
+  const child = new StateFrame(pass);
+  child.set('__proto__', 'polluted');
+  child.set('constructor', 'polluted');
+  assert.equal({}.polluted, undefined);
+  assert.equal(({}).__proto__, Object.prototype);
 });

@@ -6,7 +6,7 @@
  */
 
 import type { RenderNode, SourceNode } from '../render-node.js';
-import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyExhibit, applyEventAttr, expandNode, exhibitOpenFromNode, prewarmToggleFonts, applyBulletProps, applyListItemProps } from '../handler-utils.js';
+import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyExhibit, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, prewarmToggleFonts, applyBulletProps, applyListItemProps } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { resolveTransclusionConfig } from '../transclusion.js';
 import { mdInlineWithSpansContinued } from '../markdown.js';
@@ -81,14 +81,22 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
     this.buildToggle();
     this.buildCells(sourceNode, attrs);
 
+    // Each doAction also fires on-action, matching the Enter/Space paths in
+    // buildKeyboardHandler; the final branch is the leaf case, where on-action
+    // is the only thing a re-click does.
     if (this._expandable && !this._alwaysOpen) {
       if (this._actionVal === 'exhibit') {
-        wireSelectThenAction(content, () => exhibitOpenFromNode(rn));
+        wireSelectThenAction(content, () => { exhibitOpenFromNode(rn); applyOnAction(rn); });
       } else {
-        wireSelectThenAction(content, (expand) => { if (rn.toggleable) this.doToggle(expand); });
+        wireSelectThenAction(content, (expand) => {
+          if (rn.toggleable) this.doToggle(expand);
+          applyOnAction(rn);
+        });
       }
     } else if (this._actionVal === 'exhibit') {
-      wireSelectThenAction(content, () => exhibitOpenFromNode(rn));
+      wireSelectThenAction(content, () => { exhibitOpenFromNode(rn); applyOnAction(rn); });
+    } else {
+      wireSelectThenAction(content, () => { applyOnAction(rn); });
     }
 
     this.buildKeyboardHandler();
@@ -178,7 +186,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
           if (expandable && !alwaysOpen && rn.toggleable) {
             this.doToggle();
           }
-          for (const v of rn.sourceNode.attrs.getAll('on-action')) applyEventAttr(v, rn);
+          applyOnAction(rn);
           e.preventDefault();
           return;
         case 'ArrowRight':
