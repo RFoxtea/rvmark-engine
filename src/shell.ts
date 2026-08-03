@@ -61,6 +61,31 @@ export function setFooter(nodeMeta: Record<string, unknown> | null): void {
   footerTextEl.innerHTML = chips.join(' · ');
 }
 
+// Inserts search's own root element as a footer chip, right before the view
+// menu (or at the end, if there is none) — called once by search.ts's own
+// init, which always runs after the page's first setFooter call above, so by
+// the time this runs footer already has its final [footerText] [· ]?
+// [viewMenu]? shape (that lone separator, if present, sits directly before
+// viewMenuEl). This slots search-root into that same gap rather than
+// reasoning about the first separator at all: the existing " · " (if any)
+// already correctly covers "is there footer text to separate from what comes
+// next", so it's left exactly as is and simply ends up before search-root
+// instead of before the view menu. All this adds is the *second* gap, between
+// search-root and the view menu, which needs its own separator whenever a
+// view menu exists — unlike the first gap, this one doesn't depend on
+// per-node meta at all, since search-root itself is the "something before it"
+// half of that gap, and search-root's presence never varies per node.
+//
+// search.ts builds and owns everything inside the element it hands us; this
+// only decides *where* it lands, keeping shell.ts as the one place that
+// mutates footer's own children, per the file header.
+export function mountSearchRoot(el: HTMLElement): void {
+  const footer = document.querySelector('footer');
+  if (!footer) return;
+  footer.insertBefore(el, viewMenuEl);
+  if (viewMenuEl) footer.insertBefore(document.createTextNode(' · '), viewMenuEl);
+}
+
 // ── View menu ─────────────────────────────────────────────────────────────────
 // A footer drop-up offering the two non-interactive views of whatever node is
 // currently selected: the .rvmark source it came from, and the no-JS static

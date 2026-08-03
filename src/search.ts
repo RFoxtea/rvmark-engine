@@ -44,6 +44,7 @@
 import type { SourceNode } from './parser.js';
 import { isSearchable, RenderNode } from './render-node.js';
 import { scrollRowIntoMiddle } from './scroll.js';
+import { mountSearchRoot } from './shell.js';
 import { resolveTagDef } from './tags.js';
 
 interface SearchMatch {
@@ -440,9 +441,24 @@ function stepActive(dir: 1 | -1): void {
 
 // ── Widget DOM ────────────────────────────────────────────────────────────────
 
+// A footer chip like any other: the loupe icon (.search-toggle, styled the
+// same understated way as the view-menu's ≡) stays put permanently, closed or
+// open — opening only reveals the input beside it, never replacing the icon,
+// so there's always a stable, permanent affordance to click back into.
+// Separated by an actual space character, not CSS spacing (gap/margin) — the
+// same mechanism every other gap in this footer uses (chips are joined by
+// literal ' · ' text nodes; see mountSearchRoot in shell.ts).
 function buildWidget(): HTMLElement {
   const widget = document.createElement('div');
   widget.className = 'search-widget';
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'search-toggle';
+  toggle.setAttribute('aria-label', 'Search this page');
+  toggle.addEventListener('click', () => activate());
+  widget.appendChild(toggle);
+  widget.appendChild(document.createTextNode(' '));
 
   const input = document.createElement('input');
   input.type = 'text';
@@ -525,8 +541,9 @@ function activate(): void {
   // _preActivationFocus is captured by the input's own focusin listener
   // (fires below, from .focus()) — not set here, so it stays correct
   // whenever the input regains focus later too, not just on first Ctrl+F.
-  // Must show the widget before focusing — a display:none input silently
-  // refuses focus (no error, focus just stays wherever it was).
+  // Must add the class before focusing — CSS gates the input's own display on
+  // .search-widget--active (see styles.css), and a display:none input
+  // silently refuses focus (no error, focus just stays wherever it was).
   _widget.classList.add('search-widget--active');
   _input?.focus();
   _input?.select();
@@ -544,19 +561,56 @@ function isWidgetFocused(): boolean {
 // on it made search vanish entirely on mixed pages like a site index, where
 // the searchable material arrives by transclusion and so never appears in the
 // page file's own roots.
+//
+// Lives in the footer as an ordinary chip, not the header: the search input
+// can be taller than a themed header's own h1 (a compact theme can run its h1
+// smaller than the input's line height), and whichever flex child is tallest
+// sets that row's height — so opening/closing search used to grow and shrink
+// the whole header, shifting every bit of page content below it by a couple
+// tenths of a pixel each time. footer sits after #tree-scroll (the flexible
+// element that absorbs any size change), so the same growth there only
+// nudges the tree's own scrollable height instead of shifting anything.
+//
+// #search-root doesn't exist in template.html — it's created here and handed
+// to shell.ts's mountSearchRoot, which places it as a footer chip (shell.ts
+// owns all mutation of footer's children). No IntersectionObserver/floating
+// mode: the footer scrolling out of view while reading a long tree is
+// accepted (Ctrl+F still activates search from anywhere; there just isn't a
+// visible affordance for it while scrolled away from the footer).
 export function initSearch(): void {
-  const anchor = document.getElementById('search-root');
-  if (!anchor) return;
+  const root = document.createElement('div');
+  root.id = 'search-root';
 
   _widget = buildWidget();
-  anchor.appendChild(_widget);
+  root.appendChild(_widget);
+  mountSearchRoot(root);
 
-  const header = anchor.closest('header');
-  if (header && 'IntersectionObserver' in window) {
-    new IntersectionObserver(
-      ([entry]) => anchor.classList.toggle('search-root--floating', !entry.isIntersecting),
-      { threshold: 0 },
-    ).observe(header);
+  // field-sizing: content (styles.css) sizes the input to whatever's actually
+  // showing — the placeholder while empty, the typed value once there is one.
+  // Typing a single character then makes it visibly narrower than the
+  // placeholder it just replaced, since field-sizing only ever measures
+  // *current* content, not "whichever of these is wider". min-width pins the
+  // floor to the placeholder's own rendered width so it can only grow from
+  // there, never shrink below it — measured directly (not a hand-picked ch
+  // count) so it can't drift if the placeholder copy ever changes.
+  //
+  // Done here, after mounting, rather than inside buildWidget: getBoundingClientRect
+  // is always a zero rect on a detached element (buildWidget's return value
+  // isn't in the document yet), so this needs the real DOM insertion above to
+  // have already happened. It also starts display: none (gated on
+  // .search-widget--active) — a display:none element reports zero size too,
+  // placeholder or not — so visibility: hidden overrides that just for this
+  // synchronous measurement, keeping layout without ever painting the
+  // placeholder-as-value state the reader would otherwise glimpse.
+  if (_input) {
+    const input = _input;
+    input.style.display = 'inline-block';
+    input.style.visibility = 'hidden';
+    input.value = input.placeholder;
+    input.style.minWidth = `${input.getBoundingClientRect().width}px`;
+    input.value = '';
+    input.style.removeProperty('display');
+    input.style.removeProperty('visibility');
   }
 
   window.addEventListener('keydown', (e: KeyboardEvent) => {

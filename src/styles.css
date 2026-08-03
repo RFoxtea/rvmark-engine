@@ -487,50 +487,90 @@ footer .footer-section { white-space: nowrap; }
 }
 
 /* ── Search ── */
-/* Empty when nothing on the page is {searchable} (search.ts stays a no-op),
-   so it takes no space and needs no visibility rule of its own then. */
-#search-root:empty { display: none; }
+/* A footer chip, inline alongside the footer text and view menu (see
+   #search-root in shell.ts's mountSearchRoot) — not a header control. The
+   search input can be taller than a themed header's own h1, and whichever
+   flex child is tallest sets a flex row's height, so living in header meant
+   opening/closing search grew and shrank the whole header by that amount,
+   shifting every bit of page content below it. footer sits after the
+   flexible #tree-scroll, which absorbs any size change instead. */
+#search-root { display: inline; }
 
-.search-widget {
-  display: none;
-  align-items: center;
-  gap: 0.4rem;
+/* Plain inline, not flex: the toggle and input are both already inline-level
+   with the footer's own inherited font metrics, so normal inline flow lays
+   them out side by side on its own. Flex would also collapse the literal
+   space character between them (see buildWidget in search.ts) — a flex
+   container drops whitespace-only text-node children instead of rendering
+   them, which is exactly the "every gap here is a real text-node space, not
+   a CSS length" mechanism the rest of this footer relies on. */
+.search-widget { display: inline; }
+
+/* The loupe stays put always — closed or open. Opening (.search-widget--active)
+   only reveals the input beside it; it never replaces the icon, so there's
+   always a stable, permanent footer affordance to click back into.
+   Deliberately not given its own font-size/font-family/line-height: a
+   <button> doesn't inherit ambient text styles by default (a UA-stylesheet
+   quirk, not something particular to this page), which font: inherit here
+   corrects — the glyph then renders at the same size/face/line-height as the
+   footer text around it, the only way for it to actually land on the same
+   line without a guessed offset. */
+.search-toggle {
+  display: inline-block;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  color: var(--muted);
 }
-.search-widget--active { display: flex; }
+.search-toggle::before { content: '⌕'; }
+.search-toggle:hover, .search-toggle:focus-visible { color: var(--accent); }
+.search-toggle:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 
-/* #search-root sits in <header>, which can scroll out of view (#tree-scroll
-   is the page's own scroller) — search.ts toggles this class via an
-   IntersectionObserver on <header> so the widget re-docks as a floating
-   control fixed to the viewport whenever its header isn't visible. */
-#search-root.search-root--floating {
-  position: fixed;
-  top: 0.75rem;
-  right: 0.75rem;
-  z-index: 30;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  padding: 0.3rem 0.5rem;
-  border-radius: 3px;
-}
+/* .search-widget--active already means exactly "focused or has a query" —
+   the same class updateVisibility() (search.ts) computes that condition from
+   and toggles to reveal the input — so this reuses it rather than tracking
+   a separate active state. */
+.search-widget--active .search-toggle { color: var(--fg); }
 
+/* .search-status is never display:none (see its own rule below) — it's
+   already invisible via the clip-rect technique whether or not search is
+   open, which is what keeps it announceable to assistive tech throughout. */
+.search-input { display: none; }
+.search-widget--active .search-input { display: inline-block; }
+
+/* No box at all — reads as plain footer text being typed, not a form field.
+   field-sizing: content grows/shrinks the input with what's typed (falling
+   back to the UA default intrinsic width in browsers without it, still
+   capped by max-width so a long query can't blow out the footer). No focus
+   ring either: unlike a page full of other focusable controls, this is the
+   only thing that can be focused right after clicking the loupe or pressing
+   Ctrl+F, so there's nothing for a ring to disambiguate — over plain text
+   with no border/background to contain it, it reads as a stray box instead. */
 .search-input {
   font: inherit;
-  font-size: 0.85rem;
-  background: var(--surface);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 0.2rem 0.4rem;
-  width: 14rem;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  outline: none;
+  field-sizing: content;
   max-width: 40vw;
 }
-.search-input:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+
+/* Active (focused, or has a query — same .search-widget--active condition
+   the toggle icon reacts to) reads in the page's normal text color rather
+   than the footer's own muted one, same as any other text being typed. */
+.search-widget--active .search-input { color: var(--fg); }
 
 /* Zero matches. Dimming the reader's own query says "nothing found" without a
-   label to read — the same channel the answer would have appeared in. Only the
-   text dims: the field keeps its normal border and background so it still
-   reads as an active, focused input rather than a disabled one. */
-.search-input--no-matches { color: var(--muted); }
+   label to read — the same channel the answer would have appeared in.
+   Chained with .search-widget--active (matching its specificity) so this
+   wins over the active-state color above regardless of source order —
+   otherwise a query with no matches would still show in the active fg color,
+   silently losing the only cue that nothing was found. */
+.search-widget--active .search-input--no-matches { color: var(--muted); }
 
 /* The dimmed input is a visual-only cue, so the same fact is announced here.
    Visually hidden rather than display:none, which would not be announced. */
