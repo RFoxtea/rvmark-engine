@@ -875,12 +875,6 @@ test.describe('inline markdown in labels', () => {
     await expect(link).toHaveAttribute('rel', /noopener/);
   });
 
-  // NOTE: markdown.ts supports an external-link icon (setExtIconSvg →
-  // extLinkSuffix, styled by .ext-icon in styles.css), but nothing calls
-  // setExtIconSvg, so the suffix is always empty and no .ext-icon is ever
-  // rendered. The test that used to live here asserted the icon only when
-  // present, so it passed vacuously. Wire up setExtIconSvg and this is worth
-  // a real assertion.
 });
 
 // ── Static (no-JS) fallback ───────────────────────────────────────────────────

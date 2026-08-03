@@ -13,7 +13,6 @@
  *   staticMdToHtml(text)  — build-time block markdown → HTML string (no DOM, no KaTeX)
  *   mdInline(text)        — runtime inline markdown → HTML string
  *   staticMdInline(text)  — build-time inline markdown → HTML string
- *   setExtIconSvg(svg)    — called by renderer.ts to inject the external link icon
  */
 
 import { parseStateEntries, splitSegments } from './parser.js';
@@ -172,14 +171,12 @@ let _currentUrlResolver: ((url: string) => string | null) | null = null;
 interface MarkedOpts {
   renderMathBlock: (src: string) => string;
   renderMathInline: (src: string, display: boolean) => string;
-  extLinkSuffix?: string;
 }
 
 function makeMarked(opts: MarkedOpts) {
   const {
     renderMathBlock,
     renderMathInline,
-    extLinkSuffix = '',
   } = opts;
 
   const instance = new marked.Marked();
@@ -219,7 +216,7 @@ function makeMarked(opts: MarkedOpts) {
         }
         const proto = (href.match(/^([a-zA-Z][a-zA-Z0-9+\-.]*):/) ?? [])[1]?.toLowerCase();
         if (proto && !['http', 'https', 'mailto'].includes(proto)) return text;
-        return `<a href="${mdEscHtml(href)}" target="_blank" rel="noopener noreferrer">${text}${extLinkSuffix}</a>`;
+        return `<a href="${mdEscHtml(href)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
       },
     },
   });
@@ -360,11 +357,6 @@ const rvmarkSpanExtension = {
   },
 };
 
-// ── External link icon ─────────────────────────────────────────────────────────
-
-let _extIconSvg = '';
-export function setExtIconSvg(svg: string): void { _extIconSvg = svg; _runtimeMarked = null; }
-
 // ── Math fallbacks (no KaTeX) ──────────────────────────────────────────────────
 
 function mathBlockFallback(src: string): string         { return `<pre class="md-math-block">${mdEscHtml(src)}</pre>`; }
@@ -380,7 +372,6 @@ function getStaticMarked() {
     _staticMarked = makeMarked({
       renderMathBlock:  mathBlockFallback,
       renderMathInline: mathInlineFallback,
-      extLinkSuffix: '',
     });
   }
   return _staticMarked;
@@ -400,7 +391,6 @@ function getRuntimeMarked() {
           return katex.renderToString(src, { displayMode: display, throwOnError: false });
         return mathInlineFallback(src, display);
       },
-      extLinkSuffix: _extIconSvg,
     });
   }
   return _runtimeMarked;
