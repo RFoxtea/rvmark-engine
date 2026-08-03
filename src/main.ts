@@ -18,6 +18,7 @@ import { setMeta, setFooter, setViewTarget, clearTree, showError } from './shell
 import { initSearch } from './search.js';
 import { waitForPageContext, initPrerootListeners } from './iframe-guest.js';
 import { MOUNT_SETTLE_MS } from './constants.js';
+import { scrollBehavior } from './scroll.js';
 // Side-effect imports: register all built-in types via factoryRegister
 import './types/text.js';
 import './markdown.js';
@@ -132,7 +133,7 @@ async function init(page: RvmarkPageContext): Promise<void> {
   window.addEventListener('hashchange', async () => {
     const focusParam = new URLSearchParams(location.search).get('focus');
     await renderRoot(sourceFile, location.hash ? location.hash.slice(1) : null, focusParam);
-    document.getElementById('tree-scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
+    document.getElementById('tree-scroll')?.scrollTo({ top: 0, behavior: scrollBehavior() });
   });
 
   const treeRoot = document.getElementById('tree-root') as HTMLElement;

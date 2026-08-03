@@ -204,6 +204,27 @@ footer {
    every expand/collapse transition. */
 .node-content[aria-expanded="true"]:not([style*="--node-bullet"]):not(.li) .toggle:not(.leaf)::before,
 .node-content[aria-expanded="true"].node-content--bullet-spins .toggle:not(.leaf)::before { transform: rotate(90deg); }
+/* Readers who ask for less motion get the spin as an instant state change: the
+   bullet still turns ▶ → ▼ so the open/closed distinction survives, it just does
+   not sweep. Both markers are covered — the ::before glyph and the ::after
+   subscript badge — since they rotate together and leaving one animated would
+   only half-honour the request.
+
+   Scoped to the transform transitions on purpose. The colour and opacity
+   transitions elsewhere in this file (link hover, permalink and exhibit-close
+   reveals) move nothing on screen, and stripping them would make the UI feel
+   abrupt without helping anyone this query is meant to protect.
+
+   The engine's other motion is smooth scrolling, which CSS cannot reach from
+   here — see scrollBehavior() in scroll.ts. */
+@media (prefers-reduced-motion: reduce) {
+  .toggle::before,
+  .node-content[aria-expanded][style*="--node-bullet"]:not(.node-content--bullet-spins) .toggle:not(.leaf)::after,
+  .node-content.li[aria-expanded] .toggle:not(.leaf)::after {
+    transition: none;
+  }
+}
+
 .toggle.leaf  { cursor: default; color: var(--muted); }
 .toggle.leaf:hover { color: var(--muted); }
 

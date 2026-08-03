@@ -11,6 +11,22 @@
 // the band between 1/5 and 4/5 of the scroller height.
 const SCROLL_DEAD_ZONE_FRACTION = 5; // denominator — row must be within [1/5, 4/5]
 
+/**
+ * Scroll behavior honouring prefers-reduced-motion.
+ *
+ * A smooth scroll moves the whole viewport, which is the kind of large-field
+ * motion prefers-reduced-motion exists to suppress — it can provoke nausea or
+ * dizziness in readers with vestibular disorders. Reduced-motion readers get
+ * 'auto' (an instant jump): the scroll still happens and the row still lands
+ * where it should, only the travel between is skipped.
+ *
+ * Queried per call rather than cached, so a reader who changes the setting
+ * mid-session is respected without a reload.
+ */
+export function scrollBehavior(): ScrollBehavior {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 'auto' : 'smooth';
+}
+
 export function scrollRowIntoMiddle(
   targetContent: HTMLElement,
   { vertical = true, horizontal = true }: { vertical?: boolean; horizontal?: boolean } = {}
@@ -36,7 +52,7 @@ export function scrollRowIntoMiddle(
     if (!(targetRelTop >= zoneH && targetRelTop + targetRect.height <= zoneH * (SCROLL_DEAD_ZONE_FRACTION - 1))) {
       scroller.scrollTo({
         top: Math.max(0, Math.min(ideal, scroller.scrollHeight - scrollerH)),
-        behavior: 'smooth',
+        behavior: scrollBehavior(),
       });
     }
   }
@@ -76,6 +92,6 @@ export function scrollRowIntoMiddle(
     if      (toFitLeft < curLeft)   { newLeft = toFitLeft; }
     else if (toFitRight > curRight) { newLeft = Math.min(toFitRight - scrollerW, toFitLeft); }
     newLeft = Math.max(0, Math.min(newLeft, scroller.scrollWidth - scrollerW));
-    if (newLeft !== curLeft) scroller.scrollTo({ left: newLeft, behavior: 'smooth' });
+    if (newLeft !== curLeft) scroller.scrollTo({ left: newLeft, behavior: scrollBehavior() });
   }
 }
