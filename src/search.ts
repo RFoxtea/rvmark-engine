@@ -16,6 +16,13 @@
  * children, which is what produces the breadcrumb dots below. It never mounts
  * or expands anything on its own.
  *
+ * Scope is a property of the source tree, not of the DOM: {searchable} is
+ * inherited to descendants at parse time (markSearchable in parser.ts, next to
+ * meta), and isSearchable is a plain lookup on the SourceNode. Deriving scope
+ * from rendered ancestors instead is wrong in the common case — the node
+ * carrying the attribute is usually a root, and a root is not itself a row on
+ * the page, so nothing would ever be in scope and no dot could ever appear.
+ *
  * Mounted matches get a native-find-style highlight: every match is wrapped
  * in a <mark class="search-mark">, one consistent color — there is no
  * separate "current match" tint tied to selection, since stepping to a
@@ -156,24 +163,16 @@ function searchTree(query: string): SearchMatch[] {
     }
   };
 
-  // {searchable} covers a whole subtree, so a mounted node also counts as in
-  // scope when a mounted *ancestor* carries it. Ancestry is read off the DOM
-  // (.node-children nesting) rather than SourceNode, which has no parent
-  // pointer and, across a transclusion boundary, no link to the host at all.
-  const inScope = (node: SourceNode, li: HTMLElement): boolean => {
-    if (isSearchable(node)) return true;
-    for (let el = li.parentElement?.closest('li.node'); el; el = el.parentElement?.closest('li.node')) {
-      const ancestor = (el as any)._renderNode?.sourceNode as SourceNode | undefined;
-      if (ancestor && isSearchable(ancestor)) return true;
-    }
-    return false;
-  };
-
-  for (const [node, li] of mounted) {
+  for (const [node] of mounted) {
     record(node);
     // A mounted node's own children may themselves be mounted (visited by this
     // same loop) or not (only reachable here, and only when licensed).
-    if (inScope(node, li)) {
+    // isSearchable already accounts for ancestry — {searchable} is inherited
+    // down the source tree at parse time — so no ancestor walk is needed, and
+    // in particular scope does not depend on the node that carries the
+    // attribute being rendered. It usually isn't: it is typically a root, and
+    // roots are not themselves rows on the page.
+    if (isSearchable(node)) {
       for (const child of node.children) walkDeep(child, new Set([node]));
       // The mounted node may itself be an unexpanded transclusion host.
       const target = localTranscludeTarget(node);

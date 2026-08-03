@@ -75,6 +75,10 @@ export function deserializeNode(node: PortableNode, sourceFile: SourceFile): Sou
     bodyLines:   node.bodyLines.slice(),
     children:    node.children.map(c => deserializeNode(c, sourceFile)),
     meta:        {},
+    // Like meta above: recomputed by the host when the rebuilt subtree renders
+    // under a scope it can see. Nothing arriving over the wire is in scope on
+    // its own say-so.
+    searchable:  false,
     sourceFile,
   };
 }

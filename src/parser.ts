@@ -239,6 +239,12 @@ export interface RawNode {
 export interface SourceNode extends RawNode {
   meta:       Record<string, unknown>;
   children:   SourceNode[];
+  // {searchable} resolved down the source tree at parse time, exactly like meta
+  // above: set on the node that carries the attribute and on every descendant.
+  // A parse-time property, not a rendered one — search must be able to ask
+  // "is this in scope?" about nodes that are authored but not mounted, which is
+  // the whole point of the feature (see search.ts).
+  searchable: boolean;
   sourceFile: import('./source-file.js').SourceFile;  // stamped by SourceFile constructor
 }
 
@@ -550,10 +556,16 @@ export function resolveFile(rawFile: RawFile, inheritedHead: Head): {
     return o;
   }
 
-  function resolveNode(raw: RawNode, parentMeta: Record<string, unknown>): SourceNode {
+  function resolveNode(raw: RawNode, parentMeta: Record<string, unknown>, parentSearchable: boolean): SourceNode {
     const tagMeta: Record<string, unknown> = {};
+    // {searchable} inherits down the tree exactly like meta does, and is settled
+    // here rather than asked of the DOM later: its whole purpose is to license
+    // matching against content that is authored but not mounted, and the node
+    // carrying it is usually a root — which is not itself a row on the page.
+    let searchable = parentSearchable || raw.attrs.has('searchable');
     for (const tag of raw.tags) {
       const def = resolvedTagDefs[tag.name];
+      if (def?.has('node.searchable') || tag.props.has('node.searchable')) searchable = true;
       if (!def) continue;
       for (const [k, v] of def.allEntries()) {
         if (k.startsWith('meta.')) tagMeta[k.slice(5)] = v;
@@ -567,13 +579,13 @@ export function resolveFile(rawFile: RawFile, inheritedHead: Head): {
       if (k.startsWith('meta.')) attrMeta[k.slice(5)] = v;
     }
     const meta: Record<string, unknown> = { ...fileMetaObj(), ...parentMeta, ...tagMeta, ...attrMeta };
-    const node = { ...raw, meta, children: [] } as unknown as SourceNode;
+    const node = { ...raw, meta, searchable, children: [] } as unknown as SourceNode;
     nodeMap[node.slug] = node;
-    node.children = raw.children.map(c => resolveNode(c, meta));
+    node.children = raw.children.map(c => resolveNode(c, meta, searchable));
     return node;
   }
 
-  const roots = rawFile.roots.map(r => resolveNode(r, {}));
+  const roots = rawFile.roots.map(r => resolveNode(r, {}, fileMeta.has('searchable')));
   return { head, roots, nodeMap };
 }
 

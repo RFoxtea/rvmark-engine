@@ -190,14 +190,13 @@ export function isHiddenByModifier(attrs: NodeAttrs): boolean {
   return attrs.has('draft');
 }
 
-// Returns true if the node is in scope for search — either the node itself
-// carries {searchable} (which extends to its whole subtree, since callers
-// walk children recursively), or its containing file does (via {searchable}
-// in a file's own head meta, or inherited from a directory's index.rvmark
-// through the existing resolveInheritedHead chain).
+// Returns true if the node is in scope for search. {searchable} covers a whole
+// subtree, and that inheritance is resolved once at parse time (markSearchable
+// in parser.ts, alongside meta) — so this is a plain lookup, and it answers
+// correctly for nodes that are authored but not mounted, which is exactly the
+// population {searchable} exists to reach.
 export function isSearchable(node: SourceNode): boolean {
-  const attrs = mergeNodeAttrs(tagsNodeAttrs(node.tags, node.sourceFile?.tagDefs), node.attrs);
-  return attrs.has('searchable') || (node.sourceFile?.meta.has('searchable') ?? false);
+  return node.searchable === true;
 }
 
 // ── buildRenderNode ───────────────────────────────────────────────────────────

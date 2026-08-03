@@ -300,6 +300,29 @@ test.describe('matching and stepping to results', () => {
     await expect(li.locator('.search-indicator')).toHaveCount(1);
   });
 
+  // Scope must come from the source tree, not from rendered ancestors. A page
+  // renders exactly one node — the requested slug, or roots[0] (see renderRoot
+  // in main.ts) — so the node carrying {searchable} is very often not on the
+  // page at all: here the permalink targets a child, leaving the {searchable}
+  // root unrendered. Reading scope off DOM ancestors found nothing in scope,
+  // the deep walk never ran, and no breadcrumb dot could ever appear.
+  test('{searchable} still applies when the node carrying it is not rendered', async ({ page }) => {
+    await page.goto('/#search-child-collapsed');
+    await waitForTree(page);
+
+    // The {searchable} root is genuinely absent — only its child is rendered.
+    await expect(page.locator('li.node', {
+      has: page.locator('.node-label', { hasText: 'SEARCHABLE_TOP_TEXT' }),
+    })).toHaveCount(0);
+
+    await page.keyboard.press('Control+f');
+    await page.locator('.search-input').fill('SEARCHABLE_NEEDLE_TEXT');
+
+    const row = await nodeContent(page, 'search-child-collapsed');
+    await expect(row).toHaveAttribute('aria-expanded', 'false');
+    await expect(row.locator('.search-indicator')).toHaveCount(1);
+  });
+
   // A `{=> #id}` host has no children until it resolves at expand time, so the
   // deep walk used to stop dead at the host — content that is authored,
   // addressable and (once expanded) visible was unreachable. Under

@@ -142,6 +142,7 @@ function syntheticChild(host: SourceNode, attrs: Multimap, label: string): Sourc
     slug: '', permalinkId: '', numbering: '',
     attrs, tags: [], label, bodyLines: [],
     children: [], meta: {}, sourceFile: host.sourceFile,
+    searchable: host.searchable,
   };
 }
 

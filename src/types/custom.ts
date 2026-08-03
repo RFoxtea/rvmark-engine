@@ -80,6 +80,7 @@ function errorNode(original: SourceNode, message: string): SourceNode {
     bodyLines:   [],
     children:    [],
     meta:        {},
+    searchable:  original.searchable,
     sourceFile:  original.sourceFile,
   };
 }
