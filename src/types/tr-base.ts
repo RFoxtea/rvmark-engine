@@ -6,7 +6,7 @@
  */
 
 import type { RenderNode, SourceNode } from '../render-node.js';
-import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyExhibit, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, prewarmToggleFonts, applyBulletProps, applyListItemProps } from '../handler-utils.js';
+import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyExhibit, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { resolveTransclusionConfig } from '../transclusion.js';
 import { mdInlineWithSpansContinued } from '../markdown.js';
@@ -56,7 +56,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
     content.classList.add(cfg.contentClass);
 
     if (cfg.withBullet) {
-      applyBulletProps(content, attrs);
+      applyBulletProps(content, attrs, sourceNode);
       applyListItemProps(content, attrs);
     }
 
@@ -128,6 +128,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
     const tog = document.createElement('span');
     tog.className = `${cfg.toggleClass} toggle`;
     tog.classList.add('leaf');
+    tog.appendChild(makeToggleBadge());
     if (_expandable && !_alwaysOpen) {
       tog.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -137,10 +138,6 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
     }
     this._li.insertBefore(tog, rn.children);
     this._tog = tog;
-  }
-
-  onConnected(): void {
-    prewarmToggleFonts(this._tog);
   }
 
   private buildCells(sourceNode: SourceNode, attrs: ReturnType<typeof resolveAttrs>) {

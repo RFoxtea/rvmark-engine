@@ -160,8 +160,9 @@ function makeLoadingNode(host: SourceNode): SourceNode {
 export function makeErrorNode(host: SourceNode, ref: string, reason: 'error' | 'timeout'): SourceNode {
   const attrs = new Multimap();
   attrs.set('type', 'text');
-  attrs.set('bullet', '⨂');            // distinct error bullet
-  attrs.append('class', 'node-load-error');  // muted row (styles.css)
+  // Distinct error marker + muted row; both drawn from CSS on this class, so the
+  // marker needs no font and no fetch (see .node-load-error in styles.css).
+  attrs.append('class', 'node-load-error');
   const label = reason === 'timeout' ? `${ref} timed out` : `${ref} not found`;
   return syntheticChild(host, attrs, label);
 }
@@ -314,16 +315,68 @@ export function applyTagClasses(content: HTMLElement, sourceNode: SourceNode, at
   }
 }
 
-// Apply the custom marker-glyph attrs to a node's content element. Shared by
-// every type that shows a gutter marker (text rows, table rows, hr dividers) so
-// the supported set lives in one place.
-//   bullet / bullet-font / bullet-spins — custom marker glyph + spin
-export function applyBulletProps(content: HTMLElement, attrs: ResolvedAttrs): void {
+// The subscript ▶ badge that marks an expandable node whose bullet is a custom
+// icon (the icon replaces the toggle triangle, so the affordance moves to a
+// corner badge). CSS decides whether it shows.
+//
+// It is a real element rather than .toggle::after because the badge is a MASKED
+// shape that needs a 1px separation ring, and `filter` is applied BEFORE `mask`
+// on the same element — a drop-shadow there is computed on the unmasked box and
+// then clipped away by the mask, drawing nothing. Splitting it across two
+// elements fixes the order: the inner ::before carries the mask and the
+// rotation, this span carries the filter, so the shadow sees the finished,
+// rotated, masked triangle.
+//
+// A painted halo is not an option: it would have to match the row's backdrop,
+// and an author can give a node any background — including an image. An alpha
+// outset needs no such assumption.
+//
+// No geometry is duplicated: this span owns the position/size, and its ::before
+// is inset:0, so both are the same box.
+export function makeToggleBadge(): HTMLElement {
+  const badge = document.createElement('span');
+  badge.className = 'toggle-badge';
+  badge.setAttribute('aria-hidden', 'true');
+  return badge;
+}
+
+// Apply the custom marker attrs to a node's content element. Shared by every
+// type that shows a gutter marker (text rows, table rows, hr dividers) so the
+// supported set lives in one place.
+//   bullet / bullet-spins — custom marker image + spin
+//
+// `bullet` is an image ref ('./icons/tip.svg'), never a glyph. Glyph bullets
+// were removed deliberately: a character marker only renders if the reader has
+// a font covering it, so supporting them pushed every site into shipping an
+// emoji/symbol font stack (~2MB) as the price of decorated bullets, and made
+// markers unreliable across federation — a transcluded foreign node's glyph is
+// at the mercy of the HOST's fonts. An image ref has neither problem: it is
+// addressed, so it resolves against the origin that wrote it, and it costs one
+// small lazy fetch instead of a font.
+export function applyBulletProps(content: HTMLElement, attrs: ResolvedAttrs, sourceNode?: SourceNode): void {
   const bullet = attrs.get('bullet');
-  if (bullet !== undefined)
-    content.style.setProperty('--node-bullet', `'${bullet.replace(/'/g, "\\'")}'`);
-  const bf = attrs.get('bullet-font');
-  if (bf !== undefined) content.style.setProperty('--node-bullet-font', bf);
+  if (bullet !== undefined && sourceNode) {
+    // Relative refs resolve against the file the node came FROM (resolveMediaUrl
+    // uses pageAddress) — so a transcluded foreign node gets its OWN origin's
+    // icons, the same rule markdown media and transclusion refs already follow.
+    const url = sourceNode.sourceFile.resolveMediaUrl(bullet);
+    if (url) {
+      // CSS url() token: escape backslashes and quotes only — the value is a
+      // resolved address, never author markup.
+      content.style.setProperty('--node-bullet-image', `url("${url.replace(/[\\"]/g, '\\$&')}")`);
+      content.classList.add('node-content--bullet-image');
+      // A masked box paints nothing if the icon 404s or the origin is offline —
+      // a silently empty gutter. Probe the URL and drop back to the default
+      // marker if it never arrives. The probe hits the same URL the mask does,
+      // so it is served from cache rather than fetched twice.
+      const probe = new Image();
+      probe.onerror = () => {
+        content.classList.remove('node-content--bullet-image');
+        content.style.removeProperty('--node-bullet-image');
+      };
+      probe.src = url;
+    }
+  }
   if (attrs.has('bullet-spins')) content.classList.add('node-content--bullet-spins');
 }
 
@@ -502,15 +555,3 @@ export function treeNavKeydown(e: KeyboardEvent, content: HTMLElement, li: HTMLE
   return false;
 }
 
-// ── Toggle font pre-warming ────────────────────────────────────────────────
-
-// Call after appending a .toggle element to the DOM. Reads the resolved
-// font-family from its ::before computed style and eagerly loads each font
-// so they are cached before any custom glyph first appears mid-session.
-export function prewarmToggleFonts(tog: HTMLElement): void {
-  const family = getComputedStyle(tog, '::before').fontFamily;
-  for (const part of family.split(',')) {
-    const name = part.trim().replace(/^['"]|['"]$/g, '');
-    if (name) document.fonts.load(`1em '${name}'`);
-  }
-}

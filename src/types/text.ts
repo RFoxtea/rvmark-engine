@@ -8,7 +8,7 @@
 import type { NodeTypeFactory, SourceNode, ResolvedAttrs } from '../render-node.js';
 import { factoryRegister, RenderNode } from '../render-node.js';
 
-import { resolveAttrs, buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyExhibit, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, prewarmToggleFonts, applyBulletProps, applyListItemProps } from '../handler-utils.js';
+import { resolveAttrs, buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyExhibit, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';
@@ -49,7 +49,7 @@ class TextTypeHandler extends BaseTypeHandler {
 
     this.alwaysOpen = openVal === 'always' || hasListbox;
 
-    this.buildCssProps(attrs);
+    this.buildCssProps(attrs, sourceNode);
 
     const { content } = this;
     applyExhibit(rn, attrs);
@@ -85,8 +85,8 @@ class TextTypeHandler extends BaseTypeHandler {
 
   // ── Private helpers ────────────────────────────────────────────────────────
 
-  private buildCssProps(attrs: ResolvedAttrs) {
-    applyBulletProps(this.content, attrs);
+  private buildCssProps(attrs: ResolvedAttrs, sourceNode: SourceNode) {
+    applyBulletProps(this.content, attrs, sourceNode);
     applyListItemProps(this.content, attrs);
   }
 
@@ -96,6 +96,7 @@ class TextTypeHandler extends BaseTypeHandler {
     this.tog = tog;
 
     tog.classList.add('leaf');
+    tog.appendChild(makeToggleBadge());
     this.content.appendChild(tog);
   }
 
@@ -149,10 +150,6 @@ class TextTypeHandler extends BaseTypeHandler {
       scrollOnSelect:  false,
       volatile,
     });
-  }
-
-  onConnected(): void {
-    prewarmToggleFonts(this.tog);
   }
 
   onDestroy(): void {
