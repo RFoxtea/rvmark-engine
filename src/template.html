@@ -49,12 +49,15 @@
       sync();
     })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap">
+  <!-- No webfonts. Every family used by the engine falls back to a system face
+       (serif / monospace), so a page costs zero third-party font requests and
+       has no FOUT. A site that wants a specific face can load it from its own
+       theme.css — the engine does not impose one. -->
   <link rel="stylesheet" href="{{BASE}}styles.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <!-- KaTeX is NOT loaded here. It is ~280KB and most pages have no math, so it
+       is fetched on demand the first time a math token is parsed — see
+       ensureKatex() in markdown.ts. Nodes containing math defer their mount
+       until it arrives, so nothing renders unstyled and then upgrades. -->
   <script src="{{BASE}}_vendor/purify.min.js"></script>
 </head>
 <body>

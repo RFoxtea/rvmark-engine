@@ -25,7 +25,7 @@ import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';
 import { wireSelectThenAction } from '../interaction.js';
-import { mdToHtmlWithSpans, staticMdToHtml } from '../markdown.js';
+import { mdToHtmlWithSpans, staticMdToHtml, ensureKatex, hasMath, katexLoaded } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
 
 // ── Overflow fade ──────────────────────────────────────────────────────────────
@@ -147,24 +147,32 @@ class MarkdownTypeHandler extends BaseTypeHandler {
     });
     outer.appendChild(scroller);
 
-    if (url) {
-      fetch(url)
-        .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
-        .then(text => {
-          const resolved = sectionSlug ? extractMdSection(text, sectionSlug) : text;
-          const { html, spanMap } = mdToHtmlWithSpans(resolved);
-          scroller.innerHTML = html;
-          initOverflowFade(outer, scroller);
-          this.wireListboxOptions(scroller, spanMap, attrs, sourceNode);
-          this.rn.ready();
-        })
-        .catch(err => { scroller.textContent = `[${err.message}]`; this.rn.ready(); });
-    } else {
-      const { html, spanMap } = mdToHtmlWithSpans(bodyText!);
+    // KaTeX is fetched on demand (see ensureKatex in markdown.ts). Math renders
+    // synchronously, so it must be loaded BEFORE the markdown is parsed — hence
+    // awaiting here rather than upgrading afterwards, which would flash the raw
+    // source. The node declares managesReady, so it just does not mount until
+    // this settles; MOUNT_SETTLE_MS hides a fast load entirely.
+    const renderInto = (src: string) => {
+      const { html, spanMap } = mdToHtmlWithSpans(src);
       scroller.innerHTML = html;
       initOverflowFade(outer, scroller);
       this.wireListboxOptions(scroller, spanMap, attrs, sourceNode);
       this.rn.ready();
+    };
+    const renderWhenMathReady = (src: string) => {
+      if (!hasMath(src) || katexLoaded()) { renderInto(src); return; }
+      void ensureKatex().then(() => renderInto(src));
+    };
+
+    if (url) {
+      fetch(url)
+        .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
+        .then(text => {
+          renderWhenMathReady(sectionSlug ? extractMdSection(text, sectionSlug) : text);
+        })
+        .catch(err => { scroller.textContent = `[${err.message}]`; this.rn.ready(); });
+    } else {
+      renderWhenMathReady(bodyText!);
     }
 
     content.appendChild(outer);

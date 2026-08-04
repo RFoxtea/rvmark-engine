@@ -342,12 +342,10 @@ function exhibitHead(basePath: string): string {
   return `
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap">
+  <!-- No webfonts here either — see the note in template.html. -->
   <link rel="stylesheet" href="${basePath}styles.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"><\/script>
+  <!-- No KaTeX here either — exhibits run the engine, so ensureKatex() fetches
+       it on demand if the exhibited content actually contains math. -->
   <script type="module" src="${basePath}_engine/iframe-guest.js"><\/script>`;
 }
 
@@ -471,7 +469,7 @@ ${exhibitHead(basePath)}
   }
   body {
     padding: 1rem;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--mono, monospace);
     font-size: 0.88rem;
     line-height: 1.6;
     color: var(--fg);

@@ -17,6 +17,7 @@
 
 import { parseStateEntries, splitSegments } from './parser.js';
 import type { StateEntry } from './parser.js';
+import { KATEX_DEADLINE_MS } from './constants.js';
 
 // marked is loaded as a classic <script> before this module at runtime, and
 // provided as a CJS import in the build. Access via globalThis so this file
@@ -362,6 +363,77 @@ const rvmarkSpanExtension = {
 function mathBlockFallback(src: string): string         { return `<pre class="md-math-block">${mdEscHtml(src)}</pre>`; }
 function mathInlineFallback(src: string, display: boolean): string {
   return display ? mathBlockFallback(src) : `<code>${mdEscHtml(src)}</code>`;
+}
+
+// ── Lazy KaTeX ─────────────────────────────────────────────────────────────────
+//
+// KaTeX is ~280KB of JS + CSS and most pages have no math, so it is not in the
+// page template — it is fetched the first time a math token is actually parsed.
+//
+// Rendering is synchronous (katex.renderToString returns HTML inline), so the
+// script must be present BEFORE the markdown that needs it renders. Callers
+// therefore await ensureKatex() first. Markdown nodes declare `managesReady`, so
+// the node simply does not mount until this resolves — and the MOUNT_SETTLE_MS
+// race means a fast CDN response never shows a placeholder at all. Nothing ever
+// paints in fallback form and then upgrades, so there is no flash.
+//
+// The fallbacks above remain the path for the build (no DOM, no network) and for
+// a failed load.
+
+const KATEX_VERSION = '0.16.11';
+const KATEX_BASE    = `https://cdn.jsdelivr.net/npm/katex@${KATEX_VERSION}/dist/katex.min`;
+
+let _katexPromise: Promise<void> | null = null;
+
+/** True once KaTeX is on the page — lets callers skip the await entirely. */
+export function katexLoaded(): boolean {
+  return typeof katex !== 'undefined';
+}
+
+/** Does this source contain anything the math tokenizers would pick up? */
+export function hasMath(src: string): boolean {
+  return src.includes('$');
+}
+
+/**
+ * Load KaTeX once, resolving when it is usable. Resolves immediately if already
+ * present. NEVER rejects and never hangs: on error or timeout it resolves anyway,
+ * and math then renders through the fallbacks above.
+ *
+ * The deadline is load-bearing. Callers defer mounting a node until this settles,
+ * so a request that neither loads nor errors — an offline reader, a blocked CDN
+ * that black-holes rather than refusing — would otherwise leave that content
+ * permanently invisible. Bounding the wait means the worst case is unstyled math,
+ * never missing content. Same reasoning as TRANSCLUDE_DEADLINE_MS.
+ */
+export function ensureKatex(): Promise<void> {
+  if (katexLoaded()) return Promise.resolve();
+  if (_katexPromise) return _katexPromise;
+  if (typeof document === 'undefined') return Promise.resolve(); // build-time
+
+  _katexPromise = new Promise<void>(resolve => {
+    let settled = false;
+    const done = (warn?: string) => {
+      if (settled) return;
+      settled = true;
+      if (warn) console.warn(`rvmark: ${warn}; math renders unstyled`);
+      resolve();
+    };
+
+    const css = document.createElement('link');
+    css.rel  = 'stylesheet';
+    css.href = `${KATEX_BASE}.css`;
+    document.head.appendChild(css);
+
+    const js = document.createElement('script');
+    js.src = `${KATEX_BASE}.js`;
+    js.onload  = () => done();
+    js.onerror = () => done('KaTeX failed to load');
+    document.head.appendChild(js);
+
+    setTimeout(() => done('KaTeX timed out'), KATEX_DEADLINE_MS);
+  });
+  return _katexPromise;
 }
 
 // ── Lazy singleton instances ───────────────────────────────────────────────────

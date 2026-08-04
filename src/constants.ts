@@ -17,3 +17,9 @@ export const MOUNT_SETTLE_MS = 250;
 // gives up on the stragglers and renders a per-ref error marker in their place.
 // Bounds the wait so one slow/hung ref can't wedge the whole expansion.
 export const TRANSCLUDE_DEADLINE_MS = 5000;
+
+// How long a node containing math waits for the on-demand KaTeX load before it
+// renders with the plain-text math fallbacks instead. Nodes with math defer their
+// mount until KaTeX settles (so nothing flashes raw source and then upgrades), so
+// this bound is what stops a hung CDN request from hiding that content for good.
+export const KATEX_DEADLINE_MS = 5000;

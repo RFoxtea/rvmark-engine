@@ -1152,7 +1152,7 @@ html.rvmark-exhibit-guest footer { display: none; }
   background: var(--surface);
   padding: 0 3px;
   border-radius: 2px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono, monospace);
   font-size: 0.85em;
 }
 

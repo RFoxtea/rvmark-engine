@@ -14,7 +14,7 @@ import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';
 import { buildTagChips } from '../tags.js';
 import { scrollRowIntoMiddle } from '../scroll.js';
-import { mdInlineWithSpans, staticMdInline } from '../markdown.js';
+import { mdInlineWithSpans, staticMdInline, ensureKatex, hasMath, katexLoaded } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
 import { resolveTransclusionConfig } from '../transclusion.js';
 import { wireSelectThenAction } from '../interaction.js';
@@ -29,6 +29,10 @@ class TextTypeHandler extends BaseTypeHandler {
   private lbl!:        HTMLSpanElement;
   private expandable!: boolean;
   private alwaysOpen!: boolean;
+  // Set only when the label contains math and KaTeX is not loaded yet; read by
+  // RenderNode.attach, which skips its own ready() call when this is true.
+  managesReady?: true;
+  private _reRenderLabel: (() => { html: string }) | null = null;
 
   constructor(rn: RenderNode) {
     super(rn, '.node-label a[href]');
@@ -41,10 +45,21 @@ class TextTypeHandler extends BaseTypeHandler {
     const neverOpen = openVal === 'never';
     const paramOpen = attrs.has('open') && (openVal === '' || openVal === 'true');
 
-    const { html: lblHtml, spanMap } = mdInlineWithSpans(
-      sourceNode.label || '',
+    // A label containing math needs KaTeX before it renders, or it paints the
+    // raw source and then upgrades — a visible flash. Defer readiness (so the
+    // node does not mount) and re-render the label once KaTeX lands. Only labels
+    // that actually contain math pay this; everything else is untouched, and
+    // MOUNT_SETTLE_MS hides a fast load entirely.
+    const rawLabel = sourceNode.label || '';
+    const needsKatex = hasMath(rawLabel) && !katexLoaded();
+    if (needsKatex) this.managesReady = true;
+
+    const renderLabel = () => mdInlineWithSpans(
+      rawLabel,
       (url) => sourceNode.sourceFile.resolveMediaUrl(url) ?? null,
     );
+    const { html: lblHtml, spanMap } = renderLabel();
+    this._reRenderLabel = needsKatex ? renderLabel : null;
     const hasListbox = isListbox(attrs, spanMap);
 
     this.alwaysOpen = openVal === 'always' || hasListbox;
@@ -79,6 +94,20 @@ class TextTypeHandler extends BaseTypeHandler {
     this.buildKeyboardHandler();
 
     this.deactivate();
+
+    // Label had math and KaTeX was missing: fetch it, re-render the label with
+    // real typesetting, then release the node. The first render above never
+    // reaches the screen — the node is unmounted until ready() below.
+    if (this._reRenderLabel) {
+      void ensureKatex().then(() => {
+        const { html } = this._reRenderLabel!();
+        this.lbl.innerHTML = html;
+        const chips = buildTagChips(sourceNode.tags, sourceNode.sourceFile?.tagDefs);
+        if (chips.childNodes.length > 0) this.lbl.prepend(chips);
+        this._reRenderLabel = null;
+        rn.ready();
+      });
+    }
 
     if (this.expandable && (paramOpen || this.alwaysOpen)) this.doExpand(false);
   }
