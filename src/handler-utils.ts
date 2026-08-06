@@ -334,6 +334,53 @@ export function makeToggleBadge(): HTMLElement {
   return badge;
 }
 
+// ── Bullet-column clickability ─────────────────────────────────────────────
+//
+// The bullet column takes clicks for two unrelated reasons: expanding a node,
+// and clearing a listbox's option selection. A node may afford either, both, or
+// neither, and every type resolves that differently — a text row's bullet is one
+// element doing double duty, a table row's is the same shape in a grid cell, and
+// a block node has no bullet at all (markdown.ts appends a strip instead).
+//
+// What must NOT differ is when the column claims to be clickable. Keying the
+// cursor off :focus, as the per-type rules used to, lit up a leaf bullet with no
+// listbox behind it — a pointer over a target that does nothing. So the class
+// this sets is the single condition, asserted where the handler already knows
+// the answer, and CSS styles that rather than guessing from focus.
+export interface BulletActions {
+  /** Called on click when the node can expand/collapse. */
+  expand?: () => void;
+  /** Resolves the listbox to reset, if the node has one. Called per click. */
+  listbox?: () => { reset(): void; activeIdx(): number } | null | undefined;
+}
+
+// Wire a bullet-column element and mark whether it is actually clickable.
+// Returns true if it took any action wiring at all.
+export function wireBulletActions(
+  el:      HTMLElement,
+  content: HTMLElement,
+  actions: BulletActions,
+): boolean {
+  const { expand, listbox } = actions;
+  // `listbox` is resolved lazily: a type handler wires its bullet before the
+  // listbox exists (the body may still be fetching), so the presence of a
+  // resolver — not a live nav — is what marks the column clickable.
+  const clickable = !!expand || !!listbox;
+  el.classList.toggle('bullet-clickable', clickable);
+  if (!clickable) return false;
+
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    content.focus();
+    // Expansion wins where a node affords both: it is the bullet's primary job,
+    // and a node that expands shows its listbox reset elsewhere (ArrowLeft, or
+    // deselect when {listbox-volatile}).
+    if (expand) { expand(); return; }
+    listbox?.()?.reset();
+  });
+  return true;
+}
+
 // Apply the custom marker attrs to a node's content element. Shared by every
 // type that shows a gutter marker (text rows, table rows, hr dividers) so the
 // supported set lives in one place.

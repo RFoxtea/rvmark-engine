@@ -6,7 +6,7 @@
  */
 
 import type { RenderNode, SourceNode } from '../render-node.js';
-import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps } from '../handler-utils.js';
+import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps, wireBulletActions } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { resolveTransclusionConfig } from '../transclusion.js';
 import { mdInlineWithSpansContinued } from '../markdown.js';
@@ -79,7 +79,18 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
 
 
     this.buildToggle();
-    this.buildCells(sourceNode, attrs);
+    const hasListbox = this.buildCells(sourceNode, attrs);
+
+    // The bullet expands when it can, and otherwise clears a listbox selection —
+    // the same contract as a text node's bullet. Before this, a non-expandable
+    // listbox row had no click wiring at all, so its options could only be
+    // cleared from the keyboard.
+    wireBulletActions(this._tog!, content, {
+      expand:  (this._expandable && !this._alwaysOpen)
+        ? () => { if (rn.toggleable) this.doToggle(); }
+        : undefined,
+      listbox: hasListbox ? () => this._listboxNav : undefined,
+    });
 
     // Each doAction also fires on-action, matching the Enter/Space paths in
     // buildKeyboardHandler; the final branch is the leaf case, where on-action
@@ -123,24 +134,20 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
 
   // ── Build steps ────────────────────────────────────────────────────────────
 
+  // Builds the element only; the click wiring needs buildCells' answer about
+  // whether this row is a listbox, so it happens once, afterwards.
   private buildToggle() {
-    const { content, rn, cfg, _expandable, _alwaysOpen } = this;
+    const { rn, cfg } = this;
     const tog = document.createElement('span');
     tog.className = `${cfg.toggleClass} toggle`;
     tog.classList.add('leaf');
     tog.appendChild(makeToggleBadge());
-    if (_expandable && !_alwaysOpen) {
-      tog.addEventListener('click', (e) => {
-        e.stopPropagation();
-        content.focus();
-        if (rn.toggleable) this.doToggle();
-      });
-    }
     this._li.insertBefore(tog, rn.children);
     this._tog = tog;
   }
 
-  private buildCells(sourceNode: SourceNode, attrs: ReturnType<typeof resolveAttrs>) {
+  /** Returns true if this row turned out to be a listbox. */
+  private buildCells(sourceNode: SourceNode, attrs: ReturnType<typeof resolveAttrs>): boolean {
     const cells = parseCells(sourceNode.label);
     const spanMap = new Map<number, ParsedSpanAttrs>();
     let nextOrdinal = 0;
@@ -154,20 +161,21 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
       this.content.appendChild(div);
     }
 
-    if (isListbox(attrs, spanMap)) {
-      const { content, rn } = this;
-      content.classList.add('node-content--listbox');
-      content.setAttribute('role', 'listbox');
-      this._listboxNav = wireListbox({
-        navRoot:         content,
-        optionContainer: content,
-        spanMap,
-        rn,
-        sourceNode,
-        scrollOnSelect:  false,
-        volatile:        attrs.has('listbox-volatile'),
-      });
-    }
+    if (!isListbox(attrs, spanMap)) return false;
+
+    const { content, rn } = this;
+    content.classList.add('node-content--listbox');
+    content.setAttribute('role', 'listbox');
+    this._listboxNav = wireListbox({
+      navRoot:         content,
+      optionContainer: content,
+      spanMap,
+      rn,
+      sourceNode,
+      scrollOnSelect:  false,
+      volatile:        attrs.has('listbox-volatile'),
+    });
+    return true;
   }
 
   private buildKeyboardHandler() {

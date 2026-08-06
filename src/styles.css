@@ -187,7 +187,8 @@ footer {
   width: var(--bullet-w);
   font-size: 0.85rem;
   color: var(--muted);
-  cursor: pointer;
+  /* No cursor here: see .bullet-clickable below — the pointer is asserted only
+     where a click actually does something. */
   user-select: none;
   display: inline-block;
   text-align: center;
@@ -351,7 +352,9 @@ footer {
   transform-origin: center center;
 }
 
-.toggle:hover { color: var(--accent); }
+/* Hover accent is asserted by .bullet-clickable (see the bullet-column rules
+   below), not here: a bullet should only light up under the pointer if the
+   click does something. */
 /* The expand spin is applied to the bullet glyph (::before), not to .toggle
    itself. .toggle stays a stable, unrotated frame so markers positioned
    against it — the ::after badge below, and search's .search-indicator — keep
@@ -380,10 +383,30 @@ footer {
   }
 }
 
-.toggle.leaf  { cursor: default; color: var(--muted); }
-.toggle.leaf:hover { color: var(--muted); }
+/* A leaf bullet is muted and unclickable by default — but a leaf that clears a
+   listbox is still a target, so .bullet-clickable below re-asserts the pointer.
+   :not() here rather than relying on source order. */
+.toggle.leaf:not(.bullet-clickable) { cursor: default; }
+.toggle.leaf { color: var(--muted); }
 
-.node-content:focus .toggle { color: var(--accent); cursor: pointer; }
+/* Focus recolours the bullet, but must not make it look clickable: whether it
+   is depends on whether anything consumes the click, which only the handler
+   knows. wireBulletActions (handler-utils.ts) sets .bullet-clickable when a
+   bullet expands or clears a listbox; that class is the single source of the
+   pointer, here and for .tr-toggle / .table-toggle below. */
+.node-content:focus .toggle { color: var(--accent); }
+
+.toggle.bullet-clickable,
+.md-body-reset.bullet-clickable { cursor: pointer; }
+
+/* Hover accent, for every bullet-column target that actually takes a click.
+   .toggle.leaf is included deliberately: a non-expandable listbox bullet is
+   still clickable (it clears the selection), which the old .toggle.leaf:hover
+   override used to suppress. */
+.toggle.bullet-clickable:hover { color: var(--accent); }
+
+/* The block strip's own hover accent lives with the .md-body focus rule below,
+   which it has to outrank. */
 
 /* ── Label ── */
 .node-label {
@@ -519,6 +542,12 @@ footer {
 /* ── Body mode indicator ── */
 .node-content:has(.md-body-scroll:focus) { box-shadow: 0 0 0 1px var(--accent); border-radius: 3px; }
 .node-content:focus .md-body { border-left-color: var(--accent-dim); }
+
+/* The block node's reset strip paints nothing of its own — it is a bare hit
+   area over the border — so hovering it accents that border instead, in the
+   same --accent-dim the focused state uses: it is the same border reading as
+   live, not a second, louder state. */
+.md-body:has(> .md-body-reset.bullet-clickable:hover) { border-left-color: var(--accent-dim); }
 
 /* ── Minor nodes ── */
 .node-content.minor .node-label { color: var(--muted); }
@@ -748,11 +777,15 @@ footer .footer-section { white-space: nowrap; }
 .search-toggle:hover, .search-toggle:focus-visible { color: var(--accent); }
 .search-toggle:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 
-/* .search-widget--active already means exactly "focused or has a query" —
-   the same class updateVisibility() (search.ts) computes that condition from
-   and toggles to reveal the input — so this reuses it rather than tracking
-   a separate active state. */
-.search-widget--active .search-toggle { color: var(--fg); }
+/* The loupe lights up only while a search is actually finding something —
+   not merely because the bar is open, which the input's own presence already
+   shows. Both halves of that condition are readable from the DOM, so this
+   needs no state tracked in search.ts:
+     :not(:placeholder-shown)      → a query has been typed
+     :not(.search-input--no-matches) → that query found something
+   (the latter is set by updateResultState(), which also dims the input). */
+.search-widget--active:has(.search-input:not(:placeholder-shown):not(.search-input--no-matches))
+  .search-toggle { color: var(--fg); }
 
 /* .search-status is never display:none (see its own rule below) — it's
    already invisible via the clip-rect technique whether or not search is
@@ -1129,6 +1162,29 @@ html.rvmark-exhibit-guest footer { display: none; }
   border-left: var(--body-border-w) solid var(--border-tree);
   min-width: 0;
   width: 100%;
+}
+
+/* On a listbox block, clicking the left border clears the option selection (see
+   wireListboxOptions in types/markdown.ts) — the block's analogue of clicking a
+   text node's bullet.
+   The painted border is only --body-border-w, far too thin to aim at, so the
+   target is a strip as wide as a bullet, centred on that border: the same hit
+   box a bullet offers, so the two gestures feel alike. It paints nothing and
+   only exists to be clicked, so its whole geometry lives here — the element is
+   appended by markdown.ts but never measured there, which keeps it correct for
+   any --bullet-w a theme sets, in whatever unit. */
+.node-content--listbox .md-body { position: relative; }
+
+.md-body-reset {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  /* `left` is measured from the padding box, so the border width comes back out
+     to centre the strip on the border itself. */
+  left: calc(-1 * var(--body-border-w) - var(--bullet-w) / 2);
+  width: var(--bullet-w);
+  /* Pointer comes from .bullet-clickable (see the bullet-column rules), which
+     wireBulletActions sets only when there is a listbox to clear. */
 }
 
 .md-body-scroll {
@@ -1597,7 +1653,7 @@ body.exhibit-open .exhibit-panel {
 .tr-row:has(> .node-content[aria-expanded="true"]) > .tr-toggle:not(.leaf)::before  { transform: rotate(90deg); }
 
 /* Recolor toggle on focus */
-.tr-row:has(> .node-content:focus) > .tr-toggle { color: var(--accent); cursor: pointer; }
+.tr-row:has(> .node-content:focus) > .tr-toggle { color: var(--accent); }
 
 /* No border-radius on selection/focus for tr rows */
 .tr-row > .node-content[aria-selected="true"],
@@ -1684,7 +1740,7 @@ body.exhibit-open .exhibit-panel {
 }
 
 /* Recolor toggle on focus */
-.table-node:has(> .node-content--table:focus) > .table-toggle { color: var(--accent); cursor: pointer; }
+.table-node:has(> .node-content--table:focus) > .table-toggle { color: var(--accent); }
 
 /* Selection / focus: no border-radius */
 .table-node > .node-content--table[aria-selected="true"],

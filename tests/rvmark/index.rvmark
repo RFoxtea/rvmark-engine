@@ -197,6 +197,19 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
     2. {#listbox-indicator-b; show-when: &step == b} step is b
     3. {#listbox-indicator-c; show-when: &step == c} step is c
 
+35. {#listbox-tr-root; let &tstep = ""; open} Listbox table-row fixture
+  1. {#listbox-tr-table; = table; open} Col A | Col B
+    1. {#listbox-tr-node; = tr} Pick [A]{set &tstep = a} or [B]{set &tstep = b} | second cell
+  2. {#listbox-tr-indicator-a; show-when: &tstep == a} tr step is a
+
+34. {#listbox-block-root; let &bstep = ""; open} Listbox block-node fixture
+  1. {#listbox-block-node; = block}
+      ~~~
+      Pick [A]{set &bstep = a} or [B]{set &bstep = b}.
+      ~~~
+    1. {#listbox-block-indicator-a; show-when: &bstep == a} block step is a
+    2. {#listbox-block-indicator-b; show-when: &bstep == b} block step is b
+
 26. {#listbox-transclude-root; open} Listbox option transitive transclusion fixture
   1. {#listbox-transclude-node} [Direct]{=> #tt-leaf} [Transitive]{=> #tt-mid}
 27. {#tt-mid; => #tt-leaf} tt-mid children-mode label

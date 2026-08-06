@@ -1735,6 +1735,78 @@ test.describe('listbox span state assignments', () => {
     await node.press('ArrowRight');
     await expect(await waitForNode(page, 'listbox-indicator-b')).toBeVisible();
   });
+
+  test('clicking the bullet clears the option selection', async ({ page }) => {
+    const node = await nodeContent(page, 'listbox-node');
+    await node.click();
+    await node.locator('[role="option"]').nth(0).click();
+    await expect(await waitForNode(page, 'listbox-indicator-a')).toBeVisible();
+    await node.locator('.toggle').click();
+    expect(await tryNodeContent(page, 'listbox-indicator-a')).toBeNull();
+  });
+});
+
+// A non-expandable listbox row had no bullet click wiring at all before
+// wireBulletActions unified the two reasons a bullet takes clicks.
+test.describe('listbox table-row bullet reset', () => {
+  test('clicking the row bullet clears the option selection', async ({ page }) => {
+    await page.goto('/#listbox-tr-root');
+    await waitForTree(page);
+    const node = await nodeContent(page, 'listbox-tr-node');
+    await node.click();
+    await node.locator('[role="option"]').nth(0).click();
+    await expect(await waitForNode(page, 'listbox-tr-indicator-a')).toBeVisible();
+    // .tr-toggle is a sibling of .node-content under the row's own li.
+    await node.locator('xpath=../*[contains(@class,"tr-toggle")]').click();
+    expect(await tryNodeContent(page, 'listbox-tr-indicator-a')).toBeNull();
+  });
+});
+
+// A block node's left border is its analogue of a text node's bullet: clicking
+// it clears the option selection. The border belongs to .md-body, which also
+// wraps the scroller, so the handler distinguishes the strip by offsetX — these
+// pin both halves of that (border resets, content does not).
+test.describe('listbox block-node border reset', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/#listbox-block-root');
+    await waitForTree(page);
+    await waitForNode(page, 'listbox-block-node');
+  });
+
+  async function selectOptionA(page) {
+    const node = await nodeContent(page, 'listbox-block-node');
+    await node.click();
+    await node.locator('[role="option"]').nth(0).click();
+    await expect(await waitForNode(page, 'listbox-block-indicator-a')).toBeVisible();
+    return node;
+  }
+
+  test('clicking the left border clears the option selection', async ({ page }) => {
+    const node = await selectOptionA(page);
+    const box  = await node.locator('.md-body').boundingBox();
+    // On the border itself, at .md-body's leading edge.
+    await page.mouse.click(box.x + 1, box.y + box.height / 2);
+    expect(await tryNodeContent(page, 'listbox-block-indicator-a')).toBeNull();
+  });
+
+  // The target is --bullet-w wide centred on the border, so half of it sits out
+  // in .md-body's margin — outside the element, but still a valid target.
+  test('clicking just left of the border also clears it', async ({ page }) => {
+    const node = await selectOptionA(page);
+    const box  = await node.locator('.md-body').boundingBox();
+    await page.mouse.click(box.x - 4, box.y + box.height / 2);
+    expect(await tryNodeContent(page, 'listbox-block-indicator-a')).toBeNull();
+  });
+
+  test('clicking inside the body does not clear the selection', async ({ page }) => {
+    const node = await selectOptionA(page);
+    const scroller = node.locator('.md-body-scroll');
+    const box = await scroller.boundingBox();
+    // Right edge: inside .md-body but past the end of the text, so this lands on
+    // the scroller with no option under it.
+    await page.mouse.click(box.x + box.width - 2, box.y + box.height / 2);
+    await expect(await waitForNode(page, 'listbox-block-indicator-a')).toBeVisible();
+  });
 });
 
 // Fixture: #listbox-transclude-node has two inline options. [Direct] embeds

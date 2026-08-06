@@ -20,7 +20,7 @@
 
 import type { NodeTypeFactory, SourceNode, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode } from '../handler-utils.js';
+import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, wireBulletActions } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';
@@ -196,6 +196,32 @@ class MarkdownTypeHandler extends BaseTypeHandler {
       scrollOnSelect:  true,
       volatile:        attrs.has('listbox-volatile'),
     });
+
+    // Clicking the left border clears the option selection — the same gesture a
+    // text node's bullet offers, on the block's own analogue of one. The border
+    // is deliberately aligned to the bullet column (see .md-body in styles.css),
+    // so this is the same target in the same place.
+    //
+    // The painted border is only --body-border-w, far too thin to aim at, so the
+    // target is a strip as wide as a text node's bullet, centred on the border.
+    // Matching the bullet's own hit box is the point: the two gestures should
+    // feel identical, not merely exist.
+    //
+    // A real element, not a pseudo-element or a coordinate test: the strip is
+    // then an ordinary event target, so the stylesheet owns its geometry
+    // outright and no JS has to reconstruct it. That matters because --bullet-w
+    // is themeable — any px/rem/em value an author picks resolves in CSS, where
+    // reading it back out would mean parsing a unit this code cannot predict.
+    const body = scroller.parentElement;
+    if (body?.classList.contains('md-body')) {
+      const strip = document.createElement('div');
+      strip.className = 'md-body-reset';
+      strip.setAttribute('aria-hidden', 'true');   // keyboard path is ArrowLeft
+      // No expand: a block node renders no children (this handler never calls
+      // setChildren), so its bullet column only ever resets.
+      wireBulletActions(strip, content, { listbox: () => this._listboxNav });
+      body.appendChild(strip);
+    }
   }
 
   private buildKeyboardHandler(li: HTMLElement): void {

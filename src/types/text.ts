@@ -8,7 +8,7 @@
 import type { NodeTypeFactory, SourceNode, ResolvedAttrs } from '../render-node.js';
 import { factoryRegister, RenderNode } from '../render-node.js';
 
-import { resolveAttrs, buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps } from '../handler-utils.js';
+import { resolveAttrs, buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps, wireBulletActions } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';
@@ -89,7 +89,7 @@ class TextTypeHandler extends BaseTypeHandler {
       rn.state.subscribeAny(this._permalinkAnyFn);
     }
 
-    this.buildClickWiring(!!exhibitButton);
+    this.buildClickWiring(!!exhibitButton, hasListbox);
     this.buildKeyboardHandler();
 
     this.deactivate();
@@ -185,18 +185,18 @@ class TextTypeHandler extends BaseTypeHandler {
     this._unwatchChildren?.();
   }
 
-  private buildClickWiring(exhibitButton: boolean) {
+  private buildClickWiring(exhibitButton: boolean, hasListbox: boolean) {
     const { tog, lbl, content, rn, expandable, alwaysOpen } = this;
 
-    // Toggle (bullet) always handles expand/collapse when expandable.
-    if (expandable && !alwaysOpen) {
-      tog.addEventListener('click', () => { content.focus(); if (rn.toggleable) this.doToggle(undefined, { scroll: false }); });
-    } else {
-      tog.addEventListener('click', () => {
-        content.focus();
-        this._listboxNav?.reset();
-      });
-    }
+    // The bullet expands when it can, and otherwise clears a listbox selection.
+    // wireBulletActions also marks whether it is clickable at all, which is what
+    // CSS styles — a leaf with no listbox must not show a pointer.
+    wireBulletActions(tog, content, {
+      expand:  (expandable && !alwaysOpen)
+        ? () => { if (rn.toggleable) this.doToggle(undefined, { scroll: false }); }
+        : undefined,
+      listbox: hasListbox ? () => this._listboxNav : undefined,
+    });
 
     // Re-click wiring: exhibit opens the exhibit; otherwise toggle expand/collapse.
     // Every branch fires on-action too, so re-clicking a selected node matches
