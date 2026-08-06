@@ -24,6 +24,24 @@
 
   --indent: 1.1rem;
   --bullet-w: 1rem;
+  /* Sizes for mask-drawn chrome marks.
+
+     --mark-size: the show-hidden tick. Cells holding one derive their box from
+     it, so overriding rescales mark and cell together and cannot leave the
+     mark overhanging its cell.
+     --chip-icon-*: footer chip icons (search loupe, view menu). Both chips
+     read these, so they stay identical to each other through any override —
+     they sit side by side, where a mismatch reads as a bug.
+
+     These are em, i.e. the font's design size, which is taller than any actual
+     letter — so a mark at 1em is somewhat larger than the capitals it sits
+     beside. If you want a mark that instead tracks the height of neighbouring
+     text across a font change, `1cap` is the unit that means that (needs an em
+     fallback behind @supports (width: 1cap), since an unparsed unit invalidates
+     the declaration and yields a zero-size mask). */
+  --mark-size: 0.8em;
+  --chip-icon-size: 1em;
+  --chip-icon-shift: -0.15em;
   --tree-gap: 0.3rem;
   --tree-indent-offset: 0.4rem;
   --body-border-w: 2px;
@@ -550,20 +568,37 @@ footer .footer-section { white-space: nowrap; }
   white-space: nowrap;
   border: 0;
 }
-/* The brackets are static text; only the tick cell between them changes. That
-   cell reserves a fixed 1ch whether or not it holds a '×', so ticking the box
-   cannot change the marker's width and shove the label sideways. */
+/* The brackets are static text; only the tick cell between them changes.
+
+   Ticking never moves ' show hidden': the cell is the same box in both states
+   and the mark is absolutely positioned, so no mark dimension reaches layout.
+
+   Alignment is by half-leading, not a guessed vertical-align. The cell is an
+   inline-block, so its box — not its (empty) text baseline — is what lines up
+   against the brackets, and a hand-tuned baseline nudge only matches one font.
+   Instead the cell is a full line-box tall (1lh) and the mark is centred inside
+   it: an inline box of the line's own height sits exactly where the line's text
+   sits, in any font, because that is the same box the brackets are centred in.
+   1lh falls back to 1.4em on engines without it (see the fallback declaration).
+
+   The mark is deliberately smaller than the cell (--mark-inset), so it nests
+   between the brackets instead of running edge to edge into them. */
 .show-hidden-toggle .tick {
+  position: relative;
   display: inline-block;
-  width: 1ch;
-  text-align: center;
+  vertical-align: top;
+  width: max(1ch, var(--mark-size));
+  height: 1.4em;
+  height: 1lh;
 }
 .show-hidden-toggle:has(input:checked) .tick::before {
   content: '';
-  display: inline-block;
-  width: 0.9em;
-  height: 0.9em;
-  vertical-align: -0.1em;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: var(--mark-size);
+  height: var(--mark-size);
   background-color: currentColor;
   -webkit-mask: var(--icon-tick) no-repeat center / contain;
           mask: var(--icon-tick) no-repeat center / contain;
@@ -581,7 +616,10 @@ footer .footer-section { white-space: nowrap; }
   cursor: pointer;
   user-select: none;
   list-style: none;
-  padding: 0 0.25rem;
+  /* No padding, matching .search-toggle: the ' · ' text nodes between footer
+     chips already supply the spacing, and padding here added a gap the loupe
+     didn't have. */
+  padding: 0;
   line-height: 1;
   color: var(--muted);
 }
@@ -589,12 +627,14 @@ footer .footer-section { white-space: nowrap; }
 /* Reads as "menu" rather than as a direction: the drop-up always opens the one
    way it can, so the arrow was spending its meaning on something the user has
    no choice about. Static: the mark is the affordance, so it must not move. */
+/* Geometry comes from the shared chip-icon tokens, not literals, so this and
+   the search loupe cannot drift apart under a theme override. */
 .view-menu > summary::before {
   content: '';
   display: inline-block;
-  width: 0.85em;
-  height: 0.85em;
-  vertical-align: -0.08em;
+  width: var(--chip-icon-size);
+  height: var(--chip-icon-size);
+  vertical-align: var(--chip-icon-shift);
   background-color: currentColor;
   -webkit-mask: var(--icon-menu) no-repeat center / contain;
           mask: var(--icon-menu) no-repeat center / contain;
@@ -692,12 +732,15 @@ footer .footer-section { white-space: nowrap; }
   cursor: pointer;
   color: var(--muted);
 }
+/* Shared chip-icon tokens — see the view-menu's ::before. Both icons are
+   0 0 16 16 masks with ink filling the box, so `contain` makes the box the
+   rendered size and these two values are the whole story. */
 .search-toggle::before {
   content: '';
   display: inline-block;
-  width: 1em;
-  height: 1em;
-  vertical-align: -0.15em;
+  width: var(--chip-icon-size);
+  height: var(--chip-icon-size);
+  vertical-align: var(--chip-icon-shift);
   background-color: currentColor;
   -webkit-mask: var(--icon-search) no-repeat center / contain;
           mask: var(--icon-search) no-repeat center / contain;
