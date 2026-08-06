@@ -62,6 +62,16 @@
 30. {#search-cycle-target} Cycle target, transcludes its own host back
   1. {=> #search-transclude-cycle}
 
+31. {#exhibit-scope-root; exhibit: ./other#other-root} Exhibit scope root
+  1. {#exhibit-scope-child} Child under the exhibit scope
+    1. {#exhibit-scope-grandchild} Grandchild under the exhibit scope
+  2. {#exhibit-scope-nested; exhibit: ./other#pass-exhibit-target} Nested override
+    1. {#exhibit-scope-nested-child} Child under the nested override
+  3. {#exhibit-scope-transclude-host; => ./other#other-root} Host transcluding foreign content
+
+32. {#exhibit-outside} Node outside any exhibit scope
+  1. {#exhibit-outside-child} Child outside any exhibit scope
+
 2. {#embed-target} Embed target node
   1. Embed target child A
   2. Embed target child B

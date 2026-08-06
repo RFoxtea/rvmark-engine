@@ -6,7 +6,7 @@
  */
 
 import type { RenderNode, SourceNode } from '../render-node.js';
-import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyExhibit, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps } from '../handler-utils.js';
+import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { resolveTransclusionConfig } from '../transclusion.js';
 import { mdInlineWithSpansContinued } from '../markdown.js';
@@ -67,7 +67,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
     cfg.onSetup?.({ content, li, attrs, sourceNode });
 
     this._actionVal = cfg.withExhibit ? (attrs.get('action') ?? null) : null;
-    if (cfg.withExhibit) applyExhibit(this.rn, attrs);
+
 
     const openVal   = attrs.get('open');
     const neverOpen = openVal === 'never';

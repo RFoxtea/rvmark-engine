@@ -8,7 +8,7 @@
 import type { NodeTypeFactory, SourceNode, ResolvedAttrs } from '../render-node.js';
 import { factoryRegister, RenderNode } from '../render-node.js';
 
-import { resolveAttrs, buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyExhibit, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps } from '../handler-utils.js';
+import { resolveAttrs, buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';
@@ -67,7 +67,6 @@ class TextTypeHandler extends BaseTypeHandler {
     this.buildCssProps(attrs, sourceNode);
 
     const { content } = this;
-    applyExhibit(rn, attrs);
 
     const { embedVal, childrenList, exhibitButton } = resolveTransclusionConfig(sourceNode, attrs);
     this.expandable    = !neverOpen && (sourceNode.children.length > 0 || !!embedVal || !!childrenList);

@@ -18,12 +18,13 @@ import { scrollRowIntoMiddle } from './scroll.js';
 import type { SourceNode } from './parser.js';
 import { parseStateEntries } from './parser.js';
 import { Multimap } from './multimap.js';
+import { bagOf } from './inherited.js';
 import type { ResolvedAttrs } from './render-node.js';
 import { RenderNode } from './render-node.js';
 import { resolveRef, resolveEffectiveChildren, resolveTransclusionConfig } from './transclusion.js';
 import { TRANSCLUDE_DEADLINE_MS } from './constants.js';
 import type { PassEntry, PassMode, StateNode } from './state.js';
-import { exhibitStampScope, exhibitOpenFromNode } from './exhibit.js';
+import { exhibitOpenFromNode } from './exhibit.js';
 export { exhibitOpenFromNode };
 
 // ── parsePass ──────────────────────────────────────────────────────────────
@@ -99,7 +100,7 @@ export async function expandNode(rn: RenderNode, transcludeRef?: string): Promis
     // the setChildren mount race (MOUNT_SETTLE_MS), so a fast resolve supersedes it
     // before it ever paints — no flash — while a slow one reveals it.
     if (needsResolve) {
-      rn.setChildren([makeLoadingNode(sourceNode)], null, rn.meta, passChildrenEntries);
+      rn.setChildren([makeLoadingNode(sourceNode)], null, passChildrenEntries);
     }
 
     // Phase 2: race every ref against one shared deadline. A ref still unresolved
@@ -125,9 +126,9 @@ export async function expandNode(rn: RenderNode, transcludeRef?: string): Promis
         allNodes.push(makeErrorNode(sourceNode, o.rawRef, o.timedOut ? 'timeout' : 'error'));
       }
     }
-    rn.setChildren(allNodes, null, rn.meta, passChildrenEntries);
+    rn.setChildren(allNodes, null, passChildrenEntries);
   } else if (sourceNode.children.length) {
-    rn.setChildren(sourceNode.children as SourceNode[], null, rn.meta, passChildrenEntries);
+    rn.setChildren(sourceNode.children as SourceNode[], null, passChildrenEntries);
   }
 }
 
@@ -141,9 +142,10 @@ function syntheticChild(host: SourceNode, attrs: Multimap, label: string): Sourc
   return {
     slug: '', permalinkId: '', numbering: '',
     attrs, tags: [], label, bodyLines: [],
-    children: [], meta: {}, sourceFile: host.sourceFile,
-    searchable: host.searchable,
-  };
+    children: [], sourceFile: host.sourceFile,
+    // Stands in for the host, so it inherits exactly what the host has.
+    ...bagOf(host),
+  } as SourceNode;
 }
 
 // The single "resolving…" marker (loading type → animated placeholder).
@@ -165,14 +167,6 @@ export function makeErrorNode(host: SourceNode, ref: string, reason: 'error' | '
   attrs.append('class', 'node-load-error');
   const label = reason === 'timeout' ? `${ref} timed out` : `${ref} not found`;
   return syntheticChild(host, attrs, label);
-}
-
-// ── Exhibit wiring ─────────────────────────────────────────────────────────
-
-export function applyExhibit(rn: RenderNode, attrs: ResolvedAttrs): void {
-  const exhibitVal = attrs.get('exhibit');
-  if (exhibitVal)
-    exhibitStampScope(rn, exhibitVal, rn.sourceNode.sourceFile.pageAddress, attrs);
 }
 
 // ── Listbox keydown dispatch ───────────────────────────────────────────────

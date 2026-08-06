@@ -10,7 +10,7 @@
 
 import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { resolveAttrs, applyExhibit, applyTagClasses } from '../handler-utils.js';
+import { resolveAttrs, applyTagClasses } from '../handler-utils.js';
 
 class HrTypeHandler implements TypeHandler {
   readonly content:    HTMLElement;
@@ -31,7 +31,6 @@ class HrTypeHandler implements TypeHandler {
     renderNode.meta = sourceNode.meta;
 
     // ── Exhibit scope ────────────────────────────────────────────────────────
-    applyExhibit(renderNode, attrs);
 
     const hr = document.createElement('hr');
     hr.className = 'divider-rule';

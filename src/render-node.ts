@@ -22,7 +22,6 @@ import type { StateNode, PassEntry } from './state.js';
 import { tagsNodeAttrs, mergeNodeAttrs } from './tags.js';
 import { isOrContainsPermalink } from './transclusion.js';
 import { exhibitNotifySelection } from './exhibit.js';
-import type { ExhibitConfig } from './exhibit.js';
 import { applyEventAttr } from './handler-utils.js';
 import { scrollRowIntoMiddle } from './scroll.js';
 import { blastocyteFactory } from './types/blastocyte.js';
@@ -130,9 +129,8 @@ function insertSlot(slot: ChildSlot): void {
 function spawnSlot(
   slot:       ChildSlot,
   focusSlug:  string | null,
-  parentMeta: Record<string, unknown>,
 ): RenderNode {
-  const rn = buildRenderNode(slot.node, focusSlug, parentMeta, slot.parentState);
+  const rn = buildRenderNode(slot.node, focusSlug, slot.parentState);
   rn._onVacate = () => {
     slot.live = null;
     recomputeAria(slot.slots);
@@ -144,9 +142,8 @@ function spawnSlot(
 function reactiveSpawnSlot(
   slot:       ChildSlot,
   focusSlug:  string | null,
-  parentMeta: Record<string, unknown>,
 ): void {
-  spawnSlot(slot, focusSlug, parentMeta);
+  spawnSlot(slot, focusSlug);
   insertSlot(slot);
   recomputeAria(slot.slots);
   if (slot.ul.isConnected) slot.live!.fireConnected();
@@ -157,10 +154,9 @@ function initSlot(
   slot:         ChildSlot,
   showWhenRaws: string[],
   focusSlug:    string | null,
-  parentMeta:   Record<string, unknown>,
 ): RenderNode | null {
   if (showWhenRaws.length === 0) {
-    return spawnSlot(slot, focusSlug, parentMeta);
+    return spawnSlot(slot, focusSlug);
   }
 
   const isHidden = () => showWhenRaws.some(sw => evalShowWhen(sw, slot.parentState));
@@ -170,7 +166,7 @@ function initSlot(
   const check = () => {
     const hidden = isHidden();
     if (!hidden && slot.live === null) {
-      reactiveSpawnSlot(slot, focusSlug, parentMeta);
+      reactiveSpawnSlot(slot, focusSlug);
     } else if (hidden && slot.live !== null) {
       slot.live.destroy();
     }
@@ -180,7 +176,7 @@ function initSlot(
   keys.forEach((k, i) => slot.parentState.subscribe(k, fns[i]));
   slot.teardown = () => keys.forEach((k, i) => slot.parentState.unsubscribe(k, fns[i]));
 
-  if (!isHidden()) return spawnSlot(slot, focusSlug, parentMeta);
+  if (!isHidden()) return spawnSlot(slot, focusSlug);
   return null;
 }
 
@@ -206,7 +202,6 @@ export function isSearchable(node: SourceNode): boolean {
 export function buildRenderNode(
   node:        SourceNode,
   focusSlug:   string | null,
-  parentMeta:  Record<string, unknown> = {},
   parentState: StateNode = prerootFrame,
 ): RenderNode {
   const permalinkBase = node.permalinkId;
@@ -221,10 +216,9 @@ export function buildRenderNode(
   if (isHiddenByModifier(attrs)) rn.li.classList.add('node--draft');
 
   blastocyteFactory.create(rn);
-  rn.meta = { ...parentMeta, ...rn.meta };
 
   if ((isFocusAncestor || isFocusTarget) && rn.contentEl.hasAttribute('aria-expanded')) {
-    rn.setChildren(node.children, focusSlug, {}, undefined, false);
+    rn.setChildren(node.children, focusSlug, undefined, false);
   }
 
   if (isFocusTarget) {
@@ -297,7 +291,6 @@ export class RenderNode {
 
   readonly state: StateFrame;
 
-  exhibitConfig: ExhibitConfig | null = null;
 
   // Called by the parent slot when this node is destroyed, to clear slot.live.
   _onVacate: (() => void) | null = null;
@@ -310,7 +303,7 @@ export class RenderNode {
   private _attrs:            ResolvedAttrs;
   private _slots:            ChildSlot[] = [];
   private _pendingSlots:     ChildSlot[] | null = null;
-  private _pendingChildren:  Array<[SourceNode[], string | null, Record<string, unknown>, PassEntry[] | undefined]> = [];
+  private _pendingChildren:  Array<[SourceNode[], string | null, PassEntry[] | undefined]> = [];
 
   get attrs(): ResolvedAttrs {
     return (this._handler?.attrs ?? this._attrs);
@@ -486,11 +479,10 @@ export class RenderNode {
   setChildren(
     nodes:               SourceNode[],
     focusSlug:           string | null = null,
-    parentMeta:          Record<string, unknown> = {},
     passChildrenEntries: PassEntry[] | undefined = undefined,
     delay = true,
   ): void {
-    if (!this._handler) { this._pendingChildren.push([nodes, focusSlug, parentMeta, passChildrenEntries]); return; }
+    if (!this._handler) { this._pendingChildren.push([nodes, focusSlug, passChildrenEntries]); return; }
     if (!nodes.length) {
       this._destroyExistingChildren();
       if (this.toggleable) this.expanded = false;
@@ -544,7 +536,7 @@ export class RenderNode {
     const initialRns: RenderNode[] = [];
     for (const slot of slots) {
       const showWhenRaws = nodeAttrs(slot.node).getAll('show-when');
-      const rn = initSlot(slot, showWhenRaws, focusSlug, parentMeta);
+      const rn = initSlot(slot, showWhenRaws, focusSlug);
       if (rn) { ul.appendChild(rn.li); initialRns.push(rn); }
     }
     recomputeAria(slots);

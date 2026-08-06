@@ -20,7 +20,7 @@
 
 import type { NodeTypeFactory, SourceNode, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyExhibit, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode } from '../handler-utils.js';
+import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';
@@ -87,7 +87,6 @@ class MarkdownTypeHandler extends BaseTypeHandler {
     applyOnSpawn(attrs, rn);
 
     const { content } = this;
-    applyExhibit(rn, attrs);
 
     this._actionVal = attrs.get('action') ?? null;
     if (this._actionVal === 'exhibit') {

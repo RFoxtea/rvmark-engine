@@ -12,7 +12,7 @@
 
 import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { resolveAttrs, applyExhibit } from '../handler-utils.js';
+import { resolveAttrs } from '../handler-utils.js';
 import { resolveTagDef } from '../tags.js';
 
 class GapTypeHandler implements TypeHandler {
@@ -39,7 +39,6 @@ class GapTypeHandler implements TypeHandler {
     renderNode.meta = sourceNode.meta;
 
     // ── Exhibit scope ────────────────────────────────────────────────────────
-    applyExhibit(renderNode, attrs);
   }
 
   getFocusableElements(_content: HTMLElement): NodeListOf<HTMLElement> {

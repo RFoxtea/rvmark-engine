@@ -44,7 +44,7 @@
 
 import type { NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { resolveAttrs, treeNavKeydown, actionKeydown, copyPermalink, applyExhibit, expandNode } from '../handler-utils.js';
+import { resolveAttrs, treeNavKeydown, actionKeydown, copyPermalink, expandNode } from '../handler-utils.js';
 import { BaseTypeHandler } from '../base-handler.js';
 
 import { wireSelectThenAction } from '../interaction.js';
@@ -88,7 +88,6 @@ class VideoTypeHandler extends BaseTypeHandler {
     content.classList.add('node-content--video');
 
     // ── Click wiring ──────────────────────────────────────────────────────────
-    applyExhibit(renderNode, attrs);
 
     wireSelectThenAction(content, () => {});
 

@@ -19,8 +19,11 @@
  * wiring is done by the type handlers via wireSelectThenAction, which calls
  * exhibitOpenFromNode. Keyboard activation goes through actionKeydown.
  *
- * Selection scoping: when selection moves outside the subtree of the node
- * that opened the exhibit, the exhibit closes automatically.
+ * Selection scoping: {exhibit} is an inherited property (inherited.ts), resolved
+ * down the source tree at parse time. Selecting any node under a declaring node
+ * keeps that exhibit up; selecting one with no exhibit in force blanks the panel.
+ * Because scope comes from the source tree, a node transcluded elsewhere carries
+ * its own document's exhibit rather than adopting its host's.
  * notifySelection(content) must be called whenever selection changes.
  */
 
@@ -32,7 +35,7 @@ import { parsePass } from './handler-utils.js';
 import { prerootFrame, StateRelay, buildStatePass } from './state.js';
 import { postGuestMode, broadcastPreroot, prerootDeclareMsg, prerootSetMsg, prerootDeleteMsg, wireRelay, registerThemeIframe, unregisterThemeIframe } from './iframe-host.js';
 import { RenderNode } from './render-node.js';
-import type { NodeAttrs } from './parser.js';
+import type { NodeAttrs, SourceNode } from './parser.js';
 
 export interface ExhibitConfig {
   rawRef:            string;
@@ -195,6 +198,16 @@ export function prerootDelete(key: string): void {
   broadcastPreroot(_exhibitIframes(), prerootDeleteMsg(key));
 }
 
+// `triggerRn` is the node the reader acted on — selected, clicked, or activated.
+// The selected node already determines WHICH exhibit is shown; it determines the
+// state the exhibit sees for the same reason. {exhibit-pass} binds its variables
+// in that node's frame, resolving names up the frame chain exactly as
+// {show-when} and {on-action} do on any node — ordinary lexical scoping, with a
+// nearer `let` winning over an outer one.
+//
+// This is also the only well-defined choice: {exhibit} is inherited down the
+// source tree, so a node can hold an exhibit whose declaring ancestor was never
+// rendered and therefore has no frame to bind against.
 export async function exhibitOpen(
   rawRef:         string,
   sourceFileAddress: string,
@@ -204,8 +217,8 @@ export async function exhibitOpen(
   // Already showing this trigger — nothing to do.
   if (triggerRn && _currentTriggerRn === triggerRn) return;
 
-  // Same exhibit target from a different scope node — keep the iframe in
-  // place and only rewire the state relay to the new scope's frame.
+  // Same exhibit target, different node under the same scope — keep the iframe
+  // in place and only rewire the state relay to that node's frame.
   if (triggerRn && _currentRefString === rawRef && _panel) {
     const iframe = _panel.querySelector<HTMLIFrameElement>('.exhibit-iframe');
     const win    = iframe?.contentWindow ?? null;
@@ -284,18 +297,24 @@ export function exhibitCurrentTrigger(): RenderNode | null {
   return _currentTriggerRn;
 }
 
-// Walk up from selectedRn through ancestor RenderNodes, looking for one with
-// an exhibitConfig. Stops when the source file changes (cross-document boundary).
-function _nearestExhibitRn(selectedRn: RenderNode): RenderNode | null {
-  const originFile = selectedRn.sourceNode.sourceFile?.pageAddress;
-  let li: HTMLElement | null = selectedRn.li;
-  while (li) {
-    const rn: RenderNode | undefined = (li as any)._renderNode;
-    if (rn && rn.sourceNode.sourceFile?.pageAddress !== originFile) break;
-    if (rn?.exhibitConfig) return rn;
-    li = li.parentElement?.closest<HTMLElement>('.node') ?? null;
-  }
-  return null;
+// The exhibit in force for a node. Inherited down the source tree at parse time
+// (inherited.ts), so this is a field read — no walk over rendered ancestors.
+//
+// A node's exhibit is the one its own document declared over it. The DOM walk
+// this replaced derived scope from where a subtree landed instead, so content
+// transcluded into a page picked up that page's exhibit rather than its own.
+// Exported for tests: it reads only `sourceNode`, so it is exercisable without
+// a DOM. Callers in this module pass a real RenderNode.
+export function exhibitConfigOf(rn: { sourceNode: SourceNode }): ExhibitConfig | null {
+  const scope = rn.sourceNode.exhibit;
+  if (!scope) return null;
+  return {
+    rawRef:            scope.rawRef,
+    // Inheritance never crosses a file, so this node's file is the one that
+    // declared the scope — which is what the ref resolves against.
+    sourceFileAddress: rn.sourceNode.sourceFile.pageAddress,
+    attrs:             scope.attrs,
+  };
 }
 
 // Called by the renderer whenever selection changes.
@@ -303,39 +322,20 @@ function _nearestExhibitRn(selectedRn: RenderNode): RenderNode | null {
 // Blanks the panel if no exhibit scope is found.
 export function exhibitNotifySelection(selectedRn: RenderNode): void {
   if (!_panel) return;
-  const nearest = _nearestExhibitRn(selectedRn);
-  if (!nearest) { _blankPanel(); return; }
-  if (nearest === _currentTriggerRn) return; // already showing it
-  const { rawRef, sourceFileAddress, attrs } = nearest.exhibitConfig!;
-  exhibitOpen(rawRef, sourceFileAddress, nearest, attrs);
+  const config = exhibitConfigOf(selectedRn);
+  if (!config) { _blankPanel(); return; }
+  exhibitOpen(config.rawRef, config.sourceFileAddress, selectedRn, config.attrs);
 }
 
 // ── Renderer interface ─────────────────────────────────────────────────────
 
-// Called for nodes with {exhibit: …}. Sets exhibitConfig on the RenderNode so
-// _nearestExhibitRn can find the nearest enclosing scope when selection changes.
-export function exhibitStampScope(
-  rn:                RenderNode,
-  rawRef:            string,
-  sourceFileAddress: string,
-  attrs:             NodeAttrs,
-): void {
-  rn.exhibitConfig = { rawRef, sourceFileAddress, attrs };
-}
-
-// Open the exhibit panel for the nearest enclosing exhibit scope of rn.
-// No-op if no scope is found.
+// Open the exhibit panel for the exhibit in force at rn. No-op if there is none.
 export function exhibitOpenFromNode(rn: RenderNode): void {
-  const scopeRn = _nearestExhibitRn(rn);
-  if (!scopeRn) return;
-  const { rawRef, sourceFileAddress, attrs } = scopeRn.exhibitConfig!;
-  void exhibitOpen(rawRef, sourceFileAddress, scopeRn, attrs);
+  const config = exhibitConfigOf(rn);
+  if (!config) return;
+  void exhibitOpen(config.rawRef, config.sourceFileAddress, rn, config.attrs);
 }
 
-// Called for nodes with {action: exhibit}.
-// Wires label click to open the _panel. Toggle (bullet) keeps its expand/collapse
-// behavior, wired by the type handler. Keydown is handled centrally via actionKeydown.
-// Uses the nearest enclosing exhibitConfig (which may be on this node or an ancestor).
 // ── Shared head builder ───────────────────────────────────────────────────────
 
 function exhibitHead(basePath: string): string {

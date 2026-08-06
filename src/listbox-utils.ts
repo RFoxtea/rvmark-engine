@@ -61,7 +61,7 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
     if (params.transclude) {
       void expandNode(rn, params.transclude);
     } else {
-      rn.setChildren(sourceNode.children as SourceNode[], null, rn.meta);
+      rn.setChildren(sourceNode.children as SourceNode[], null);
     }
   };
 
@@ -96,7 +96,7 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
           applyEventAttr(spanOf(_prevEl)['on-blur'],     rn);
           _prevEl = null;
         }
-        rn.setChildren(sourceNode.children as SourceNode[], null, rn.meta);
+        rn.setChildren(sourceNode.children as SourceNode[], null);
         for (const v of rn.attrs.getAll('on-no-option-select')) applyEventAttr(v, rn);
       },
     },

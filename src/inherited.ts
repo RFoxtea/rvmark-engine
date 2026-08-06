@@ -1,0 +1,198 @@
+/**
+ * inherited.ts
+ *
+ * The registry of *inherited node properties* — values an author sets once on a
+ * node (or a file head) that apply to that node and everything beneath it in the
+ * source tree.
+ *
+ * The governing rule is: the owner of a document sets these. Inheritance runs
+ * down the source tree at parse time and nowhere else. Where a node is *rendered*
+ * — transcluded into another page, federated across an origin — never changes
+ * them. A node carries its home document's answer wherever it goes.
+ *
+ * That rule is why resolution lives here rather than in a walk-up over rendered
+ * ancestors: it must answer correctly for nodes that are authored but never
+ * mounted (search descends into unrendered children), and it must not vary with
+ * where a subtree happens to land.
+ *
+ * Inheritance bottoms out at the *file*, not at a root node — every property
+ * seeds from the resolved Head (which has already merged the inherited-head
+ * chain) and may consult tag defs on the way down. That is what a lazy
+ * parent-pointer walk cannot supply without teaching every consumer about file
+ * heads and tag resolution, and is why the parser owns the threading.
+ *
+ * The parser itself knows nothing about meta, searchable, or exhibit. It carries
+ * an opaque bag of values down the recursion, asking each registered property to
+ * seed and derive itself. Adding an inherited property is one registration here.
+ */
+
+import type { Head, NodeAttrs, RawNode, TagDef } from './parser.js';
+import { tagsNodeAttrs, mergeNodeAttrs } from './tags.js';
+
+/**
+ * One inherited property.
+ *
+ *   empty  — the value for a node with no ancestry and nothing declared.
+ *   seed   — the file-level starting value, from the resolved Head.
+ *   derive — this node's value, given its parent's value and its own raw form.
+ *            Called top-down, once per node, at parse time.
+ */
+export interface InheritedProp<T = unknown> {
+  name:   string;
+  empty:  T;
+  seed:   (head: Head) => T;
+  derive: (parentValue: T, raw: RawNode, tagDefs: Record<string, TagDef>) => T;
+}
+
+/** The in-force `{exhibit}` for a node — see the `exhibit` registration below. */
+export interface ExhibitScope {
+  rawRef: string;
+  attrs:  NodeAttrs;
+}
+
+/**
+ * The resolved values for one node, keyed by property name.
+ *
+ * Typed as the statically-known set so a bag can be spread into a SourceNode
+ * without a cast. The registry itself is dynamic — this interface is the one
+ * place a newly registered property must also be declared, and the compiler
+ * will point at every construction site if it is missing.
+ */
+export interface InheritedBag {
+  meta:       Record<string, unknown>;
+  searchable: boolean;
+  exhibit:    ExhibitScope | null;
+}
+
+const _props = new Map<string, InheritedProp<any>>();
+
+export function registerInherited<T>(prop: InheritedProp<T>): void {
+  _props.set(prop.name, prop);
+}
+
+export function inheritedProps(): InheritedProp<any>[] {
+  return [..._props.values()];
+}
+
+/** The file-level bag: every registered property seeded from `head`. */
+export function seedBag(head: Head): InheritedBag {
+  const bag: Record<string, unknown> = {};
+  for (const p of _props.values()) bag[p.name] = p.seed(head);
+  return bag as unknown as InheritedBag;
+}
+
+/** Derive a child's bag from its parent's. */
+export function deriveBag(
+  parent:  InheritedBag,
+  raw:     RawNode,
+  tagDefs: Record<string, TagDef>,
+): InheritedBag {
+  const src = parent as unknown as Record<string, unknown>;
+  const bag: Record<string, unknown> = {};
+  for (const p of _props.values()) bag[p.name] = p.derive(src[p.name], raw, tagDefs);
+  return bag as unknown as InheritedBag;
+}
+
+/**
+ * A bag with every property at its "inherits nothing" value — what a node with
+ * no ancestry and no declarations would have. Used as a floor for nodes that
+ * arrive without one (an envoy transform may mint a node from scratch), so no
+ * consumer has to defend against a missing property.
+ */
+export function emptyBag(): InheritedBag {
+  const bag: Record<string, unknown> = {};
+  for (const p of _props.values()) bag[p.name] = p.empty;
+  return bag as unknown as InheritedBag;
+}
+
+/**
+ * Copy the inherited bag off an existing node. Used wherever a node is minted
+ * programmatically against a host (synthetic transclusion markers, error nodes)
+ * — such a node stands in for its host and inherits exactly what the host has,
+ * with no per-property decision to get wrong.
+ */
+export function bagOf(node: { [k: string]: any }): InheritedBag {
+  const bag: Record<string, unknown> = {};
+  for (const p of _props.values()) bag[p.name] = node[p.name];
+  return bag as unknown as InheritedBag;
+}
+
+// ── Registrations ─────────────────────────────────────────────────────────────
+
+/**
+ * meta — arbitrary author key/values, surfaced in the footer on select.
+ *
+ * Precedence, weakest to strongest: file head → inherited from parent → tag
+ * `meta.*` (tag def, then tag props) → the node's own `meta.*` attrs. Nearer
+ * and more specific wins.
+ */
+registerInherited<Record<string, unknown>>({
+  name:  'meta',
+  empty: {},
+  seed: (head) => {
+    const o: Record<string, unknown> = {};
+    for (const k of head.meta.keys()) o[k] = head.meta.get(k);
+    return o;
+  },
+  derive: (parentMeta, raw, tagDefs) => {
+    const tagMeta: Record<string, unknown> = {};
+    for (const tag of raw.tags) {
+      const def = tagDefs[tag.name];
+      if (!def) continue;
+      for (const [k, v] of def.allEntries()) {
+        if (k.startsWith('meta.')) tagMeta[k.slice(5)] = v;
+      }
+      for (const [k, v] of tag.props.allEntries()) {
+        if (k.startsWith('meta.')) tagMeta[k.slice(5)] = v;
+      }
+    }
+    const attrMeta: Record<string, unknown> = {};
+    for (const [k, v] of raw.attrs.allEntries()) {
+      if (k.startsWith('meta.')) attrMeta[k.slice(5)] = v;
+    }
+    return { ...parentMeta, ...tagMeta, ...attrMeta };
+  },
+});
+
+/**
+ * exhibit — the side-panel target a node presents for joint attention. Declared
+ * once with `{exhibit: ./path#slug}` and in force for that whole subtree, so
+ * selecting anything beneath the declaring node keeps the same panel up.
+ *
+ * A nested declaration overrides for its own subtree — nearest wins, like meta.
+ *
+ * Carried as the raw ref plus the declaring node's attrs (the panel reads
+ * `exhibit-pass` and `overflow` off them). The ref stays raw: inheritance never
+ * crosses a file, so every node holding a scope is in the file that declared it,
+ * and the reader resolves the ref against its own `sourceFile`.
+ */
+registerInherited<ExhibitScope | null>({
+  name:  'exhibit',
+  empty: null,
+  // A file-level {exhibit} would be a page-wide panel; not a feature today.
+  seed:  () => null,
+  derive: (parentScope, raw, tagDefs) => {
+    const attrs = mergeNodeAttrs(tagsNodeAttrs(raw.tags, tagDefs), raw.attrs);
+    const own   = attrs.get('exhibit');
+    return own ? { rawRef: own, attrs } : parentScope;
+  },
+});
+
+/**
+ * searchable — licenses search to descend past what is rendered, into authored
+ * children of a collapsed or unmounted subtree. Latching: once on, on for the
+ * whole subtree; there is no way to turn it back off further down.
+ */
+registerInherited<boolean>({
+  name:  'searchable',
+  empty: false,
+  seed: (head) => head.meta.has('searchable'),
+  derive: (parentSearchable, raw, tagDefs) => {
+    if (parentSearchable || raw.attrs.has('searchable')) return true;
+    for (const tag of raw.tags) {
+      const def = tagDefs[tag.name];
+      if (def?.has('node.searchable') || tag.props.has('node.searchable')) return true;
+    }
+    return false;
+  },
+});

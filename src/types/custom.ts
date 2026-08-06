@@ -26,6 +26,7 @@
 import type { TypeHandler, RenderNode, SourceNode } from '../render-node.js';
 import { factoryGet } from '../render-node.js';
 import { Multimap } from '../multimap.js';
+import { bagOf } from '../inherited.js';
 import { addressOrigin } from '../shared.js';
 import { envoyFor } from '../envoy-host.js';
 import { loadingHandler } from './blastocyte.js';
@@ -79,10 +80,10 @@ function errorNode(original: SourceNode, message: string): SourceNode {
     label:       `⚠ custom type failed: ${message}`,
     bodyLines:   [],
     children:    [],
-    meta:        {},
-    searchable:  original.searchable,
     sourceFile:  original.sourceFile,
-  };
+    // Stands in for the failed node, so it inherits exactly what it had.
+    ...bagOf(original),
+  } as SourceNode;
 }
 
 /** Entry point called by blastocyteFactory.create for a custom-typed node. */

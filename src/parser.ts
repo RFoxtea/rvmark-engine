@@ -32,6 +32,7 @@
  */
 
 import { Multimap } from './multimap.js';
+import { seedBag, deriveBag, type InheritedBag } from './inherited.js';
 
 export interface StateEntry {
   key: string;
@@ -235,16 +236,17 @@ export interface RawNode {
   children:   RawNode[];
 }
 
-// Resolved node — RawNode with meta fully computed from inherited context.
+// Resolved node — RawNode with its inherited properties fully computed.
+//
+// `meta` and `searchable` are inherited properties: resolved once, down the
+// source tree, at parse time. They are registered in inherited.ts and threaded
+// by resolveFile; see that file for why inheritance lives there and not in a
+// walk over rendered ancestors.
 export interface SourceNode extends RawNode {
   meta:       Record<string, unknown>;
   children:   SourceNode[];
-  // {searchable} resolved down the source tree at parse time, exactly like meta
-  // above: set on the node that carries the attribute and on every descendant.
-  // A parse-time property, not a rendered one — search must be able to ask
-  // "is this in scope?" about nodes that are authored but not mounted, which is
-  // the whole point of the feature (see search.ts).
   searchable: boolean;
+  exhibit:    import('./inherited.js').ExhibitScope | null;
   sourceFile: import('./source-file.js').SourceFile;  // stamped by SourceFile constructor
 }
 
@@ -536,8 +538,8 @@ export function assignOrdinals(
 }
 
 // ── resolveFile ───────────────────────────────────────────────────────────────
-// Second pass: merge inheritedHead into a RawFile, producing resolved SourceNodes
-// with fully-computed meta (inherited → file → parent → tag meta.* → attr meta.*).
+// Second pass: merge inheritedHead into a RawFile, producing SourceNodes with
+// every inherited property resolved (see inherited.ts).
 export function resolveFile(rawFile: RawFile, inheritedHead: Head): {
   head:    Head;
   roots:   SourceNode[];
@@ -550,42 +552,17 @@ export function resolveFile(rawFile: RawFile, inheritedHead: Head): {
   const head: Head = { meta: fileMeta, tagDefs: resolvedTagDefs, origins: resolvedOrigins };
   const nodeMap: Record<string, SourceNode> = {};
 
-  function fileMetaObj(): Record<string, unknown> {
-    const o: Record<string, unknown> = {};
-    for (const k of fileMeta.keys()) o[k] = fileMeta.get(k);
-    return o;
-  }
-
-  function resolveNode(raw: RawNode, parentMeta: Record<string, unknown>, parentSearchable: boolean): SourceNode {
-    const tagMeta: Record<string, unknown> = {};
-    // {searchable} inherits down the tree exactly like meta does, and is settled
-    // here rather than asked of the DOM later: its whole purpose is to license
-    // matching against content that is authored but not mounted, and the node
-    // carrying it is usually a root — which is not itself a row on the page.
-    let searchable = parentSearchable || raw.attrs.has('searchable');
-    for (const tag of raw.tags) {
-      const def = resolvedTagDefs[tag.name];
-      if (def?.has('node.searchable') || tag.props.has('node.searchable')) searchable = true;
-      if (!def) continue;
-      for (const [k, v] of def.allEntries()) {
-        if (k.startsWith('meta.')) tagMeta[k.slice(5)] = v;
-      }
-      for (const [k, v] of tag.props.allEntries()) {
-        if (k.startsWith('meta.')) tagMeta[k.slice(5)] = v;
-      }
-    }
-    const attrMeta: Record<string, unknown> = {};
-    for (const [k, v] of raw.attrs.allEntries()) {
-      if (k.startsWith('meta.')) attrMeta[k.slice(5)] = v;
-    }
-    const meta: Record<string, unknown> = { ...fileMetaObj(), ...parentMeta, ...tagMeta, ...attrMeta };
-    const node = { ...raw, meta, searchable, children: [] } as unknown as SourceNode;
+  // The parser knows only that inherited properties exist, seed from the head,
+  // and derive top-down. What they mean lives in inherited.ts.
+  function resolveNode(raw: RawNode, parentBag: InheritedBag): SourceNode {
+    const bag  = deriveBag(parentBag, raw, resolvedTagDefs);
+    const node = { ...raw, ...bag, children: [] } as unknown as SourceNode;
     nodeMap[node.slug] = node;
-    node.children = raw.children.map(c => resolveNode(c, meta, searchable));
+    node.children = raw.children.map(c => resolveNode(c, bag));
     return node;
   }
 
-  const roots = rawFile.roots.map(r => resolveNode(r, {}, fileMeta.has('searchable')));
+  const roots = rawFile.roots.map(r => resolveNode(r, seedBag(head)));
   return { head, roots, nodeMap };
 }
 
