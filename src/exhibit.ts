@@ -130,7 +130,15 @@ function _blankPanel({ showHint = true }: { showHint?: boolean } = {}): void {
   if (showHint) {
     const hint = document.createElement('div');
     hint.className = 'exhibit-hint';
-    hint.textContent = 'No exhibit active.\nPress Esc to close.';
+    // Two spans, not one string: the state applies everywhere, but the Escape
+    // instruction is keyboard-only and is hidden on coarse pointers, where the
+    // × button is the obvious affordance. See .exhibit-hint-key in styles.css.
+    const state = document.createElement('span');
+    state.textContent = 'No exhibit active.';
+    const key = document.createElement('span');
+    key.className = 'exhibit-hint-key';
+    key.textContent = 'Press Esc to close.';
+    hint.append(state, key);
     _panel.appendChild(hint);
   }
 }
@@ -329,10 +337,16 @@ export function exhibitNotifySelection(selectedRn: RenderNode): void {
 
 // ── Renderer interface ─────────────────────────────────────────────────────
 
-// Open the exhibit panel for the exhibit in force at rn. No-op if there is none.
+// Open the exhibit panel for the exhibit in force at rn.
+//
+// An explicit open — {action: exhibit}, or the keyboard equivalent — always
+// opens the panel, even where no exhibit is in force. The reader asked for the
+// panel; showing it empty ("No exhibit active") answers them, whereas doing
+// nothing looks like a broken control. Only selection-driven updates
+// (exhibitNotifySelection) leave a closed panel closed.
 export function exhibitOpenFromNode(rn: RenderNode): void {
   const config = exhibitConfigOf(rn);
-  if (!config) return;
+  if (!config) { _ensurePanel(); _blankPanel(); return; }
   void exhibitOpen(config.rawRef, config.sourceFileAddress, rn, config.attrs);
 }
 

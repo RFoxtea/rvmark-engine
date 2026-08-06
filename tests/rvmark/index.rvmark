@@ -72,6 +72,8 @@
 32. {#exhibit-outside} Node outside any exhibit scope
   1. {#exhibit-outside-child} Child outside any exhibit scope
 
+33. {#exhibit-action-no-scope; action: exhibit} Opens the panel with no exhibit in force
+
 2. {#embed-target} Embed target node
   1. Embed target child A
   2. Embed target child B

@@ -552,6 +552,37 @@ test.describe('footer and metadata', () => {
     await aiRow.click();
     await expect(page.locator('footer')).toContainText('Global AI Author');
   });
+
+  // {action: exhibit} on a node with no exhibit in force still opens the panel.
+  // Doing nothing would read as a broken control; the empty panel answers the
+  // reader and can be dismissed with Escape.
+  test('exhibit action with no exhibit in force opens an empty panel', async ({ page }) => {
+    await page.goto('/#exhibit-action-no-scope');
+    await waitForTree(page);
+    const row = await nodeContent(page, 'exhibit-action-no-scope');
+    await row.click(); // select
+    await row.click(); // activate
+    await expect(page.locator('.exhibit-panel')).toBeVisible();
+    await expect(page.locator('.exhibit-panel .exhibit-hint')).toContainText('No exhibit active');
+    await expect(page.locator('.exhibit-panel .exhibit-hint-key')).toBeVisible();
+    await expect(page.locator('.exhibit-panel .exhibit-iframe')).toHaveCount(0);
+  });
+
+  // On a coarse pointer the Escape line is hidden (the × button is the
+  // affordance), but the reader must still be told the panel is empty by design.
+  test.describe('touch device', () => {
+    test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+    test('empty exhibit still states its state, without the Escape line', async ({ page }) => {
+      await page.goto('/#exhibit-action-no-scope');
+      await waitForTree(page);
+      const row = await nodeContent(page, 'exhibit-action-no-scope');
+      await row.click();
+      await row.click();
+      await expect(page.locator('.exhibit-panel .exhibit-hint')).toContainText('No exhibit active');
+      await expect(page.locator('.exhibit-panel .exhibit-hint-key')).toBeHidden();
+    });
+  });
 });
 
 // ── Tag chips ─────────────────────────────────────────────────────────────────

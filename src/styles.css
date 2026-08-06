@@ -1436,11 +1436,16 @@ html.rvmark-exhibit-guest footer { display: none; }
 }
 
 .exhibit-hint {
-  white-space: pre-line;
+  flex-direction: column;
+  gap: 0.35em;
 }
 
+/* The Escape instruction only applies where there is a keyboard. The state it
+ * accompanies ("No exhibit active.") is shown regardless — on touch the ×
+ * button is affordance enough, but the reader still needs to know the panel is
+ * empty by design rather than broken. */
 @media (hover: none) and (pointer: coarse) {
-  .exhibit-hint { display: none; }
+  .exhibit-hint-key { display: none; }
 }
 
 /* ── Layout: exhibit open ── */
