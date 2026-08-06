@@ -1435,9 +1435,13 @@ html.rvmark-exhibit-guest footer { display: none; }
   word-break: break-word;
 }
 
+/* The two sentences are separate elements so the keyboard-only one can be
+ * hidden (below). They should still read as one block: stacked with no gap, so
+ * only the inherited line-height separates them — exactly as the single \n did
+ * under white-space: pre-line.
+ * (The shared rule above supplies the flex centering that positions the hint.) */
 .exhibit-hint {
   flex-direction: column;
-  gap: 0.35em;
 }
 
 /* The Escape instruction only applies where there is a keyboard. The state it
