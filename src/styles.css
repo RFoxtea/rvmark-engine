@@ -1467,9 +1467,13 @@ html.rvmark-exhibit-guest footer { display: none; }
 .exhibit-close:hover { color: var(--accent); border-color: var(--accent); }
 .exhibit-close:focus { opacity: 1; outline: 1px solid var(--accent); }
 
-/* The iframe fills all available space */
+/* The iframe fills all available space. `display: block` is load-bearing: an
+ * iframe is inline-replaced by default, so it sits on a text baseline and the
+ * line box reserves descender space under it — a few pixels of overflow below
+ * the panel that no amount of height: 100% removes. */
 .exhibit-iframe {
   border: none;
+  display: block;
   width: 100%;
   flex: 1;
 }
