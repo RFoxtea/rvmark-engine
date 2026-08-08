@@ -99,10 +99,24 @@ function _ensurePanel(): void {
   _panel = document.createElement('div');
   _panel.className = 'exhibit-panel';
   // Add the close button once; it lives for the _panel's lifetime.
+  //
+  // The × is drawn, not typed. As a character (U+00D7) it is centred on its
+  // typographic metrics rather than its ink: the multiplication sign aligns
+  // with digits and operators, sitting on the maths axis above the middle of
+  // the line box, so centring the box still leaves the mark visibly high — and
+  // by a different amount in every font the button might inherit. Two lines
+  // through the middle of a square viewBox are centred by construction, are
+  // identical on every platform, and scale with the button rather than with the
+  // font stack.
   const closeBtn = document.createElement('button');
   closeBtn.className = 'exhibit-close';
-  closeBtn.textContent = '×';
+  closeBtn.innerHTML =
+    '<svg viewBox="0 0 16 16" aria-hidden="true">' +
+    '<path d="M4.5 4.5 11.5 11.5M11.5 4.5 4.5 11.5"/></svg>';
   closeBtn.title = 'Close exhibit (Escape)';
+  // The glyph carried the accessible name while it was text; an aria-hidden
+  // drawing carries none, so it is stated.
+  closeBtn.setAttribute('aria-label', 'Close exhibit');
   closeBtn.tabIndex = -1;
   closeBtn.addEventListener('click', () => exhibitClose());
   _panel.appendChild(closeBtn);

@@ -48,6 +48,35 @@
   --md-fade-h: 2rem;
   --node-max-w: 600px;
 
+  /* Type sizes, named for the role rather than the measurement.
+
+     Three steps below body, not six. The literals these replaced ran 0.68,
+     0.78, 0.82, 0.85, 0.88 and 0.9rem — but 0.82 through 0.9 is 13.1px to
+     14.4px at a 16px root: four "sizes" spanning 1.3px, which no reader can
+     tell apart. That was drift between edits made at different times, not a
+     scale, and collapsing it loses no distinction that was ever visible.
+
+     What survives is what can actually be told apart: chrome text, annotations
+     clearly smaller than it, and one step between for the labels on a panel's
+     own furniture, which should recede without shrinking to the size of a tag.
+
+     Only absolute sizes are tokens. A rule that sizes itself against its parent
+     — code inside a label, ruby annotations — stays in em, because what it
+     wants is "smaller than whatever contains me", not a fixed step. */
+  --text-annotation: 0.68rem;  /* node ids, tags */
+  --text-affordance: 0.78rem;  /* labels on panel furniture, e.g. a download link */
+  --text-chrome:     0.85rem;  /* footer, toggles, captions, hints, body chrome */
+
+  /* The markdown heading ladder: a real descending scale, and rendered content
+     rather than interface, so it is kept apart from the chrome sizes above. It
+     bottoms out at --text-chrome, an h6 already being as small as the
+     interface's own text. */
+  --text-h2: 1.25rem;
+  --text-h3: 1.1rem;
+  --text-h4: 1rem;
+  --text-h5: 0.92rem;
+  --text-h6: var(--text-chrome);
+
   /* ── Chrome icons ──
      The engine's own UI markers, as inline SVG data: URIs. They are inlined
      rather than fetched because chrome must render before (and despite) any
@@ -141,16 +170,10 @@ header h1 {
   color: var(--fg);
 }
 
-header .meta {
-  font-size: 0.78rem;
-  color: var(--muted);
-  margin-top: 0.3rem;
-}
-
 /* ── Footer ── */
 footer {
   margin-top: 1rem;
-  font-size: 0.85rem;
+  font-size: var(--text-chrome);
   color: var(--muted);
   text-align: center;
 }
@@ -185,7 +208,7 @@ footer {
   position: relative;
   flex-shrink: 0;
   width: var(--bullet-w);
-  font-size: 0.85rem;
+  font-size: var(--text-chrome);
   color: var(--muted);
   /* No cursor here: see .bullet-clickable below — the pointer is asserted only
      where a click actually does something. */
@@ -476,7 +499,7 @@ footer {
   padding: 0.1rem 0.6rem;
   border-bottom: 2px solid var(--border-tree);
   text-decoration: none;
-  font-size: 0.85rem;
+  font-size: var(--text-chrome);
   color: var(--muted);
   transition: color 0.1s, border-color 0.1s;
   cursor: pointer;
@@ -492,7 +515,7 @@ footer {
 
 /* ── Permalink ── */
 .node-id {
-  font-size: 0.68rem;
+  font-size: var(--text-annotation);
   color: var(--dim);
   opacity: 0;
   transition: opacity 0.15s;
@@ -555,7 +578,7 @@ footer {
 /* ── Tag chips ── */
 .node-tag {
   display: inline-block;
-  font-size: 0.68rem;
+  font-size: var(--text-annotation);
   line-height: 1.2;
   padding: 0 5px;
   border: 1px solid var(--tag-color, var(--border-tag));
@@ -939,7 +962,7 @@ footer .footer-section { white-space: nowrap; }
 
 .static-tree > li {
   position: relative;
-  font-size: 0.88rem;
+  font-size: var(--text-chrome);
   line-height: 1.5;
   word-break: break-word;
 }
@@ -957,7 +980,7 @@ footer .footer-section { white-space: nowrap; }
   width: var(--bullet-w);
   text-align: center;
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: var(--text-chrome);
 }
 
 /* Links */
@@ -980,7 +1003,7 @@ footer .footer-section { white-space: nowrap; }
 /* Tag chips */
 .static-tag {
   display: inline-block;
-  font-size: 0.68rem;
+  font-size: var(--text-annotation);
   line-height: 1.2;
   padding: 0 5px;
   border: 1px solid var(--tag-color, var(--border-tag));
@@ -1008,7 +1031,7 @@ footer .footer-section { white-space: nowrap; }
   margin: 0.3rem 0 0.5rem;
   padding-left: 0.5rem;
   border-left: 2px solid var(--border-tree);
-  font-size: 0.85rem;
+  font-size: var(--text-chrome);
   color: var(--fg);
 }
 
@@ -1034,7 +1057,7 @@ footer .footer-section { white-space: nowrap; }
 .static-body th, .static-body td {
   border: 1px solid var(--border);
   padding: 0.2rem 0.5rem;
-  font-size: 0.82rem;
+  font-size: var(--text-chrome);
 }
 
 /* Transclusion references — distinct from regular links */
@@ -1076,7 +1099,7 @@ a.static-iframe-link {
 .static-remote {
   color: var(--muted);
   font-style: italic;
-  font-size: 0.82rem;
+  font-size: var(--text-chrome);
 }
 
 /* ── Divider ── */
@@ -1219,11 +1242,11 @@ html.rvmark-exhibit-guest footer { display: none; }
   margin: 0.6rem 0 0.2rem;
   font-weight: 600;
 }
-.md-body h2 { font-size: 1.25rem; }
-.md-body h3 { font-size: 1.1rem; }
-.md-body h4 { font-size: 1rem; }
-.md-body h5 { font-size: 0.92rem; }
-.md-body h6 { font-size: 0.85rem; color: var(--muted); }
+.md-body h2 { font-size: var(--text-h2); }
+.md-body h3 { font-size: var(--text-h3); }
+.md-body h4 { font-size: var(--text-h4); }
+.md-body h5 { font-size: var(--text-h5); }
+.md-body h6 { font-size: var(--text-h6); color: var(--muted); }
 
 .md-body ul, .md-body ol {
   padding-left: 1.2rem;
@@ -1335,7 +1358,7 @@ html.rvmark-exhibit-guest footer { display: none; }
   padding: 0.2rem 1rem 0.3rem calc(var(--bullet-w) + 0.3rem);
   border-left: 2px solid var(--border);
   margin-bottom: 0.5rem;
-  font-size: 0.9rem;
+  font-size: var(--text-chrome);
   line-height: 1.6;
 }
 
@@ -1427,7 +1450,7 @@ html.rvmark-exhibit-guest footer { display: none; }
 
 .img-body figcaption {
   margin-top: 0.3rem;
-  font-size: 0.82rem;
+  font-size: var(--text-chrome);
   color: var(--muted);
 }
 
@@ -1446,21 +1469,40 @@ html.rvmark-exhibit-guest footer { display: none; }
   display: none;
 }
 
+/* Square box, and the × inside it is drawn rather than typed — see the comment
+ * in exhibit.ts. A text × is centred on its typographic metrics, not its ink,
+ * so it sits high in the box by a font-dependent amount that no box centring
+ * can correct. Two lines across a square viewBox have no such offset. */
 .exhibit-close {
   position: absolute;
   top: 0.4rem;
   right: 0.4rem;
   z-index: 1;
+  width: 1.6rem;
+  height: 1.6rem;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--muted);
-  font-size: 1rem;
-  line-height: 1;
-  padding: 0.1rem 0.4rem;
+  padding: 0;
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s;
+}
+/* Sized in the button's own box rather than in em, so the mark cannot drift
+ * with an inherited font-size. `display: block` keeps the svg off a text
+ * baseline, which would reintroduce the descender gap the glyph had. */
+.exhibit-close svg {
+  display: block;
+  width: 0.75rem;
+  height: 0.75rem;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  fill: none;
 }
 .exhibit-panel:hover .exhibit-close { opacity: 1; }
 @media (hover: none) { .exhibit-close { opacity: 1; } }
@@ -1486,7 +1528,7 @@ html.rvmark-exhibit-guest footer { display: none; }
   justify-content: center;
   padding: 2rem;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: var(--text-chrome);
   text-align: center;
 }
 
