@@ -9,6 +9,19 @@
  * `.get(k)` returns the last value (the common case); `.getAll(k)` returns every
  * value. Consumers that need every value (e.g. `on-*` handler chains) must use
  * `.getAll()` explicitly — no silent merging or discarding.
+ *
+ * Which accessor an attribute warrants depends on what repeating it means:
+ *
+ *   composition — each declaration is an independent thing that happens, so all
+ *     of them apply. `on-*` (two handlers are two effects), `show-when` (two
+ *     conditions are ANDed), `class`. Read with .getAll().
+ *
+ *   override — the attribute states what a node *is*, so a second declaration
+ *     replaces the first rather than adding to it. `transclude`, the `*-pass`
+ *     permission grants, and ordinary scalars like `width`. Read with .get().
+ *     Where several values are genuinely wanted these take a comma-separated
+ *     list in one declaration, which also keeps one entry per key — `*-pass`
+ *     relies on that to avoid two conflicting modes for the same state key.
  */
 
 export class Multimap {
