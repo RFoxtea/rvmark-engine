@@ -603,7 +603,6 @@ footer {
   border: 1px solid var(--tag-color, var(--border-tag));
   border-radius: 3px;
   color: var(--tag-color, var(--muted));
-  margin-right: 0.35rem;
   vertical-align: 0.05em;
   white-space: nowrap;
   flex-shrink: 0;
@@ -1126,7 +1125,6 @@ footer .footer-section { white-space: nowrap; }
   border: 1px solid var(--tag-color, var(--border-tag));
   border-radius: 3px;
   color: var(--tag-color, var(--muted));
-  margin-right: 0.35rem;
   vertical-align: 0.05em;
   white-space: nowrap;
   text-decoration: none;

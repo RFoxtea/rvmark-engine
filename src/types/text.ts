@@ -282,8 +282,9 @@ class TextTypeHandler extends BaseTypeHandler {
               const lblToText = (l: HTMLElement): string => {
                 let out = '';
                 for (const child of l.childNodes) {
+                  // No trailing space — a real one follows every chip in the DOM.
                   if (child.nodeType === Node.ELEMENT_NODE && (child as HTMLElement).classList?.contains('node-tag'))
-                    out += `[${child.textContent}] `;
+                    out += `[${child.textContent}]`;
                   else
                     out += child.textContent ?? '';
                 }

@@ -63,6 +63,10 @@ export function buildTagChips(tags: Tag[], sourceTagDefs?: Record<string, TagDef
     if (color) chip.style.setProperty('--tag-color', color);
     if (tip)   chip.title = tip;
     frag.appendChild(chip);
+    // A real space, not just the chip's margin: the gap has to survive leaving
+    // the page. Without it a copied label reads '[6]The general form...' —
+    // margin is presentation, and the clipboard takes the text.
+    frag.appendChild(document.createTextNode(' '));
   }
   return frag;
 }
