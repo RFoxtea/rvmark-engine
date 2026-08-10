@@ -13,13 +13,14 @@
  */
 
 import { addressToHref } from './shared.js';
-import { tagsNodeAttrs, mergeNodeAttrs, resolveTagDef } from './tags.js';
+import { resolveTagDef } from './tags.js';
 import { scrollRowIntoMiddle } from './scroll.js';
 import type { SourceNode } from './parser.js';
 import { parseStateEntries } from './parser.js';
 import { Multimap } from './multimap.js';
 import { bagOf } from './inherited.js';
-import type { ResolvedAttrs } from './render-node.js';
+import { resolveAttrs } from './source-file.js';
+import type { ResolvedAttrs } from './source-file.js';
 import { RenderNode } from './render-node.js';
 import { resolveRef, resolveEffectiveChildren, resolveTransclusionConfig } from './transclusion.js';
 import { TRANSCLUDE_DEADLINE_MS } from './constants.js';
@@ -81,7 +82,7 @@ export function parsePass(raw: string): PassEntry[] {
 
 export async function expandNode(rn: RenderNode, transcludeRef?: string): Promise<void> {
   const sourceNode = rn.sourceNode;
-  const attrs = mergeNodeAttrs(tagsNodeAttrs(sourceNode.tags, sourceNode.sourceFile?.tagDefs), sourceNode.attrs);
+  const attrs = resolveAttrs(sourceNode);
   const { embedVal, childrenList: _childrenList } = resolveTransclusionConfig(sourceNode, attrs);
   // A caller-supplied ref (listbox option) or a link-mode embedVal is just a
   // single-ref children list. Route both through the list path below so the
@@ -435,14 +436,6 @@ export function applyListItemProps(content: HTMLElement, attrs: ResolvedAttrs): 
     const n = Number.parseInt(raw, 10);
     if (Number.isFinite(n)) content.style.setProperty('--li-start', String(n));
   }
-}
-
-// ── Attr resolution ────────────────────────────────────────────────────────
-
-// Merge tag node.* overrides onto node attrs. Call in factory.create() and
-// store result as handler field — SourceNode stays pure, resolution happens once.
-export function resolveAttrs(node: SourceNode): ResolvedAttrs {
-  return mergeNodeAttrs(tagsNodeAttrs(node.tags, node.sourceFile.tagDefs), node.attrs);
 }
 
 // ── Permalink helpers ──────────────────────────────────────────────────────

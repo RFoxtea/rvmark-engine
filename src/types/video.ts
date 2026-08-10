@@ -44,7 +44,8 @@
 
 import type { NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { resolveAttrs, treeNavKeydown, actionKeydown, copyPermalink, expandNode } from '../handler-utils.js';
+import { treeNavKeydown, actionKeydown, copyPermalink, expandNode } from '../handler-utils.js';
+import { resolveAttrs } from '../source-file.js';
 import { BaseTypeHandler } from '../base-handler.js';
 
 import { wireSelectThenAction } from '../interaction.js';

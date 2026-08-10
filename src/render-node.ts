@@ -19,7 +19,8 @@ export type { SourceNode };
 export { parseShowWhen };
 import { StateFrame, buildStatePass, prerootFrame } from './state.js';
 import type { StateNode, PassEntry } from './state.js';
-import { tagsNodeAttrs, mergeNodeAttrs } from './tags.js';
+import { resolveAttrs } from './source-file.js';
+import type { ResolvedAttrs } from './source-file.js';
 import { isOrContainsPermalink } from './transclusion.js';
 import { exhibitNotifySelection } from './exhibit.js';
 import { applyEventAttr } from './handler-utils.js';
@@ -29,7 +30,9 @@ import { MOUNT_SETTLE_MS } from './constants.js';
 export type { StateFrame as StateView };
 
 // ── ResolvedAttrs ─────────────────────────────────────────────────────────────
-export type ResolvedAttrs = NodeAttrs;
+// Defined with resolveAttrs in source-file.ts; re-exported here because the
+// TypeHandler interface below is its most-read consumer.
+export type { ResolvedAttrs };
 
 // ── TypeHandler ───────────────────────────────────────────────────────────────
 export interface TypeHandler {
@@ -209,7 +212,7 @@ export function buildRenderNode(
   const isFocusTarget   = !!focusSlug && (node.slug === focusSlug || node.attrs.get('id') === focusSlug || permalinkBase === focusSlug);
   const isFocusAncestor = !!focusSlug && !isFocusTarget && isOrContainsPermalink(node, permalinkBase, focusSlug);
 
-  const attrs = mergeNodeAttrs(tagsNodeAttrs(node.tags, node.sourceFile?.tagDefs), node.attrs);
+  const attrs = resolveAttrs(node);
 
   const rn = new RenderNode(node, parentState);
   rn.permalinkId = permalinkBase ?? '';
@@ -317,7 +320,7 @@ export class RenderNode {
   constructor(node: SourceNode, parentState: StateNode = prerootFrame) {
     this.index      = _rnIndex++;
     this.sourceNode = node;
-    this._attrs     = mergeNodeAttrs(tagsNodeAttrs(node.tags, node.sourceFile?.tagDefs), node.attrs);
+    this._attrs     = resolveAttrs(node);
     this.li         = document.createElement('li');
     this.children   = document.createElement('div');
 
@@ -368,9 +371,8 @@ export class RenderNode {
   }
 
   watchChildren(nodes: SourceNode[], callback: (anyVisible: boolean) => void): () => void {
-    const nodeAttrs = (n: SourceNode) => mergeNodeAttrs(tagsNodeAttrs(n.tags, n.sourceFile?.tagDefs), n.attrs);
     const isVisible = (c: SourceNode) => {
-      const a = nodeAttrs(c);
+      const a = resolveAttrs(c);
       if (a.has('draft')) return false;
       return !a.getAll('show-when').some(sw => evalShowWhen(sw, this.state));
     };
@@ -379,7 +381,7 @@ export class RenderNode {
 
     const keys = new Set<string>();
     for (const child of nodes) {
-      for (const sw of nodeAttrs(child).getAll('show-when'))
+      for (const sw of resolveAttrs(child).getAll('show-when'))
         for (const cond of parseShowWhen(sw)) keys.add(cond.key);
     }
     if (!keys.size) return () => {};
@@ -441,7 +443,7 @@ export class RenderNode {
   replaceHandler(sourceNode: SourceNode): void {
     this.sourceNode = sourceNode;
     this.permalinkId = sourceNode.permalinkId ?? '';
-    this._attrs = mergeNodeAttrs(tagsNodeAttrs(sourceNode.tags, sourceNode.sourceFile?.tagDefs), sourceNode.attrs);
+    this._attrs = resolveAttrs(sourceNode);
     blastocyteFactory.create(this);
   }
 
@@ -530,12 +532,10 @@ export class RenderNode {
     if (this._pendingSlots) this._drainSlots(this._pendingSlots);
     this._pendingSlots = slots;
 
-    const nodeAttrs = (node: SourceNode) => mergeNodeAttrs(tagsNodeAttrs(node.tags, node.sourceFile?.tagDefs), node.attrs);
-
     // Spawn the initial batch (those not deferred by show-when).
     const initialRns: RenderNode[] = [];
     for (const slot of slots) {
-      const showWhenRaws = nodeAttrs(slot.node).getAll('show-when');
+      const showWhenRaws = resolveAttrs(slot.node).getAll('show-when');
       const rn = initSlot(slot, showWhenRaws, focusSlug);
       if (rn) { ul.appendChild(rn.li); initialRns.push(rn); }
     }

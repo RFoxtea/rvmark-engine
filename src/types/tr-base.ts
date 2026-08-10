@@ -6,7 +6,8 @@
  */
 
 import type { RenderNode, SourceNode } from '../render-node.js';
-import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps, wireBulletActions } from '../handler-utils.js';
+import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps, wireBulletActions } from '../handler-utils.js';
+import { resolveAttrs } from '../source-file.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { resolveTransclusionConfig } from '../transclusion.js';
 import { mdInlineWithSpansContinued } from '../markdown.js';

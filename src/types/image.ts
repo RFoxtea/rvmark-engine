@@ -12,7 +12,8 @@
 
 import type { NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { resolveAttrs, copyPermalink, treeNavKeydown, actionKeydown, expandNode } from '../handler-utils.js';
+import { copyPermalink, treeNavKeydown, actionKeydown, expandNode } from '../handler-utils.js';
+import { resolveAttrs } from '../source-file.js';
 import { BaseTypeHandler } from '../base-handler.js';
 
 const DARK_MODE_CLASSES: Record<string, string> = {

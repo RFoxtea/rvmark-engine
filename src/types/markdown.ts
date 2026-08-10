@@ -20,7 +20,8 @@
 
 import type { NodeTypeFactory, SourceNode, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { resolveAttrs, treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, wireBulletActions } from '../handler-utils.js';
+import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, wireBulletActions } from '../handler-utils.js';
+import { resolveAttrs } from '../source-file.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';

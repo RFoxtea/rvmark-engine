@@ -49,10 +49,11 @@
  */
 
 import type { SourceNode } from './parser.js';
+import { resolveAttrs } from './source-file.js';
 import { isSearchable, RenderNode } from './render-node.js';
 import { scrollRowIntoMiddle } from './scroll.js';
 import { mountSearchRoot } from './shell.js';
-import { resolveTagDef, mergeNodeAttrs, tagsNodeAttrs } from './tags.js';
+import { resolveTagDef } from './tags.js';
 import { resolveSlugInFile } from './shared.js';
 
 interface SearchMatch {
@@ -124,7 +125,7 @@ function mountedNodes(): Map<SourceNode, HTMLElement> {
 // Deliberately local-only for now: a cross-file ref would need its file loaded,
 // and a miss there is indistinguishable from a broken ref.
 function localTranscludeTarget(node: SourceNode): SourceNode | null {
-  const attrs = mergeNodeAttrs(tagsNodeAttrs(node.tags, node.sourceFile?.tagDefs), node.attrs);
+  const attrs = resolveAttrs(node);
   const raw = attrs.get('transclude');
   // Only a single bare `#id`. A list, a `*`, or any path-bearing ref is
   // cross-file or children-mode and out of scope here.

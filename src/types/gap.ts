@@ -12,7 +12,7 @@
 
 import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { resolveAttrs } from '../handler-utils.js';
+import { resolveAttrs } from '../source-file.js';
 import { resolveTagDef } from '../tags.js';
 
 class GapTypeHandler implements TypeHandler {

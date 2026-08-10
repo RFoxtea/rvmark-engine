@@ -1,6 +1,6 @@
 import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
+import { resolveAttrs } from '../source-file.js';
 import { factoryGet, factoryRegister } from '../type-registry.js';
-import { tagsNodeAttrs, mergeNodeAttrs } from '../tags.js';
 import { resolveTransclusionConfig, resolveRef } from '../transclusion.js';
 import { buildStatePass } from '../state.js';
 import { parsePass, treeNavKeydown, makeErrorNode } from '../handler-utils.js';
@@ -9,7 +9,7 @@ import { createCustomTypeHandler } from './custom.js';
 
 function differentiate(rn: RenderNode): TypeHandler {
   const node     = rn.sourceNode;
-  const attrs    = mergeNodeAttrs(tagsNodeAttrs(node.tags, node.sourceFile?.tagDefs), node.attrs);
+  const attrs    = resolveAttrs(node);
   const typeName = attrs.get('type') ?? 'text';
   const factory  = factoryGet(typeName);
 
@@ -65,7 +65,7 @@ factoryRegister('loading', { create: (rn) => loadingHandler(rn) });
 export const blastocyteFactory: NodeTypeFactory = {
   create(rn: RenderNode): TypeHandler {
     const node  = rn.sourceNode;
-    const attrs = mergeNodeAttrs(tagsNodeAttrs(node.tags, node.sourceFile?.tagDefs), node.attrs);
+    const attrs = resolveAttrs(node);
     const { embedVal, transcludeMode } = resolveTransclusionConfig(node, attrs);
 
     if (transcludeMode === 'link') {

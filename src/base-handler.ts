@@ -11,7 +11,8 @@
  */
 
 import type { TypeHandler, RenderNode } from './render-node.js';
-import { resolveAttrs, applyTagClasses, wireFocusGating } from './handler-utils.js';
+import { applyTagClasses, wireFocusGating } from './handler-utils.js';
+import { resolveAttrs } from './source-file.js';
 import type { FocusGating } from './handler-utils.js';
 
 export abstract class BaseTypeHandler implements TypeHandler {
