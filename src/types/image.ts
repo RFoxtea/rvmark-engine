@@ -1,5 +1,5 @@
 /**
- * types/image.new.ts
+ * types/image.ts
  *
  * Renders an image in the node body.
  * Syntax: {= image} https://example.com/photo.jpg
@@ -73,9 +73,17 @@ class ImageTypeHandler extends BaseTypeHandler {
     content.addEventListener('keydown', (e) => {
       if (e.target !== content) return;
       if (actionKeydown(e, renderNode)) return;
-      if (e.key === 'c' && !e.ctrlKey && !e.metaKey) {
-        copyPermalink(renderNode);
-        e.preventDefault();
+      if (e.key === 'c') {
+        if (e.ctrlKey || e.metaKey) {
+          // Defer to the browser whenever there is a selection to copy.
+          if (url && !window.getSelection()?.toString()) {
+            copyImage(url, alt);
+            e.preventDefault();
+          }
+        } else {
+          copyPermalink(renderNode);
+          e.preventDefault();
+        }
         return;
       }
       treeNavKeydown(e, content, li);
@@ -87,6 +95,45 @@ class ImageTypeHandler extends BaseTypeHandler {
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// image/png is the only bitmap type the Clipboard API requires implementations
+// to support, so anything else is re-encoded through a canvas. That needs the
+// image to be CORS-readable, and it rasterises — an animated GIF becomes one
+// frame — so the html and plain flavours are always written alongside it as
+// the lossless fallbacks a receiving app can prefer.
+async function pngBlob(url: string): Promise<Blob> {
+  const res = await fetch(url, { mode: 'cors' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const blob = await res.blob();
+  if (blob.type === 'image/png') return blob;
+
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement('canvas');
+  canvas.width  = bitmap.width;
+  canvas.height = bitmap.height;
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  return await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(b => b ? resolve(b) : reject(new Error('encode failed')), 'image/png');
+  });
+}
+
+function copyImage(url: string, alt: string): void {
+  const absolute = new URL(url, window.location.href).href;
+  const html = `<img src="${esc(absolute)}" alt="${esc(alt)}">`;
+  const item = {
+    // Safari rejects a write whose ClipboardItem was built from an awaited
+    // value — the gesture is considered spent — so the png is handed over as a
+    // pending promise instead.
+    'image/png':  pngBlob(absolute),
+    'text/html':  new Blob([html],     { type: 'text/html' }),
+    'text/plain': new Blob([absolute], { type: 'text/plain' }),
+  };
+  navigator.clipboard.write([new ClipboardItem(item)])
+    // A tainted canvas, a CORS-less host or an unsupported source format all
+    // land here; the URL is still worth having.
+    .catch(() => navigator.clipboard.writeText(absolute).catch(() => {}));
 }
 
 const imageFactory: NodeTypeFactory = {
