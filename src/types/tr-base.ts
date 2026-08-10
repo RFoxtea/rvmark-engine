@@ -213,7 +213,24 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
           e.preventDefault();
           return;
         case 'c':
-          if (!e.ctrlKey && !e.metaKey) {
+          if (e.ctrlKey || e.metaKey) {
+            // Defer to the browser whenever there is a selection to copy.
+            if (!window.getSelection()?.toString()) {
+              // Plain text is the row as it is written on the site: cells
+              // joined by '|', normalised through the same parse the cells
+              // themselves came from.
+              const text = parseCells(rn.sourceNode.label).join(' | ');
+              const html = [...content.querySelectorAll<HTMLElement>(`.${this.cfg.cellClass}`)]
+                .map(c => c.innerHTML).join(' | ');
+              navigator.clipboard.write([
+                new ClipboardItem({
+                  'text/html':  new Blob([html], { type: 'text/html' }),
+                  'text/plain': new Blob([text], { type: 'text/plain' }),
+                }),
+              ]).catch(() => navigator.clipboard.writeText(text));
+              e.preventDefault();
+            }
+          } else {
             copyPermalink(rn);
             e.preventDefault();
           }

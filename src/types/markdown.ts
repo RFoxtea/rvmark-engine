@@ -80,6 +80,7 @@ class MarkdownTypeHandler extends BaseTypeHandler {
   readonly managesReady = true as const;
   private _listboxNav?: ListboxNav;
   private _actionVal:  string | null = null;
+  private _src:        string | null = null;
 
   constructor(rn: RenderNode) {
     super(rn, 'a[href], pre, .md-body-scroll, .md-math-block, .katex-display, .katex-html');
@@ -154,6 +155,9 @@ class MarkdownTypeHandler extends BaseTypeHandler {
     // this settles; MOUNT_SETTLE_MS hides a fast load entirely.
     const renderInto = (src: string) => {
       const { html, spanMap } = mdToHtmlWithSpans(src);
+      // Kept for Ctrl+C, which copies the block's markdown source — the same
+      // text whether it was written inline or fetched from a file.
+      this._src = src;
       scroller.innerHTML = html;
       initOverflowFade(outer, scroller);
       this.wireListboxOptions(scroller, spanMap, attrs, sourceNode);
@@ -244,7 +248,20 @@ class MarkdownTypeHandler extends BaseTypeHandler {
           return;
         }
         case 'c':
-          if (!e.ctrlKey && !e.metaKey) {
+          if (e.ctrlKey || e.metaKey) {
+            // Defer to the browser whenever there is a selection to copy.
+            if (this._src && !window.getSelection()?.toString()) {
+              const body = content.querySelector<HTMLElement>('.md-body-scroll');
+              const html = body?.innerHTML ?? '';
+              navigator.clipboard.write([
+                new ClipboardItem({
+                  'text/html':  new Blob([html],       { type: 'text/html' }),
+                  'text/plain': new Blob([this._src], { type: 'text/plain' }),
+                }),
+              ]).catch(() => navigator.clipboard.writeText(this._src!));
+              e.preventDefault();
+            }
+          } else {
             copyPermalink(this.rn);
             e.preventDefault();
           }
