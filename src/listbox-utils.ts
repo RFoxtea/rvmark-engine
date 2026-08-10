@@ -13,11 +13,15 @@
  */
 
 import { createListboxNav } from './listbox.js';
-import type { Multimap } from './multimap.js';
+import { Multimap } from './multimap.js';
 import type { ListboxNav } from './listbox.js';
 import type { ParsedSpanAttrs } from './markdown.js';
 import type { RenderNode, SourceNode } from './render-node.js';
-import { expandNode, applyEventAttr, resolveStateVal } from './handler-utils.js';
+import { expandNode, applyEventAttr } from './handler-utils.js';
+
+// Shared empty attr set for elements with no parsed span (e.g. an author-written
+// [role=option] that never went through the span extension).
+const EMPTY_SPAN: ParsedSpanAttrs = new Multimap();
 
 export interface ListboxConfig {
   /** The element that receives role=listbox and contains [role=option] elements. */
@@ -49,17 +53,22 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
 
   let _prevEl: HTMLElement | null = null;
 
-  const spanOf = (el: HTMLElement): ParsedSpanAttrs => (el as any)._rvmarkSpan ?? {};
+  const spanOf = (el: HTMLElement): ParsedSpanAttrs => (el as any)._rvmarkSpan ?? EMPTY_SPAN;
+
+  // Every value of an event key fires, in source order — a span may declare the
+  // same on-* handler more than once.
+  const fireSpanEvent = (el: HTMLElement, key: string) => {
+    for (const v of spanOf(el).getAll(key)) applyEventAttr(v, rn);
+  };
 
   const applyOptionSelection = (el: HTMLElement) => {
     const params = spanOf(el);
-    for (const { key, op, val } of params.stateAssignments ?? []) {
-      if (op === 'delete') rn.state.delete(key);
-      else if (op === 'set') rn.state.set(key, resolveStateVal(val, rn.state));
-      else rn.state.declare(key, resolveStateVal(val, rn.state));
-    }
-    if (params.transclude) {
-      void expandNode(rn, params.transclude);
+    // A span's state mutations live under on-action (bare `let`/`set`/`remove`
+    // normalize to it), and every one of them applies — hence getAll.
+    for (const v of params.getAll('on-action')) applyEventAttr(v, rn);
+    const transclude = params.get('transclude');
+    if (transclude) {
+      void expandNode(rn, transclude);
     } else {
       rn.setChildren(sourceNode.children as SourceNode[], null);
     }
@@ -72,12 +81,12 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
     {
       onSelect(_idx, el) {
         if (_prevEl && _prevEl !== el) {
-          applyEventAttr(spanOf(_prevEl)['on-deselect'], rn);
-          applyEventAttr(spanOf(_prevEl)['on-blur'],     rn);
+          fireSpanEvent(_prevEl, 'on-deselect');
+          fireSpanEvent(_prevEl, 'on-blur');
         }
         applyOptionSelection(el);
-        applyEventAttr(spanOf(el)['on-select'], rn);
-        applyEventAttr(spanOf(el)['on-focus'],  rn);
+        fireSpanEvent(el, 'on-select');
+        fireSpanEvent(el, 'on-focus');
         _prevEl = el;
         if (scrollOnSelect) {
           const elRect        = el.getBoundingClientRect();
@@ -87,13 +96,13 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
         }
       },
       onActivate(_idx, el) {
-        applyEventAttr(spanOf(el)['on-action'], rn);
+        fireSpanEvent(el, 'on-action');
         if (el.tagName === 'A') (el as HTMLAnchorElement).click();
       },
       onReset() {
         if (_prevEl) {
-          applyEventAttr(spanOf(_prevEl)['on-deselect'], rn);
-          applyEventAttr(spanOf(_prevEl)['on-blur'],     rn);
+          fireSpanEvent(_prevEl, 'on-deselect');
+          fireSpanEvent(_prevEl, 'on-blur');
           _prevEl = null;
         }
         rn.setChildren(sourceNode.children as SourceNode[], null);
@@ -106,7 +115,7 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
 
   // Apply default {selected} if any option declares it
   const options    = [...optionContainer.querySelectorAll<HTMLElement>('[role="option"]')];
-  const defaultIdx = options.findIndex(el => (el as any)._rvmarkSpan?.selected);
+  const defaultIdx = options.findIndex(el => (el as any)._rvmarkSpan?.has('selected'));
   if (defaultIdx !== -1) nav.select(defaultIdx);
 
   if (volatile) {
@@ -123,5 +132,5 @@ export function isListbox(
   spanMap: Map<number, ParsedSpanAttrs>,
 ): boolean {
   return attrs.has('listbox') ||
-    [...spanMap.values()].some(s => s.option || s.stateAssignments?.length || s.transclude);
+    [...spanMap.values()].some(s => s.has('option') || s.has('on-action') || s.has('transclude'));
 }

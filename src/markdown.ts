@@ -15,8 +15,8 @@
  *   staticMdInline(text)  — build-time inline markdown → HTML string
  */
 
-import { parseStateEntries, splitSegments } from './parser.js';
-import type { StateEntry } from './parser.js';
+import { splitSegments, STATE_EVENT_ATTRS } from './parser.js';
+import { Multimap } from './multimap.js';
 import { KATEX_DEADLINE_MS } from './constants.js';
 
 // marked is loaded as a classic <script> before this module at runtime, and
@@ -196,9 +196,10 @@ function makeMarked(opts: MarkedOpts) {
     walkTokens(token: any) {
       if (token.type !== 'rvmarkSpan' || !_currentSpanMap) return;
       const attrs = parseInlineSpanParams(token.rawParams);
+      const rawIndex = attrs.get('index');
       let ordinal: number;
-      if (attrs.index !== undefined) {
-        ordinal = attrs.index;
+      if (rawIndex !== undefined && rawIndex !== '' && Number.isFinite(parseInt(rawIndex, 10))) {
+        ordinal = parseInt(rawIndex, 10);
         if (ordinal > _spanOrdinalWalk) _spanOrdinalWalk = ordinal;
       } else {
         _spanOrdinalWalk++;
@@ -227,69 +228,47 @@ function makeMarked(opts: MarkedOpts) {
 
 // ── Inline span extension: [text]{key: val; ...} ──────────────────────────────
 
-export interface ParsedSpanAttrs {
-  option?:           true;
-  selected?:         true;
-  index?:            number;
-  transclude?:       string;   // raw ref string, e.g. './path#slug'
-  stateAssignments?: StateEntry[];
-  'on-select'?:      string;
-  'on-deselect'?:    string;
-  'on-focus'?:       string;
-  'on-blur'?:        string;
-  'on-action'?:      string;
-  href?:             string;
-  img?:              string;
-  ruby?:             string;
-  class?:            string;
-  style?:            string;
-  role?:             string;
-  extra:             Record<string, string | true>;  // everything else
-}
+/**
+ * A span's attribute block, parsed to the same Multimap every other rvmark attr
+ * collection uses (see multimap.ts). Keys are canonical: the `=>` sigil
+ * normalizes to `transclude` and a bare `let`/`set`/`remove` to `on-action`,
+ * mirroring parseAttrBlock's sigil handling.
+ *
+ * Consumers ask `.has(k)` for flags and `.getAll(k)` for repeatable keys —
+ * notably the `on-*` chains, where the previous one-field-per-key shape silently
+ * dropped all but the last handler.
+ */
+export type ParsedSpanAttrs = Multimap;
 
+// Bare `let`/`set`/`remove` on a span defaults to on-action: the mutation fires
+// when the span is activated. (On a node, a bare `let` means on-spawn instead —
+// a span has no spawn of its own, so there is nothing for it to hook.)
 export function parseInlineSpanParams(raw: string): ParsedSpanAttrs {
-  const result: ParsedSpanAttrs = { extra: {} };
+  const out = new Multimap();
   for (const part of splitSegments(raw)) {
     const trimmed = part.trim();
     if (!trimmed) continue;
-    // '=>' transclusion ref — rest of token is the ref value
-    if (trimmed.startsWith('=>')) {
-      result.transclude = trimmed.slice(2).trim();
-      continue;
-    }
-    // 'let'/'set'/'remove' state mutation — same grammar as node-level attrs.
-    // On a span the mutation fires when the span is activated, so a bare `let`
-    // here is an activation-time declaration rather than a spawn-time one.
-    if (/^(let|set|remove)\b/.test(trimmed)) {
-      const entries = parseStateEntries(trimmed);
-      if (entries.length) {
-        if (!result.stateAssignments) result.stateAssignments = [];
-        result.stateAssignments.push(...entries);
-      }
-      continue;
-    }
+    if (trimmed.startsWith('=>')) { out.append('transclude', trimmed.slice(2).trim()); continue; }
+    if (/^(let|set|remove)\b/.test(trimmed)) { out.append('on-action', trimmed); continue; }
     const colon = trimmed.indexOf(':');
-    if (colon === -1) {
-      if (trimmed === 'option')   result.option   = true;
-      else if (trimmed === 'selected') result.selected = true;
-      else result.extra[trimmed] = true;
-    } else {
-      const k = trimmed.slice(0, colon).trim();
-      const v = trimmed.slice(colon + 1).trim();
-      if (k === 'option')       { result.option = true; }
-      else if (k === 'index')    { result.index = parseInt(v, 10); }
-      else if (k === 'href')     { result.href  = v; }
-      else if (k === 'img')      { result.img   = v; }
-      else if (k === 'ruby')     { result.ruby  = v; }
-      else if (k === 'class')    { result.class = v; }
-      else if (k === 'style')    { result.style = v; }
-      else if (k === 'role')     { result.role  = v; }
-      else if (k === 'on-select' || k === 'on-deselect' || k === 'on-focus' || k === 'on-blur' || k === 'on-action')
-        result[k] = v;
-      else result.extra[k] = v;
-    }
+    if (colon === -1) out.append(trimmed, '');
+    else out.append(trimmed.slice(0, colon).trim(), trimmed.slice(colon + 1).trim());
   }
-  return result;
+  return out;
+}
+
+// The keys renderInlineSpan consumes itself; everything else becomes a data-*
+// attribute. Listed here so a new behavioural key is added in one place.
+//
+// Built on first use, not at module scope: parser.ts reaches this module through
+// inherited.ts → tags.ts, so STATE_EVENT_ATTRS is still uninitialized while this
+// module is evaluating.
+let _spanReserved: Set<string> | null = null;
+function spanReserved(): Set<string> {
+  return _spanReserved ??= new Set([
+    'option', 'selected', 'index', 'transclude', 'href', 'img', 'ruby',
+    'class', 'style', 'role', ...STATE_EVENT_ATTRS,
+  ]);
 }
 
 function renderInlineSpan(token: any, label: string): string {
@@ -299,22 +278,24 @@ function renderInlineSpan(token: any, label: string): string {
   const dataAttrs: string[] = [`data-rvmark-span="${ordinal}"`];
   const directAttrs: string[] = [];
 
-  let role:  string | null = attrs.role  ?? null;
-  let style: string | null = attrs.style ?? null;
+  let role:  string | null = attrs.get('role')  ?? null;
+  const style: string | null = attrs.get('style') ?? null;
 
-  if (attrs.option || attrs.stateAssignments?.length || attrs.transclude) {
+  if (attrs.has('option') || attrs.has('on-action') || attrs.has('transclude')) {
     classes.push('inline-option');
     role = 'option';
   }
-  if (attrs.class) classes.push(...attrs.class.split(/\s+/).filter(Boolean));
+  for (const c of attrs.getAll('class')) classes.push(...c.split(/\s+/).filter(Boolean));
 
-  for (const [k, v] of Object.entries(attrs.extra)) {
+  const reserved = spanReserved();
+  for (const [k, v] of attrs.allEntries()) {
+    if (reserved.has(k)) continue;
     if (k.startsWith('.')) {
       classes.push(k.slice(1));
     } else if (k === 'tabindex' || k.startsWith('aria-')) {
-      directAttrs.push(`${mdEscHtml(k)}="${mdEscHtml(String(v))}"`);
+      directAttrs.push(`${mdEscHtml(k)}="${mdEscHtml(v)}"`);
     } else {
-      dataAttrs.push(`data-${mdEscHtml(k)}="${mdEscHtml(String(v))}"`);
+      dataAttrs.push(`data-${mdEscHtml(k)}="${mdEscHtml(v)}"`);
     }
   }
 
@@ -324,18 +305,19 @@ function renderInlineSpan(token: any, label: string): string {
   const directStr = directAttrs.length ? ' ' + directAttrs.join(' ')  : '';
   const dataStr   = dataAttrs.length   ? ' ' + dataAttrs.join(' ')    : '';
 
-  const imgSrc = attrs.img
-    ? (_currentUrlResolver?.(attrs.img) ?? attrs.img)
-    : null;
+  const img    = attrs.get('img');
+  const imgSrc = img ? (_currentUrlResolver?.(img) ?? img) : null;
   let content = imgSrc
     ? `<img src="${mdEscHtml(imgSrc)}" alt="${mdEscHtml(label)}" loading="lazy" draggable="false">`
     : label;
-  if (attrs.ruby) {
-    content = `<ruby>${content}<rt>${mdEscHtml(attrs.ruby)}</rt></ruby>`;
+  const ruby = attrs.get('ruby');
+  if (ruby) {
+    content = `<ruby>${content}<rt>${mdEscHtml(ruby)}</rt></ruby>`;
   }
 
-  if (attrs.href) {
-    const hrefAt = ` href="${mdEscHtml(attrs.href)}"`;
+  const href = attrs.get('href');
+  if (href) {
+    const hrefAt = ` href="${mdEscHtml(href)}"`;
     return `<a${hrefAt} target="_blank" rel="noopener noreferrer"${roleAt}${cls}${styleAt}${directStr}${dataStr}>${content}</a>`;
   }
   return `<span${roleAt}${cls}${styleAt}${directStr}${dataStr}>${content}</span>`;
