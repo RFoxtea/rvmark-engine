@@ -693,8 +693,10 @@ test.describe('same-file transclusion', () => {
   test('{=> #embed-target} node shows target label after loading', async ({ page }) => {
     await page.goto('/');
     await waitForTree(page);
-    // #child-embed embeds #embed-target
-    const label = (await nodeContent(page, 'child-embed')).locator('.node-label');
+    // #child-embed embeds #embed-target. waitForNode, not nodeContent: a
+    // transclusion mounts only once its target resolves, which is after
+    // waitForTree sees the first hydrated row.
+    const label = (await waitForNode(page, 'child-embed')).locator('.node-label');
     await expect(label).toContainText('Embed target node');
   });
 
@@ -736,7 +738,8 @@ test.describe('cross-file transclusion', () => {
   test('{=> ./other#other-root} with label expands to show other file children', async ({ page }) => {
     await page.goto('/');
     await waitForTree(page);
-    const row = await nodeContent(page, 'child-cross-children');
+    // waitForNode: the cross-file target must be fetched before this row mounts.
+    const row = await waitForNode(page, 'child-cross-children');
     await row.focus();
     await row.press('ArrowRight');
     await expect(row).toHaveAttribute('aria-expanded', 'true');
