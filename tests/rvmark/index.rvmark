@@ -236,3 +236,10 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
     1. {#envoy-echo-a-child} Echo A child survives the round-trip
   2. {#envoy-echo-b; = echo} Echo node B reuses the same origin envoy
   3. {#envoy-missing; = nonexistent} Custom type with no registered transform
+
+36. {#span-vis-root; let &svis = 0; let &sa = 0; let &sb = 0; open} Conditional inline span fixture
+  1. {#span-vis-toggle; on-action: set &svis = 1} span-vis toggle
+  2. {#span-vis-line} before [shown-when-svis]{show-when: &svis == 1} after [always]{.span-vis-always} end
+  3. {#span-vis-multi} multi [both-conds]{show-when: &sa == 1; show-when: &sb == 1} end
+  4. {#span-vis-set-a; on-action: set &sa = 1} span-vis set a
+  5. {#span-vis-set-b; on-action: set &sb = 1} span-vis set b

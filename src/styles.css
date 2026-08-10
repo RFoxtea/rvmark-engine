@@ -466,6 +466,16 @@ footer {
 .node-label .vinculum .vinculum { text-decoration: overline double; }
 .node-label .strikethrough { text-decoration: line-through; }
 
+/* ── Conditional inline spans ({show-when}) ── */
+/* Pending is the pre-wiring state stamped by the renderer, hidden the resolved
+   one. Both use !important because the display they override is set by
+   context-specific rules of higher specificity (.badges .inline-option, the
+   .tabs strip), and a hidden span must stay hidden in every such context. */
+.span-conditional-pending,
+.span-hidden {
+  display: none !important;
+}
+
 /* ── Inline options (listbox) ── */
 .inline-option {
   color: var(--muted);

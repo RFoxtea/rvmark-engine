@@ -13,6 +13,7 @@ import { resolveTransclusionConfig } from '../transclusion.js';
 import { mdInlineWithSpansContinued, clipboardHtml } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
+import { wireSpanVisibility } from '../span-visibility.js';
 import type { ListboxNav } from '../listbox.js';
 import { wireSelectThenAction, focusAndScroll } from '../interaction.js';
 
@@ -39,6 +40,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
   private _tog!:        HTMLSpanElement;
   private _listboxNav?: ListboxNav;
   private _unwatchChildren?: () => void;
+  private _unwireSpans?: () => void;
 
   // Set during construction, used across methods
   private _expandable!:  boolean;
@@ -162,6 +164,12 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
       this.content.appendChild(div);
     }
 
+    // Wired before the listbox check: every cell of the row shares one spanMap
+    // and one content element, and a conditional cell is meaningful whether or
+    // not the row is also a listbox.
+    this._unwireSpans?.();
+    this._unwireSpans = wireSpanVisibility(this.content, spanMap, this.rn.state);
+
     if (!isListbox(attrs, spanMap)) return false;
 
     const { content, rn } = this;
@@ -260,5 +268,6 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
 
   onDestroy(): void {
     this._unwatchChildren?.();
+    this._unwireSpans?.();
   }
 }

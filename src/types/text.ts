@@ -12,6 +12,7 @@ import { buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listb
 import { resolveAttrs } from '../source-file.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
+import { wireSpanVisibility } from '../span-visibility.js';
 import type { ListboxNav } from '../listbox.js';
 import { buildTagChips } from '../tags.js';
 import { scrollRowIntoMiddle } from '../scroll.js';
@@ -24,6 +25,7 @@ class TextTypeHandler extends BaseTypeHandler {
   private _listboxNav?: ListboxNav;
   private _permalinkAnyFn?: (key: string, value: string | undefined) => void;
   private _unwatchChildren?: () => void;
+  private _unwireSpans?: () => void;
 
   // Computed once in constructor, used across methods
   private tog!:        HTMLSpanElement;
@@ -33,7 +35,7 @@ class TextTypeHandler extends BaseTypeHandler {
   // Set only when the label contains math and KaTeX is not loaded yet; read by
   // RenderNode.attach, which skips its own ready() call when this is true.
   managesReady?: true;
-  private _reRenderLabel: (() => { html: string }) | null = null;
+  private _reRenderLabel: (() => { html: string; spanMap: Map<number, ParsedSpanAttrs> }) | null = null;
 
   constructor(rn: RenderNode) {
     super(rn, '.node-label a[href]');
@@ -100,10 +102,14 @@ class TextTypeHandler extends BaseTypeHandler {
     // reaches the screen — the node is unmounted until ready() below.
     if (this._reRenderLabel) {
       void ensureKatex().then(() => {
-        const { html } = this._reRenderLabel!();
+        const { html, spanMap: freshSpans } = this._reRenderLabel!();
         this.lbl.innerHTML = html;
         const chips = buildTagChips(sourceNode.tags, sourceNode.sourceFile?.tagDefs);
         if (chips.childNodes.length > 0) this.lbl.prepend(chips);
+        // innerHTML discarded the wired elements along with the old markup, so
+        // the subscriptions must be dropped and re-taken against the new ones.
+        this._unwireSpans?.();
+        this._unwireSpans = wireSpanVisibility(this.lbl, freshSpans, rn.state);
         this._reRenderLabel = null;
         rn.ready();
       });
@@ -153,6 +159,9 @@ class TextTypeHandler extends BaseTypeHandler {
       }
     }
 
+    this._unwireSpans?.();
+    this._unwireSpans = wireSpanVisibility(lbl, spanMap, this.rn.state);
+
     if (hasLink) {
       lbl.addEventListener('keydown', (e: KeyboardEvent) => {
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
@@ -184,6 +193,7 @@ class TextTypeHandler extends BaseTypeHandler {
   onDestroy(): void {
     if (this._permalinkAnyFn) this.rn.state.unsubscribeAny(this._permalinkAnyFn);
     this._unwatchChildren?.();
+    this._unwireSpans?.();
   }
 
   private buildClickWiring(exhibitButton: boolean, hasListbox: boolean) {

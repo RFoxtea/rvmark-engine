@@ -2004,3 +2004,55 @@ test.describe('iframe-pass', () => {
     await expect(await waitForNode(page, 'iframe-pass-rename-indicator')).toBeVisible();
   });
 });
+
+// ── Conditional inline spans ({show-when} on a span) ──────────────────────────
+// Fixture #span-vis-root. A span with show-when is hidden by class rather than
+// by deferred spawn (the node mechanism): the markup is always present, so these
+// assert on visibility, not on presence. The "pending" class is the pre-wiring
+// state — a span still carrying it after mount means wireSpanVisibility never
+// ran for that container, which is the flash-on-load failure.
+
+test.describe('conditional inline spans', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/#span-vis-root');
+    await waitForTree(page);
+    await waitForNode(page, 'span-vis-toggle');
+  });
+
+  test('span whose condition is false starts hidden, without flashing', async ({ page }) => {
+    const line = await nodeContent(page, 'span-vis-line');
+    await expect(line.getByText('shown-when-svis')).toBeHidden();
+    // Resolved by the wiring, not left in the renderer's pre-paint state.
+    await expect(line.locator('.span-conditional-pending')).toHaveCount(0);
+  });
+
+  test('unconditional spans and surrounding text are untouched', async ({ page }) => {
+    const line = await nodeContent(page, 'span-vis-line');
+    await expect(line.getByText('always')).toBeVisible();
+    await expect(line).toContainText('before');
+    await expect(line).toContainText('after');
+  });
+
+  test('span appears when its condition becomes true', async ({ page }) => {
+    const toggle = await nodeContent(page, 'span-vis-toggle');
+    await toggle.click();
+    await toggle.press('Enter');
+    const line = await nodeContent(page, 'span-vis-line');
+    await expect(line.getByText('shown-when-svis')).toBeVisible();
+  });
+
+  test('multi-condition span stays hidden until both conditions hold', async ({ page }) => {
+    const multi = await nodeContent(page, 'span-vis-multi');
+    await expect(multi.getByText('both-conds')).toBeHidden();
+
+    const setA = await nodeContent(page, 'span-vis-set-a');
+    await setA.click();
+    await setA.press('Enter');
+    await expect(multi.getByText('both-conds')).toBeHidden();
+
+    const setB = await nodeContent(page, 'span-vis-set-b');
+    await setB.click();
+    await setB.press('Enter');
+    await expect(multi.getByText('both-conds')).toBeVisible();
+  });
+});

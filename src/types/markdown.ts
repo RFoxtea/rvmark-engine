@@ -24,6 +24,7 @@ import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSp
 import { resolveAttrs } from '../source-file.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
+import { wireSpanVisibility } from '../span-visibility.js';
 import type { ListboxNav } from '../listbox.js';
 import { wireSelectThenAction } from '../interaction.js';
 import { mdToHtmlWithSpans, staticMdToHtml, ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../markdown.js';
@@ -81,6 +82,11 @@ class MarkdownTypeHandler extends BaseTypeHandler {
   private _listboxNav?: ListboxNav;
   private _actionVal:  string | null = null;
   private _src:        string | null = null;
+  private _unwireSpans?: () => void;
+
+  onDestroy(): void {
+    this._unwireSpans?.();
+  }
 
   constructor(rn: RenderNode) {
     super(rn, 'a[href], pre, .md-body-scroll, .md-math-block, .katex-display, .katex-html');
@@ -161,6 +167,10 @@ class MarkdownTypeHandler extends BaseTypeHandler {
       scroller.innerHTML = html;
       initOverflowFade(outer, scroller);
       this.wireListboxOptions(scroller, spanMap, attrs, sourceNode);
+      // renderInto can run more than once (async fetch, KaTeX upgrade), each
+      // time replacing the markup — so drop the previous subscriptions first.
+      this._unwireSpans?.();
+      this._unwireSpans = wireSpanVisibility(scroller, spanMap, this.rn.state);
       this.rn.ready();
     };
     const renderWhenMathReady = (src: string) => {

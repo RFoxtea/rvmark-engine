@@ -115,3 +115,30 @@ test('parseInlineSpanParams: an unknown key is kept rather than dropped', () => 
   assert.equal(result.get('data-thing'), '7');
   assert.equal(result.has('someflag'), true);
 });
+
+// ── show-when on a span ────────────────────────────────────────────────────────
+// The condition grammar itself is parseShowWhen's (tested via nodes); these
+// cover that a span carries the raw values through intact, including the
+// multi-value case that a one-field-per-key shape would have collapsed.
+
+test('parseInlineSpanParams: show-when is captured as its raw condition', () => {
+  const result = parseInlineSpanParams('show-when: &x == "1"');
+  assert.deepEqual(result.getAll('show-when'), ['&x == "1"']);
+});
+
+test('parseInlineSpanParams: show-when survives alongside option and a mutation', () => {
+  const result = parseInlineSpanParams('option; show-when: &vis; set &a = 1');
+  assert.deepEqual(result.getAll('show-when'), ['&vis']);
+  assert.equal(result.has('option'), true);
+  assert.deepEqual(entriesOf(result), [{ key: 'a', op: 'set', val: '1' }]);
+});
+
+test('parseInlineSpanParams: two show-when parts stay distinct', () => {
+  const result = parseInlineSpanParams('show-when: &a == 1; show-when: &b == 1');
+  assert.deepEqual(result.getAll('show-when'), ['&a == 1', '&b == 1']);
+});
+
+test('parseInlineSpanParams: a quoted ; inside show-when does not split the condition', () => {
+  const result = parseInlineSpanParams('show-when: &x == "a; b"');
+  assert.deepEqual(result.getAll('show-when'), ['&x == "a; b"']);
+});
