@@ -48,6 +48,25 @@
   --md-fade-h: 2rem;
   --node-max-w: 600px;
 
+  /* Keymap panel. --keymap-viewport-inset is the gap it keeps from the
+     viewport edge; both the width and height caps are expressed against it. */
+  --keymap-max-w: 32rem;
+  --keymap-viewport-inset: 2rem;
+  --keymap-pad: 1rem 1.25rem;
+  --keymap-row-gap: 0.25rem;
+  --keymap-col-gap: 0.75rem;
+  --keymap-section-gap: 1.1rem;
+  --keymap-title-gap: 0.35rem;
+  --keymap-radius: 4px;
+  /* em, so a keycap tracks the text it sits in rather than a fixed step. */
+  --keycap-size: 0.85em;
+  --keycap-pad: 0.05rem 0.3rem;
+  --keycap-radius: 3px;
+  --keymap-join-size: 0.9em;
+  --keymap-join-gap: 0.25em;
+  --keymap-backdrop: transparent;
+  --keymap-backdrop-blur: 3px;
+
   /* Type sizes, named for the role rather than the measurement.
 
      Three steps below body, not six. The literals these replaced ran 0.68,
@@ -726,10 +745,108 @@ footer .footer-section { white-space: nowrap; }
   outline: none;
 }
 
+/* The keymap row. A <button> inherits none of the ambient text styles by
+   default, so font/color/alignment are restated to make it read as one of the
+   menu's rows rather than as a control dropped into it. */
+.view-menu-items .keymap-row {
+  display: block;
+  width: 100%;
+  padding: 0.1rem 0.5rem;
+  background: none;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--muted);
+}
+.view-menu-items .keymap-row:hover,
+.view-menu-items .keymap-row:focus-visible {
+  background: var(--surface-2);
+  color: var(--fg);
+  border-radius: 3px;
+  outline: none;
+}
+
 .view-menu-sep {
   border: 0;
   border-top: 1px solid var(--border);
   margin: 0.15rem 0;
+}
+
+/* ── Keymap dialog ── */
+/* margin: auto is what centres a modal <dialog>; it restores what the global
+   `* { margin: 0 }` reset above takes away. */
+.keymap-dialog {
+  margin: auto;
+  padding: 0;
+  width: max-content;
+  max-width: min(var(--keymap-max-w), calc(100vw - var(--keymap-viewport-inset)));
+  max-height: calc(100vh - var(--keymap-viewport-inset) * 2);
+  overflow: auto;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--keymap-radius);
+}
+.keymap-dialog::backdrop {
+  background: var(--keymap-backdrop);
+  -webkit-backdrop-filter: blur(var(--keymap-backdrop-blur));
+          backdrop-filter: blur(var(--keymap-backdrop-blur));
+}
+/* showModal() focuses the dialog itself (nothing inside is focusable), which
+   would otherwise draw the global focus ring around the whole panel. */
+.keymap-dialog:focus,
+.keymap-dialog:focus-visible { outline: none; }
+/* One grid for the whole panel: sections and their <dl>s take these tracks via
+   subgrid, so the keys column is measured across every section at once rather
+   than per-section. */
+.keymap-body {
+  padding: var(--keymap-pad);
+  display: grid;
+  grid-template-columns: max-content 1fr;
+}
+.keymap-section {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+}
+
+.keymap-section + .keymap-section { margin-top: var(--keymap-section-gap); }
+.keymap-section-title {
+  grid-column: 1 / -1;
+  margin: 0 0 var(--keymap-title-gap);
+  font-size: var(--text-chrome);
+  font-weight: normal;
+}
+
+.keymap-rows {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  gap: var(--keymap-row-gap) var(--keymap-col-gap);
+  margin: 0;
+  align-items: baseline;
+}
+.keymap-keys { margin: 0; white-space: nowrap; }
+.keymap-desc { margin: 0; }
+
+/* Spacing lives on the joiner, not the keycaps: a margin on kbd would push the
+   first one off the column's left edge. */
+.keymap-join {
+  margin: 0 var(--keymap-join-gap);
+  font-size: var(--keymap-join-size);
+}
+.keymap-keys kbd {
+  display: inline-block;
+  padding: var(--keycap-pad);
+  font: inherit;
+  font-size: var(--keycap-size);
+  line-height: 1.4;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--keycap-radius);
 }
 
 /* The show-hidden toggle keeps its [ ]/[×] marker, but sits as a menu row. */

@@ -16,6 +16,7 @@ import type { SourceFile } from './source-file.js';
 import { loadPageFile, setPageContext } from './loader.js';
 import { setMeta, setFooter, setViewTarget, clearTree, showError } from './shell.js';
 import { initSearch } from './search.js';
+import { keymapInstallShortcut } from './keymap.js';
 import { waitForPageContext, initPrerootListeners } from './iframe-guest.js';
 import { MOUNT_SETTLE_MS } from './constants.js';
 import { scrollBehavior } from './scroll.js';
@@ -124,6 +125,9 @@ async function init(page: RvmarkPageContext): Promise<void> {
 
   setMeta(sourceFile.meta);
   initSearch();
+  // Same `no-keymap` opt-out as the footer menu row (see shell.ts): a page that
+  // suppresses the row must not still answer the key.
+  if (!sourceFile.meta?.has('no-keymap')) keymapInstallShortcut();
 
   const hash  = page.anchor ?? (location.hash ? location.hash.slice(1) : null);
   const focus = page.focus  ?? new URLSearchParams(location.search).get('focus');

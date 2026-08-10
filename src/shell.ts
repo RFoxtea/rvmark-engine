@@ -6,6 +6,7 @@
  */
 
 import { mdInline } from './markdown.js';
+import { keymapOpen } from './keymap.js';
 import { prerootSet, prerootDelete } from './exhibit.js';
 import { prerootFrame } from './state.js';
 import { addressToHref, addressOrigin, RVMARK_SEGMENT } from './shared.js';
@@ -43,9 +44,10 @@ export function setFooter(nodeMeta: Record<string, unknown> | null): void {
     // the toggle is wanted — `no-view-menu` suppresses the view links alone.
     const wantToggle = !p?.has('no-hidden-toggle');
     const wantViews  = !p?.has('no-view-menu');
-    if (wantToggle || wantViews) {
+    const wantKeymap = !p?.has('no-keymap');
+    if (wantToggle || wantViews || wantKeymap) {
       if (footerLabel || license || author) footer.appendChild(document.createTextNode(' · '));
-      viewMenuEl = buildViewMenu(wantViews, wantToggle);
+      viewMenuEl = buildViewMenu(wantViews, wantToggle, wantKeymap);
       footer.appendChild(viewMenuEl);
       if (wantViews) setViewTarget(null);
     }
@@ -95,7 +97,7 @@ export function mountSearchRoot(el: HTMLElement): void {
 // renderer stamps onto its <li>s — so one fragment anchors correctly in the
 // static view, and (for the source file) at least names the node being read.
 
-function buildViewMenu(withViews: boolean, withToggle: boolean): HTMLDetailsElement {
+function buildViewMenu(withViews: boolean, withToggle: boolean, withKeymap: boolean): HTMLDetailsElement {
   const details = document.createElement('details');
   details.className = 'view-menu footer-section';
 
@@ -120,8 +122,26 @@ function buildViewMenu(withViews: boolean, withToggle: boolean): HTMLDetailsElem
     menu.append(viewSourceLink, viewStaticLink);
   }
 
+  // The keymap row. A <button>, not a link: it opens a panel in place rather
+  // than going anywhere, so it must not offer a target to middle-click or copy.
+  // Sits with the view links — both are "show me something about this page" —
+  // and above the separator that fences off the show-hidden toggle.
+  if (withKeymap) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'keymap-row';
+    // Visible text is the accessible name — no aria-label, matching the view
+    // links above and leaving one source of truth for what the row says.
+    btn.textContent = 'Keyboard controls';
+    btn.addEventListener('click', () => {
+      details.open = false;
+      keymapOpen();
+    });
+    menu.appendChild(btn);
+  }
+
   if (withToggle) {
-    if (withViews) {
+    if (withViews || withKeymap) {
       const sep = document.createElement('hr');
       sep.className = 'view-menu-sep';
       menu.appendChild(sep);
@@ -166,14 +186,14 @@ function buildViewMenu(withViews: boolean, withToggle: boolean): HTMLDetailsElem
   // Enter/Space, the links stay links, and the toggle keeps its real checkbox.
   // Arrow keys are layered on top so it drives like a dropdown.
   //
-  // The rows are <a>s plus a <label>. A label is not focusable on its own, so
-  // it carries tabindex="0" and forwards activation to the checkbox it wraps —
-  // that way every row is one Tab stop and one arrow target.
+  // The rows are <a>s and a <button>, plus a <label>. A label is not focusable
+  // on its own, so it carries tabindex="0" and forwards activation to the
+  // checkbox it wraps — that way every row is one Tab stop and one arrow target.
 
   // Live, in DOM order: the panel is rebuilt in only one place, but rows are
   // conditional, so never assume which ones exist.
   const rows = (): HTMLElement[] =>
-    Array.from(menu.querySelectorAll<HTMLElement>('a, .show-hidden-toggle'));
+    Array.from(menu.querySelectorAll<HTMLElement>('a, .keymap-row, .show-hidden-toggle'));
 
   const focusRow = (i: number): void => {
     const list = rows();
@@ -216,7 +236,7 @@ function buildViewMenu(withViews: boolean, withToggle: boolean): HTMLDetailsElem
       case ' ':
       case 'Enter': {
         // A focused label has no default action of its own — forward to the
-        // checkbox. Links keep their native activation.
+        // checkbox. Links and the keymap button keep their native activation.
         const row = list[idx];
         if (row?.classList.contains('show-hidden-toggle')) {
           e.preventDefault();
