@@ -10,7 +10,7 @@ import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSp
 import { resolveAttrs } from '../source-file.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { resolveTransclusionConfig } from '../transclusion.js';
-import { mdInlineWithSpansContinued } from '../markdown.js';
+import { mdInlineWithSpansContinued, clipboardHtml } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';
@@ -221,7 +221,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
               // themselves came from.
               const text = parseCells(rn.sourceNode.label).join(' | ');
               const html = [...content.querySelectorAll<HTMLElement>(`.${this.cfg.cellClass}`)]
-                .map(c => c.innerHTML).join(' | ');
+                .map(c => clipboardHtml(c)).join(' | ');
               navigator.clipboard.write([
                 new ClipboardItem({
                   'text/html':  new Blob([html], { type: 'text/html' }),

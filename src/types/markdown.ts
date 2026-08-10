@@ -26,7 +26,7 @@ import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';
 import { wireSelectThenAction } from '../interaction.js';
-import { mdToHtmlWithSpans, staticMdToHtml, ensureKatex, hasMath, katexLoaded } from '../markdown.js';
+import { mdToHtmlWithSpans, staticMdToHtml, ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
 
 // ── Overflow fade ──────────────────────────────────────────────────────────────
@@ -252,7 +252,7 @@ class MarkdownTypeHandler extends BaseTypeHandler {
             // Defer to the browser whenever there is a selection to copy.
             if (this._src && !window.getSelection()?.toString()) {
               const body = content.querySelector<HTMLElement>('.md-body-scroll');
-              const html = body?.innerHTML ?? '';
+              const html = body ? clipboardHtml(body) : '';
               navigator.clipboard.write([
                 new ClipboardItem({
                   'text/html':  new Blob([html],       { type: 'text/html' }),

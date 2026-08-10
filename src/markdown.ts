@@ -378,6 +378,23 @@ export function hasMath(src: string): boolean {
 }
 
 /**
+ * Rendered markup, prepared for the clipboard.
+ *
+ * KaTeX renders each formula twice — a .katex-mathml branch (MathML, plus the
+ * original TeX in an <annotation>) for assistive tech, and a .katex-html branch
+ * for sighted readers — and hides the former with CSS. The clipboard carries
+ * markup without our stylesheet, so the paste target renders every branch and
+ * the formula arrives three times over. Dropping the MathML leaves the visual
+ * rendering alone.
+ */
+export function clipboardHtml(el: HTMLElement): string {
+  if (!el.querySelector('.katex-mathml')) return el.innerHTML;
+  const clone = el.cloneNode(true) as HTMLElement;
+  for (const m of clone.querySelectorAll('.katex-mathml')) m.remove();
+  return clone.innerHTML;
+}
+
+/**
  * Load KaTeX once, resolving when it is usable. Resolves immediately if already
  * present. NEVER rejects and never hangs: on error or timeout it resolves anyway,
  * and math then renders through the fallbacks above.

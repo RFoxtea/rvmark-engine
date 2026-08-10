@@ -15,7 +15,7 @@ import { wireListbox, isListbox } from '../listbox-utils.js';
 import type { ListboxNav } from '../listbox.js';
 import { buildTagChips } from '../tags.js';
 import { scrollRowIntoMiddle } from '../scroll.js';
-import { mdInlineWithSpans, staticMdInline, ensureKatex, hasMath, katexLoaded } from '../markdown.js';
+import { mdInlineWithSpans, staticMdInline, ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
 import { resolveTransclusionConfig } from '../transclusion.js';
 import { wireSelectThenAction } from '../interaction.js';
@@ -278,7 +278,7 @@ class TextTypeHandler extends BaseTypeHandler {
           if (inMode) break;
           if (e.ctrlKey || e.metaKey) {
             if (!window.getSelection()?.toString()) {
-              const html = lbl.innerHTML;
+              const html = clipboardHtml(lbl);
               const lblToText = (l: HTMLElement): string => {
                 let out = '';
                 for (const child of l.childNodes) {
