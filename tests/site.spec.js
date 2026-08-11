@@ -594,7 +594,7 @@ test.describe('tag chips', () => {
   });
 
   test('[AI] tag chip is visible on #child-tagged', async ({ page }) => {
-    const chip = (await nodeContent(page, 'child-tagged')).locator('.node-tag').first();
+    const chip = (await waitForNode(page, 'child-tagged')).locator('.node-tag').first();
     await expect(chip).toBeVisible();
     await expect(chip).toHaveText('AI');
   });
@@ -606,7 +606,7 @@ test.describe('tag chips', () => {
   // overrides the chip text, and an internal tag produces no chip at all.
 
   test('resolved tag props reach the chip element', async ({ page }) => {
-    const chip = (await nodeContent(page, 'child-tagged')).locator('.node-tag').first();
+    const chip = (await waitForNode(page, 'child-tagged')).locator('.node-tag').first();
     await expect(chip).toBeVisible();
     await expect(chip).toHaveAttribute('title', 'AI tip');
     const color = await chip.evaluate(el => el.style.getPropertyValue('--tag-color'));
@@ -616,12 +616,12 @@ test.describe('tag chips', () => {
   test('inline label overrides the chip text', async ({ page }) => {
     await page.goto('/#child-tag-inline-label');
     await waitForTree(page);
-    const chip = (await nodeContent(page, 'child-tag-inline-label')).locator('.node-tag').first();
+    const chip = (await waitForNode(page, 'child-tag-inline-label')).locator('.node-tag').first();
     await expect(chip).toHaveText('W.I.P.');
   });
 
   test('internal tag renders no chip', async ({ page }) => {
-    const chips = (await nodeContent(page, 'child-internal')).locator('.node-tag');
+    const chips = (await waitForNode(page, 'child-internal')).locator('.node-tag');
     await expect(chips).toHaveCount(0);
   });
 });
