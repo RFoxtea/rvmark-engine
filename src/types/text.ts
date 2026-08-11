@@ -8,7 +8,8 @@
 import type { NodeTypeFactory, SourceNode, ResolvedAttrs } from '../render-node.js';
 import { factoryRegister, RenderNode } from '../render-node.js';
 
-import { buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps, wireBulletActions } from '../handler-utils.js';
+import { buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyOnAction, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps, wireBulletActions } from '../handler-utils.js';
+import { ToggleSet } from '../toggle-set.js';
 import { resolveAttrs } from '../source-file.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
@@ -24,14 +25,12 @@ import { wireSelectThenAction } from '../interaction.js';
 class TextTypeHandler extends BaseTypeHandler {
   private _listboxNav?: ListboxNav;
   private _permalinkAnyFn?: (key: string, value: string | undefined) => void;
-  private _unwatchChildren?: () => void;
   private _unwireSpans?: () => void;
 
   // Computed once in constructor, used across methods
   private tog!:        HTMLSpanElement;
   private lbl!:        HTMLSpanElement;
-  private expandable!: boolean;
-  private alwaysOpen!: boolean;
+  private toggles!:    ToggleSet;
   // Set only when the label contains math and KaTeX is not loaded yet; read by
   // RenderNode.attach, which skips its own ready() call when this is true.
   managesReady?: true;
@@ -45,7 +44,6 @@ class TextTypeHandler extends BaseTypeHandler {
 
     const hasLink   = attrs.get('action') === 'link';
     const openVal   = attrs.get('open');
-    const neverOpen = openVal === 'never';
     const paramOpen = attrs.has('open') && (openVal === '' || openVal === 'true');
 
     // A label containing math needs KaTeX before it renders, or it paints the
@@ -65,16 +63,24 @@ class TextTypeHandler extends BaseTypeHandler {
     this._reRenderLabel = needsKatex ? renderLabel : null;
     const hasListbox = isListbox(attrs, spanMap);
 
-    this.alwaysOpen = openVal === 'always' || hasListbox;
-
     this.buildCssProps(attrs, sourceNode);
 
     const { content } = this;
 
-    const { embedVal, childrenList, exhibitButton } = resolveTransclusionConfig(sourceNode, attrs);
-    this.expandable    = !neverOpen && (sourceNode.children.length > 0 || !!embedVal || !!childrenList);
+    const { exhibitButton } = resolveTransclusionConfig(sourceNode, attrs);
 
     this.buildToggleBullet(sourceNode);
+    // Built after the bullet, which it needs; a listbox node is always-open
+    // because its children area belongs to the selected option, not the bullet.
+    this.toggles = new ToggleSet(rn, attrs, {
+      alwaysOpen: openVal === 'always' || hasListbox,
+      onExpand:   ({ scroll }) => {
+        // This rAF may fire after the node was collapsed/destroyed (the expand
+        // is awaited); scrollRowIntoMiddle no-ops on a detached row.
+        if (scroll) requestAnimationFrame(() => scrollRowIntoMiddle(this.content));
+        if (RenderNode.currentSelection === this.rn) this.activate();
+      },
+    });
     this._installWatch();
     this.buildLabel(lblHtml, spanMap, hasListbox, hasLink, sourceNode);
 
@@ -115,7 +121,7 @@ class TextTypeHandler extends BaseTypeHandler {
       });
     }
 
-    if (this.expandable && (paramOpen || this.alwaysOpen)) this.doExpand(false);
+    this.toggles.openIfRequested(paramOpen, false);
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────
@@ -192,19 +198,19 @@ class TextTypeHandler extends BaseTypeHandler {
 
   onDestroy(): void {
     if (this._permalinkAnyFn) this.rn.state.unsubscribeAny(this._permalinkAnyFn);
-    this._unwatchChildren?.();
+    this.toggles.destroy();
     this._unwireSpans?.();
   }
 
   private buildClickWiring(exhibitButton: boolean, hasListbox: boolean) {
-    const { tog, lbl, content, rn, expandable, alwaysOpen } = this;
+    const { tog, lbl, content, rn, toggles } = this;
 
     // The bullet expands when it can, and otherwise clears a listbox selection.
     // wireBulletActions also marks whether it is clickable at all, which is what
     // CSS styles — a leaf with no listbox must not show a pointer.
     wireBulletActions(tog, content, {
-      expand:  (expandable && !alwaysOpen)
-        ? () => { if (rn.toggleable) this.doToggle(undefined, { scroll: false }); }
+      expand:  (toggles.expandable && !toggles.alwaysOpen)
+        ? () => { if (toggles.operable) toggles.toggle(undefined, { scroll: false }); }
         : undefined,
       listbox: hasListbox ? () => this._listboxNav : undefined,
     });
@@ -216,9 +222,9 @@ class TextTypeHandler extends BaseTypeHandler {
     if (exhibitButton) {
       lbl.style.cursor = 'pointer';
       wireSelectThenAction(content, () => { exhibitOpenFromNode(rn); applyOnAction(rn); }, content, notTog);
-    } else if (expandable && !alwaysOpen) {
+    } else if (toggles.expandable && !toggles.alwaysOpen) {
       wireSelectThenAction(content, (expand) => {
-        if (rn.toggleable) this.doToggle(expand, { scroll: false });
+        if (rn.toggleable) toggles.toggle(expand, { scroll: false });
         else content.focus();
         applyOnAction(rn);
       }, content, notTog);
@@ -231,8 +237,7 @@ class TextTypeHandler extends BaseTypeHandler {
 
 
   private buildKeyboardHandler() {
-    const { content, lbl, rn } = this;
-    const { expandable, alwaysOpen } = this;
+    const { content, lbl, rn, toggles } = this;
 
     content.addEventListener('keydown', (e) => {
       const inMode     = this.modeActive;
@@ -244,8 +249,8 @@ class TextTypeHandler extends BaseTypeHandler {
       switch (e.key) {
         case 'Enter': {
           if (e.target !== content) break;
-          if (expandable && !alwaysOpen && rn.toggleable) {
-            this.doToggle();
+          if (toggles.operable) {
+            toggles.toggle();
           }
           applyOnAction(rn);
           e.preventDefault();
@@ -253,19 +258,19 @@ class TextTypeHandler extends BaseTypeHandler {
         }
         case ' ': {
           if (inMode) break;
-          if (expandable && !alwaysOpen && rn.toggleable) this.doToggle();
+          if (toggles.operable) toggles.toggle();
           applyOnAction(rn);
           e.preventDefault();
           break;
         }
         case 'ArrowRight': {
           if (inMode) break;
-          if (alwaysOpen && expandable) {
+          if (toggles.alwaysOpen && toggles.expandable) {
             const fc = childrenEl.querySelector<HTMLElement>('.node-content');
             if (fc) { fc.focus(); scrollRowIntoMiddle(fc); }
-          } else if (expandable && rn.toggleable && !rn.expanded) {
-            this.doToggle(true);
-          } else if (expandable) {
+          } else if (toggles.expandable && rn.toggleable && !rn.expanded) {
+            toggles.toggle(true);
+          } else if (toggles.expandable) {
             const fc = childrenEl.querySelector<HTMLElement>('.node-content');
             if (fc) { fc.focus(); scrollRowIntoMiddle(fc); }
           }
@@ -274,8 +279,8 @@ class TextTypeHandler extends BaseTypeHandler {
         }
         case 'ArrowLeft': {
           if (inMode) break;
-          if (expandable && !alwaysOpen && rn.expanded) {
-            rn.setChildren([]);
+          if (toggles.expandable && !toggles.alwaysOpen && rn.expanded) {
+            toggles.close();
           } else {
             const parent = rn.li.parentElement?.closest<HTMLElement>('li.node')
               ?.querySelector<HTMLElement>(':scope > .node-content');
@@ -323,38 +328,9 @@ class TextTypeHandler extends BaseTypeHandler {
 
   // ── Expand/collapse ────────────────────────────────────────────────────────
 
-
-  private async doExpand(scroll = true) {
-    await expandNode(this.rn);
-    for (const v of this.rn.sourceNode.attrs.getAll('on-expand')) applyEventAttr(v, this.rn);
-    // This rAF may fire after the node was collapsed/destroyed (expandNode is
-    // awaited above); scrollRowIntoMiddle no-ops on a detached row.
-    if (scroll) requestAnimationFrame(() => scrollRowIntoMiddle(this.content));
-    if (RenderNode.currentSelection === this.rn) this.activate();
-  }
-
-  private doToggle(forceState?: boolean, opts: { scroll?: boolean } = {}) {
-    const scroll = opts.scroll ?? true;
-    const open   = forceState !== undefined ? forceState : !this.rn.expanded;
-    if (open) this.doExpand(scroll);
-    else {
-      for (const v of this.rn.sourceNode.attrs.getAll('on-collapse')) applyEventAttr(v, this.rn);
-      this.rn.setChildren([]);
-    }
-  }
-
-  private _setExpandable(nowExpandable: boolean) {
-    this.setExpandable(nowExpandable, this.tog, () => this.rn.setChildren([]));
-  }
-
   private _installWatch() {
-    if (this.alwaysOpen) return;
-    if (!this.rn.sourceNode.children.length) {
-      if (this.expandable) this._setExpandable(true);
-      return;
-    }
-    this._unwatchChildren = this.rn.watchChildren(this.rn.sourceNode.children, (nowExpandable) => {
-      this._setExpandable(nowExpandable);
+    this.toggles.installWatch((nowExpandable) => {
+      this.setExpandable(nowExpandable, this.tog, () => this.toggles.close());
     });
   }
 

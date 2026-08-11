@@ -20,7 +20,8 @@
 
 import type { NodeTypeFactory, SourceNode, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyEventAttr, applyOnAction, expandNode, exhibitOpenFromNode, wireBulletActions } from '../handler-utils.js';
+import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, exhibitOpenFromNode, wireBulletActions } from '../handler-utils.js';
+import { ToggleSet } from '../toggle-set.js';
 import { resolveAttrs } from '../source-file.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
@@ -109,7 +110,7 @@ class MarkdownTypeHandler extends BaseTypeHandler {
 
     this.buildKeyboardHandler(rn.li);
 
-    void expandNode(rn);
+    new ToggleSet(rn, attrs, { alwaysOpen: true }).mountOnce();
   }
 
   // ── Private methods ────────────────────────────────────────────────────────

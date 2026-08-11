@@ -44,7 +44,8 @@
 
 import type { NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { treeNavKeydown, actionKeydown, copyPermalink, expandNode } from '../handler-utils.js';
+import { treeNavKeydown, actionKeydown, copyPermalink } from '../handler-utils.js';
+import { ToggleSet } from '../toggle-set.js';
 import { resolveAttrs } from '../source-file.js';
 import { BaseTypeHandler } from '../base-handler.js';
 
@@ -177,7 +178,7 @@ class VideoTypeHandler extends BaseTypeHandler {
       treeNavKeydown(e, content, li);
     });
 
-    void expandNode(renderNode);
+    new ToggleSet(renderNode, attrs, { alwaysOpen: true }).mountOnce();
   }
 
   private _togglePlayback(): void {
