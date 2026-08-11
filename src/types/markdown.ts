@@ -22,6 +22,7 @@ import type { NodeTypeFactory, SourceNode, RenderNode } from '../render-node.js'
 import { factoryRegister } from '../render-node.js';
 import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, exhibitOpenFromNode, wireBulletActions } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
+import { wireSpanToggles } from '../span-toggle.js';
 import { resolveAttrs } from '../source-file.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
@@ -84,9 +85,12 @@ class MarkdownTypeHandler extends BaseTypeHandler {
   private _actionVal:  string | null = null;
   private _src:        string | null = null;
   private _unwireSpans?: () => void;
+  private _unwireSpanToggles?: () => void;
+  private _toggles!: ToggleSet;
 
   onDestroy(): void {
     this._unwireSpans?.();
+    this._unwireSpanToggles?.();
   }
 
   constructor(rn: RenderNode) {
@@ -104,13 +108,17 @@ class MarkdownTypeHandler extends BaseTypeHandler {
       wireSelectThenAction(content, () => { applyOnAction(rn); });
     }
 
+    // Built before the body: renderInto wires span toggles against it, and the
+    // body may render synchronously.
+    this._toggles = new ToggleSet(rn, attrs, { alwaysOpen: true });
+
     const { url, sectionSlug, bodyText } = this.resolveSrc(attrs, sourceNode);
     if (url || bodyText) this.buildBody(url, sectionSlug, bodyText, attrs, sourceNode);
     else rn.ready();
 
     this.buildKeyboardHandler(rn.li);
 
-    new ToggleSet(rn, attrs, { alwaysOpen: true }).mountOnce();
+    this._toggles.mountOnce();
   }
 
   // ── Private methods ────────────────────────────────────────────────────────
@@ -167,9 +175,15 @@ class MarkdownTypeHandler extends BaseTypeHandler {
       this._src = src;
       scroller.innerHTML = html;
       initOverflowFade(outer, scroller);
-      this.wireListboxOptions(scroller, spanMap, attrs, sourceNode);
       // renderInto can run more than once (async fetch, KaTeX upgrade), each
       // time replacing the markup — so drop the previous subscriptions first.
+      // Toggles are wired before the listbox check, which reads the roles it
+      // settles for spans the node turns back into options.
+      this._unwireSpanToggles?.();
+      this._unwireSpanToggles = wireSpanToggles(
+        scroller, spanMap, attrs, this.rn, this._toggles,
+      );
+      this.wireListboxOptions(scroller, spanMap, attrs, sourceNode);
       this._unwireSpans?.();
       this._unwireSpans = wireSpanVisibility(scroller, spanMap, this.rn.state);
       this.rn.ready();

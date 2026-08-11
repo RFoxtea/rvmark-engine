@@ -8,9 +8,9 @@
 import type { RenderNode, SourceNode } from '../render-node.js';
 import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps, wireBulletActions } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
+import { wireSpanToggles } from '../span-toggle.js';
 import { resolveAttrs } from '../source-file.js';
 import { BaseTypeHandler } from '../base-handler.js';
-import { resolveTransclusionConfig } from '../transclusion.js';
 import { mdInlineWithSpansContinued, clipboardHtml } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
@@ -41,6 +41,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
   private _tog!:        HTMLSpanElement;
   private _listboxNav?: ListboxNav;
   private _unwireSpans?: () => void;
+  private _unwireSpanToggles?: () => void;
 
   // Set during construction, used across methods
   private _toggles!:    ToggleSet;
@@ -149,6 +150,11 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
     this._unwireSpans?.();
     this._unwireSpans = wireSpanVisibility(this.content, spanMap, this.rn.state);
 
+    this._unwireSpanToggles?.();
+    this._unwireSpanToggles = wireSpanToggles(
+      this.content, spanMap, attrs, this.rn, this._toggles,
+    );
+
     if (!isListbox(attrs, spanMap)) return false;
 
     const { content, rn } = this;
@@ -238,5 +244,6 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
   onDestroy(): void {
     this._toggles.destroy();
     this._unwireSpans?.();
+    this._unwireSpanToggles?.();
   }
 }

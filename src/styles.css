@@ -487,6 +487,53 @@ footer {
   color: var(--fg);
 }
 
+/* ── Inline toggles (action-driven spans) ── */
+/* Same visual vocabulary as the node bullet — the masked --icon-toggle glyph,
+   rotating on expand.
+
+   Italic rather than underlined: the marker already announces the affordance,
+   and an underline mid-sentence reads as a link. Distinct from .inline-option,
+   which stays underlined — the two kinds behave differently, so they should not
+   look identical. */
+.inline-toggle {
+  color: var(--fg);
+  font-style: italic;
+  cursor: pointer;
+}
+/* Focus shows on the marker itself rather than as a ring around the span: the
+   span sits inline in prose, where an outline boxes a run of text mid-sentence
+   and breaks the line. */
+.inline-toggle:focus,
+.inline-toggle:focus-visible {
+  outline: none;
+}
+.inline-toggle:focus > .span-toggle-marker,
+.inline-toggle:focus-visible > .span-toggle-marker {
+  background-color: var(--accent);
+}
+/* Same size as the node bullet's glyph: 1em at --text-chrome, so both markers
+   are the same mark at the same scale wherever they appear. Sizing off the
+   chrome token rather than the surrounding prose also keeps the box off
+   fractional pixels — the glyph's flat back edge is a hard vertical line, and
+   at a fractional size it antialiases into a stray sliver beside the arrow. */
+.span-toggle-marker {
+  display: inline-block;
+  width: var(--text-chrome);
+  height: var(--text-chrome);
+  margin-right: 0.15em;
+  vertical-align: -0.12em;
+  background-color: currentColor;
+  -webkit-mask: var(--icon-toggle) no-repeat center / contain;
+          mask: var(--icon-toggle) no-repeat center / contain;
+  transition: transform 0.15s;
+}
+.inline-toggle[aria-expanded="true"] > .span-toggle-marker {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .span-toggle-marker { transition: none; }
+}
+
 /* ── .badges: inline listbox styled as 88x31 badge strip ── */
 .node-content.badges {
   align-items: center;

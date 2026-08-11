@@ -267,7 +267,8 @@ let _spanReserved: Set<string> | null = null;
 function spanReserved(): Set<string> {
   return _spanReserved ??= new Set([
     'option', 'selected', 'index', 'transclude', 'href', 'img', 'ruby',
-    'class', 'style', 'role', 'show-when', ...STATE_EVENT_ATTRS,
+    'class', 'style', 'role', 'show-when', 'activate', 'toggle',
+    ...STATE_EVENT_ATTRS,
   ]);
 }
 
@@ -281,9 +282,19 @@ function renderInlineSpan(token: any, label: string): string {
   let role:  string | null = attrs.get('role')  ?? null;
   const style: string | null = attrs.get('style') ?? null;
 
-  if (attrs.has('option') || attrs.has('on-action') || attrs.has('transclude')) {
+  // Role is settled here only for spans whose kind their own attrs determine.
+  // A bare `=> #ref` is action-driven by default (a toggle), but `activate` may
+  // be declared on the NODE, which this renderer cannot see — so those spans are
+  // left unroled and the handler stamps role/marker once node attrs are known.
+  // See listbox-utils.spanIsSelectionDriven and the design note §1b.
+  const selfSelectionDriven = attrs.get('activate') === 'auto' || attrs.has('option');
+  if (selfSelectionDriven || attrs.has('on-action')) {
     classes.push('inline-option');
     role = 'option';
+  } else if (attrs.has('transclude') || attrs.has('toggle')) {
+    classes.push('inline-toggle');
+    // aria-expanded is added at wiring time — a span the node turns into an
+    // option must not carry a disclosure role.
   }
 
   // A conditional span starts hidden and is revealed by wireSpanVisibility once

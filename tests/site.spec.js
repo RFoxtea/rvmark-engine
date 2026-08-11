@@ -2056,3 +2056,117 @@ test.describe('conditional inline spans', () => {
     await expect(multi.getByText('both-conds')).toBeVisible();
   });
 });
+
+// ── Span toggles (action-driven spans) ───────────────────────────────────────
+//
+// Toggling is the default for a span carrying `=> #ref`; `activate: auto`
+// restores the selection-driven listbox behaviour that a bare target used to
+// imply. The two kinds consume different events, and both contend for the one
+// children area — so exclusivity is imposed across the node's whole toggle set.
+// See rvmark-site/tools/toggle-spans-design-note.md §1b.
+
+test.describe('span toggles', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/#span-toggle-root');
+    await waitForTree(page);
+    await waitForNode(page, 'span-toggle-node');
+  });
+
+  const spanIn = async (page, nodeId, text) =>
+    (await waitForNode(page, nodeId)).locator('.inline-toggle', { hasText: text }).first();
+
+  test('a bare => target toggles instead of selecting', async ({ page }) => {
+    const first = await spanIn(page, 'span-toggle-node', 'first');
+    await expect(first).toHaveAttribute('aria-expanded', 'false');
+
+    await first.click();
+    await expect(first).toHaveAttribute('aria-expanded', 'true');
+    await waitForNode(page, 'st-alpha-child');
+
+    await first.click();
+    await expect(first).toHaveAttribute('aria-expanded', 'false');
+    expect(await tryNodeContent(page, 'st-alpha-child')).toBeNull();
+  });
+
+  test('opening one toggle closes the other — one children area', async ({ page }) => {
+    const first  = await spanIn(page, 'span-toggle-node', 'first');
+    const second = await spanIn(page, 'span-toggle-node', 'second');
+
+    await first.click();
+    await waitForNode(page, 'st-alpha-child');
+
+    await second.click();
+    await waitForNode(page, 'st-beta-child');
+    await expect(first).toHaveAttribute('aria-expanded', 'false');
+    expect(await tryNodeContent(page, 'st-alpha-child')).toBeNull();
+  });
+
+  test('a toggle span is reachable and operable from the keyboard', async ({ page }) => {
+    const first = await spanIn(page, 'span-toggle-node', 'first');
+    await first.focus();
+    await first.press('Enter');
+    await expect(first).toHaveAttribute('aria-expanded', 'true');
+    await waitForNode(page, 'st-alpha-child');
+  });
+
+  test('activate: auto restores selection-driven behaviour', async ({ page }) => {
+    // Selection-driven spans are options, not toggles: they carry no toggle
+    // marker and open by being selected rather than actioned.
+    const node = await waitForNode(page, 'span-toggle-auto-node');
+    await expect(node.locator('.inline-toggle')).toHaveCount(0);
+    await expect(node.locator('[role="option"]')).toHaveCount(2);
+  });
+
+  test('an explicit {option} stays selection-driven alongside a toggle', async ({ page }) => {
+    const node = await waitForNode(page, 'span-toggle-mixed-node');
+    await expect(node.locator('[role="option"]')).toHaveCount(1);
+    await expect(node.locator('.inline-toggle')).toHaveCount(1);
+  });
+
+  test('a node declared {listbox} makes its spans selection-driven', async ({ page }) => {
+    const node = await waitForNode(page, 'span-toggle-listbox-node');
+    await expect(node.locator('[role="option"]')).toHaveCount(2);
+    await expect(node.locator('.inline-toggle')).toHaveCount(0);
+  });
+
+  test('a span overrides the node-level activate mode', async ({ page }) => {
+    const node = await waitForNode(page, 'span-toggle-override-node');
+    await expect(node.locator('[role="option"]')).toHaveCount(1);
+    await expect(node.locator('.inline-toggle')).toHaveCount(1);
+  });
+
+  test('a toggle span works inside a {= block} node', async ({ page }) => {
+    const node = await waitForNode(page, 'span-toggle-block-node');
+    const tog = node.locator('.inline-toggle').first();
+    await expect(tog).toHaveAttribute('aria-expanded', 'false');
+    await tog.click();
+    await expect(tog).toHaveAttribute('aria-expanded', 'true');
+    await waitForNode(page, 'st-alpha-child');
+  });
+
+  // A block body goes through DOMPurify (sanitizeMd), which drops any attribute
+  // not on the allowlist. aria-expanded has to survive it or the marker never
+  // rotates and the disclosure state is invisible to assistive tech.
+  test('aria-expanded survives sanitisation in a block body', async ({ page }) => {
+    const node = await waitForNode(page, 'span-toggle-block-node');
+    const tog = node.locator('.inline-toggle').first();
+    await expect(tog).toHaveAttribute('aria-expanded', 'false');
+    await tog.click();
+    await expect(tog).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  // renderInto runs twice for a block containing math — once plain, once after
+  // KaTeX lands — re-wiring the spans each time. The marker must not accumulate,
+  // including when the label is wrapped (here in <em>).
+  test('re-rendering a block does not duplicate the toggle marker', async ({ page }) => {
+    const node = await waitForNode(page, 'span-toggle-math-block');
+    const tog = node.locator('.inline-toggle').first();
+    await expect(tog).toHaveAttribute('aria-expanded', 'false');
+    await expect(tog.locator('.span-toggle-marker')).toHaveCount(1);
+    await expect(tog.locator('em')).toHaveCount(1);
+
+    await tog.click();
+    await expect(tog).toHaveAttribute('aria-expanded', 'true');
+    await expect(tog.locator('.span-toggle-marker')).toHaveCount(1);
+  });
+});

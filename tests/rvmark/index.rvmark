@@ -211,10 +211,29 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
     2. {#listbox-block-indicator-b; show-when: &bstep == b} block step is b
 
 26. {#listbox-transclude-root; open} Listbox option transitive transclusion fixture
-  1. {#listbox-transclude-node} [Direct]{=> #tt-leaf} [Transitive]{=> #tt-mid}
+  1. {#listbox-transclude-node; activate: auto} [Direct]{=> #tt-leaf} [Transitive]{=> #tt-mid}
 27. {#tt-mid; => #tt-leaf} tt-mid children-mode label
 28. {#tt-leaf} tt-leaf target
   1. {#tt-leaf-child} tt-leaf child content
+
+40. {#span-toggle-root; open} Span toggle fixture root
+  1. {#span-toggle-node} Toggle [first]{=> #st-alpha} and [second]{=> #st-beta} here
+  2. {#span-toggle-auto-node; activate: auto} Auto [alpha]{=> #st-alpha} and [beta]{=> #st-beta} here
+  3. {#span-toggle-mixed-node} Mixed [opt]{option; => #st-alpha} and [tog]{=> #st-beta} here
+  4. {#span-toggle-listbox-node; listbox} Listbox [one]{=> #st-alpha} and [two]{=> #st-beta} here
+  5. {#span-toggle-override-node; activate: auto} Override [auto]{=> #st-alpha} and [manual]{activate: manual; => #st-beta} here
+  6. {#span-toggle-block-node; = block}
+      ~~~
+      Block prose with a [toggle]{=> #st-alpha} span in it.
+      ~~~
+  7. {#span-toggle-math-block; = block}
+      ~~~
+      Math $x^2$ forces a re-render, and a [*styled*]{=> #st-beta} span survives it.
+      ~~~
+41. {#st-alpha} st-alpha target
+  1. {#st-alpha-child} st-alpha child content
+42. {#st-beta} st-beta target
+  1. {#st-beta-child} st-beta child content
 
 19. {#event-root; open} Event attrs fixture root
   1. {#event-spawn-parent; let &spawned = 1} on-spawn parent

@@ -127,10 +127,39 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
   return nav;
 }
 
+// ── Selection-driven vs action-driven spans ────────────────────────────────
+//
+// Which EVENT drives a span's change is what separates the two kinds:
+//   listbox span — opens on selection, closes on deselection  (activate: auto)
+//   toggle span  — opens on action,    closes on action       (activate: manual)
+//
+// Toggling is the default. `activate: auto` restores the selection-driven
+// behaviour that a bare `=> #ref` used to imply on its own. Resolution order is
+// span attribute, else node attribute, else manual.
+// See rvmark-site/tools/toggle-spans-design-note.md §1b.
+
+export function spanIsSelectionDriven(span: ParsedSpanAttrs, nodeAttrs: Multimap): boolean {
+  const mode = span.get('activate') ?? nodeAttrs.get('activate');
+  if (mode !== undefined) return mode === 'auto';
+  // An explicit {option} still means "member of the listbox", which is
+  // selection-driven by definition; only a bare transclude flipped to toggling.
+  // A node declared {listbox} says the same thing about all of its spans —
+  // declaring the group and then having its members not be options would make
+  // the attribute mean nothing.
+  return span.has('option') || nodeAttrs.has('listbox') || nodeAttrs.has('listbox-volatile');
+}
+
+/** True when the span participates in the node's listbox group at all. A toggle
+ *  span may ALSO be an option (§3a), in which case it is arrow-reachable but
+ *  keeps toggle semantics. */
+export function spanIsOption(span: ParsedSpanAttrs, nodeAttrs: Multimap): boolean {
+  return span.has('option') || spanIsSelectionDriven(span, nodeAttrs);
+}
+
 export function isListbox(
   attrs: Multimap,
   spanMap: Map<number, ParsedSpanAttrs>,
 ): boolean {
   return attrs.has('listbox') ||
-    [...spanMap.values()].some(s => s.has('option') || s.has('on-action') || s.has('transclude'));
+    [...spanMap.values()].some(s => s.has('option') || s.has('on-action') || spanIsSelectionDriven(s, attrs));
 }

@@ -10,6 +10,7 @@ import { factoryRegister, RenderNode } from '../render-node.js';
 
 import { buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyOnAction, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps, wireBulletActions } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
+import { wireSpanToggles } from '../span-toggle.js';
 import { resolveAttrs } from '../source-file.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
@@ -26,6 +27,7 @@ class TextTypeHandler extends BaseTypeHandler {
   private _listboxNav?: ListboxNav;
   private _permalinkAnyFn?: (key: string, value: string | undefined) => void;
   private _unwireSpans?: () => void;
+  private _unwireSpanToggles?: () => void;
 
   // Computed once in constructor, used across methods
   private tog!:        HTMLSpanElement;
@@ -116,6 +118,10 @@ class TextTypeHandler extends BaseTypeHandler {
         // the subscriptions must be dropped and re-taken against the new ones.
         this._unwireSpans?.();
         this._unwireSpans = wireSpanVisibility(this.lbl, freshSpans, rn.state);
+        this._unwireSpanToggles?.();
+        this._unwireSpanToggles = wireSpanToggles(
+          this.lbl, freshSpans, attrs, rn, this.toggles,
+        );
         this._reRenderLabel = null;
         rn.ready();
       });
@@ -168,6 +174,11 @@ class TextTypeHandler extends BaseTypeHandler {
     this._unwireSpans?.();
     this._unwireSpans = wireSpanVisibility(lbl, spanMap, this.rn.state);
 
+    this._unwireSpanToggles?.();
+    this._unwireSpanToggles = wireSpanToggles(
+      lbl, spanMap, resolveAttrs(sourceNode), this.rn, this.toggles,
+    );
+
     if (hasLink) {
       lbl.addEventListener('keydown', (e: KeyboardEvent) => {
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
@@ -200,6 +211,7 @@ class TextTypeHandler extends BaseTypeHandler {
     if (this._permalinkAnyFn) this.rn.state.unsubscribeAny(this._permalinkAnyFn);
     this.toggles.destroy();
     this._unwireSpans?.();
+    this._unwireSpanToggles?.();
   }
 
   private buildClickWiring(exhibitButton: boolean, hasListbox: boolean) {

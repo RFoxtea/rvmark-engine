@@ -36,6 +36,13 @@ export class ToggleSet {
   readonly expandable: boolean;
   private _unwatchChildren?: () => void;
 
+  // Which span toggle currently owns the children area, or null when the
+  // bullet does (or nothing is open). Exclusivity is IMPOSED here: unlike
+  // selection, action does not give it for free — two toggles could both be
+  // actioned, and there is only one children area. Design note §1b.
+  private _openSpan: HTMLElement | null = null;
+  private readonly _spanMembers = new Set<HTMLElement>();
+
   constructor(rn: RenderNode, attrs: ResolvedAttrs, opts: ToggleSetOpts) {
     this.rn         = rn;
     this.onExpand   = opts.onExpand;
@@ -56,9 +63,47 @@ export class ToggleSet {
   }
 
   async open(scroll = true): Promise<void> {
+    // The bullet is one member among the node's toggles, so opening it closes
+    // whatever span toggle held the area.
+    this._markSpanClosed();
     await expandNode(this.rn);
     for (const v of this.rn.sourceNode.attrs.getAll('on-expand')) applyEventAttr(v, this.rn);
     this.onExpand?.({ scroll });
+  }
+
+  // ── Span toggles ─────────────────────────────────────────────────────────
+  // The second member kind. A span toggle targets a transclusion ref instead of
+  // the node's own children, but contends for the same children area, so the
+  // whole set stays "at most one open".
+
+  register(el: HTMLElement): void { this._spanMembers.add(el); }
+
+  isSpanOpen(el: HTMLElement): boolean { return this._openSpan === el; }
+
+  /** Open a span toggle's target, closing whatever else in the set was open. */
+  async openSpan(el: HTMLElement, ref: string): Promise<void> {
+    this._markSpanClosed();
+    this._openSpan = el;
+    el.setAttribute('aria-expanded', 'true');
+    await expandNode(this.rn, ref);
+  }
+
+  /** Close a span toggle, emptying the children area it owned. */
+  closeSpan(el: HTMLElement): void {
+    if (this._openSpan !== el) return;
+    this._markSpanClosed();
+    this.rn.setChildren([]);
+  }
+
+  toggleSpan(el: HTMLElement, ref: string): void {
+    if (this.isSpanOpen(el)) this.closeSpan(el);
+    else void this.openSpan(el, ref);
+  }
+
+  private _markSpanClosed(): void {
+    if (!this._openSpan) return;
+    this._openSpan.setAttribute('aria-expanded', 'false');
+    this._openSpan = null;
   }
 
   /** Mount transcluded content once, for the types that transclude at build
@@ -70,6 +115,7 @@ export class ToggleSet {
   }
 
   close(): void {
+    this._markSpanClosed();
     for (const v of this.rn.sourceNode.attrs.getAll('on-collapse')) applyEventAttr(v, this.rn);
     this.rn.setChildren([]);
   }
