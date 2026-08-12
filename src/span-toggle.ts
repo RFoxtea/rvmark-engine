@@ -18,7 +18,8 @@ import type { Multimap } from './multimap.js';
 import type { RenderNode } from './render-node.js';
 import type { ToggleSet } from './toggle-set.js';
 import { spanIsSelectionDriven } from './listbox-utils.js';
-import { applyEventAttr } from './handler-utils.js';
+import { applyEventAttr, treeNavKeydown } from './handler-utils.js';
+import { scrollRowIntoMiddle } from './scroll.js';
 
 /** Marker element mirroring the bullet's glyph, placed in front of the span. */
 function makeSpanMarker(): HTMLElement {
@@ -91,16 +92,57 @@ export function wireSpanToggles(
       activate();
     };
 
-    // Arrow keys are never a manual toggle's (§1c). They always mean listbox
-    // navigation, so that how a span was reached tells the reader which keys
-    // apply: arrows for options, Tab then Enter/Space for manual toggles.
+    // Enter/Space toggle; ArrowRight/Left open and close directionally and
+    // ArrowUp/Down walk to the previous/next node — the same gestures a node's
+    // bullet answers to, so a focused span navigates like the row it sits in.
+    //
+    // §1c says arrows are never a manual toggle's, because at the NODE level
+    // they mean listbox navigation. That rule is untouched here: while a span
+    // has DOM focus the node is in "mode" (FocusGating.modeActive), and both the
+    // node's own arrow cases and its listbox dispatch bail on `inMode` — so
+    // arrows reach nothing at all once a toggle is focused. Binding them on the
+    // focused span takes no gesture away from the listbox; arrowing across
+    // options still requires focus on the node itself.
     const onKeydown = (e: KeyboardEvent) => {
-      if (e.key !== 'Enter' && e.key !== ' ') return;
-      // The node's own handler treats Enter/Space as its bullet toggle, so the
+      const open = toggles.isSpanOpen(el);
+      switch (e.key) {
+        case 'Enter':
+        case ' ':
+          activate();
+          break;
+        case 'ArrowRight':
+          // Open when closed. When already open, step into the content it put
+          // in the children area, mirroring a node's ArrowRight.
+          if (!open) activate();
+          else {
+            const fc = rn.children?.querySelector<HTMLElement>('.node-content');
+            if (fc) { fc.focus(); scrollRowIntoMiddle(fc); }
+          }
+          break;
+        case 'ArrowLeft':
+          // Close when open; otherwise leave the event alone so it keeps its
+          // ordinary meaning rather than being silently swallowed.
+          if (!open) return;
+          activate();
+          break;
+        case 'ArrowUp':
+        case 'ArrowDown':
+          // Move to the previous/next node, as if the node itself were focused.
+          // Delegated to treeNavKeydown so a focused span walks the tree by
+          // exactly the same rules — including Alt for sibling-only movement —
+          // rather than carrying a second traversal that could drift from it.
+          // It calls preventDefault itself and moves focus off this span, which
+          // is what ends the toggle's claim on the arrow keys.
+          treeNavKeydown(e, rn.contentEl, rn.li);
+          e.stopPropagation();
+          return;
+        default:
+          return;
+      }
+      // The node's own handler treats these as its bullet/tree gestures, so the
       // event must not continue up to it.
       e.stopPropagation();
       e.preventDefault();
-      activate();
     };
 
     el.addEventListener('click', onClick);

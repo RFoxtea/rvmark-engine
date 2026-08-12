@@ -39,7 +39,11 @@ class TextTypeHandler extends BaseTypeHandler {
   private _reRenderLabel: (() => { html: string; spanMap: Map<number, ParsedSpanAttrs> }) | null = null;
 
   constructor(rn: RenderNode) {
-    super(rn, '.node-label a[href]');
+    // Manual toggle spans are Tab-reachable buttons, so they are gated exactly
+    // like links: focusable only while this node is selected. Without them here
+    // every citation in the document stays in the tab order at once, which on a
+    // page like Euclid's Elements is thousands of stops.
+    super(rn, '.node-label a[href], .node-label .inline-toggle');
     const sourceNode = rn.sourceNode;
     const attrs = resolveAttrs(sourceNode);
     applyOnSpawn(attrs, rn);
@@ -122,6 +126,10 @@ class TextTypeHandler extends BaseTypeHandler {
         this._unwireSpanToggles = wireSpanToggles(
           this.lbl, freshSpans, attrs, rn, this.toggles,
         );
+        // Re-wiring hands the fresh toggles tabIndex 0, so re-apply the gate:
+        // focusable only while this node is selected, as at construction.
+        if (RenderNode.currentSelection === this.rn) this.activate();
+        else this.deactivate();
         this._reRenderLabel = null;
         rn.ready();
       });
