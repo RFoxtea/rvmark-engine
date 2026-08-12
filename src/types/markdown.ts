@@ -225,6 +225,7 @@ class MarkdownTypeHandler extends BaseTypeHandler {
       sourceNode,
       scrollOnSelect:  true,
       volatile:        attrs.has('listbox-volatile'),
+      toggles:         this._toggles,
     });
 
     // Clicking the left border clears the option selection — the same gesture a

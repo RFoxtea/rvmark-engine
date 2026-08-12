@@ -168,6 +168,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
       sourceNode,
       scrollOnSelect:  false,
       volatile:        attrs.has('listbox-volatile'),
+      toggles:         this._toggles,
     });
     return true;
   }

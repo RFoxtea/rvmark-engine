@@ -17,6 +17,7 @@ import { Multimap } from './multimap.js';
 import type { ListboxNav } from './listbox.js';
 import type { ParsedSpanAttrs } from './markdown.js';
 import type { RenderNode, SourceNode } from './render-node.js';
+import type { ToggleSet } from './toggle-set.js';
 import { expandNode, applyEventAttr } from './handler-utils.js';
 
 // Shared empty attr set for elements with no parsed span (e.g. an author-written
@@ -38,10 +39,14 @@ export interface ListboxConfig {
   scrollOnSelect?: boolean;
   /** If true, reset the listbox to no-option when the owning node is deselected. */
   volatile?: boolean;
+  /** The node's toggle set, so a transcluding option can take the hill (§1c).
+   *  Optional: a listbox on a node with no toggle set still works, it simply
+   *  has no one to contend with. */
+  toggles?: ToggleSet;
 }
 
 export function wireListbox(cfg: ListboxConfig): ListboxNav {
-  const { optionContainer, navRoot, spanMap, rn, sourceNode, scrollOnSelect, volatile } = cfg;
+  const { optionContainer, navRoot, spanMap, rn, sourceNode, scrollOnSelect, volatile, toggles } = cfg;
 
   // Annotate DOM elements with their parsed span attrs
   for (const el of optionContainer.querySelectorAll<HTMLElement>('[data-rvmark-span]')) {
@@ -67,11 +72,14 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
     // normalize to it), and every one of them applies — hence getAll.
     for (const v of params.getAll('on-action')) applyEventAttr(v, rn);
     const transclude = params.get('transclude');
-    if (transclude) {
-      void expandNode(rn, transclude);
-    } else {
-      rn.setChildren(sourceNode.children as SourceNode[], null);
-    }
+    // Only a TRANSCLUDING option takes the hill (§1c). A targetless option —
+    // Euclid's `[BCD]{let &e-ri = …}`, thousands of them — makes no claim on
+    // the children area, so it must not touch it: it takes nothing and knocks
+    // nobody off, which is what lets a manual toggle stay open while the reader
+    // arrows across the highlights beneath it.
+    if (!transclude) return;
+    toggles?.takeHillForOption(el);
+    void expandNode(rn, transclude);
   };
 
   const nav = createListboxNav(
@@ -83,6 +91,14 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
         if (_prevEl && _prevEl !== el) {
           fireSpanEvent(_prevEl, 'on-deselect');
           fireSpanEvent(_prevEl, 'on-blur');
+          // Deselection turns an option off, so it stops holding the hill. If
+          // the newly selected option transcludes it takes the hill below and
+          // fills the area; if it does not, the area is emptied here — an
+          // option's content must not outlive its selection.
+          if (toggles?.isSpanOpen(_prevEl)) {
+            toggles.releaseIfHolder(_prevEl);
+            if (!spanOf(el).get('transclude')) rn.setChildren([]);
+          }
         }
         applyOptionSelection(el);
         fireSpanEvent(el, 'on-select');
@@ -100,12 +116,23 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
         if (el.tagName === 'A') (el as HTMLAnchorElement).click();
       },
       onReset() {
+        let heldHill = false;
         if (_prevEl) {
           fireSpanEvent(_prevEl, 'on-deselect');
           fireSpanEvent(_prevEl, 'on-blur');
+          heldHill = !!toggles?.isSpanOpen(_prevEl);
+          if (heldHill) toggles!.releaseIfHolder(_prevEl);
           _prevEl = null;
         }
-        rn.setChildren(sourceNode.children as SourceNode[], null);
+        // Restore the node's own children only when the listbox itself held the
+        // hill (or there is no toggle set to hold it). A manual toggle holding
+        // the hill is untouched by deselection — nothing knocked it off, so it
+        // stands. `on-no-option-select` still fires either way: it is a fact
+        // about selection, not about the children area, and Euclid relies on it
+        // to clear the diagram highlight.
+        if (heldHill || !toggles || toggles.hillIsFree()) {
+          rn.setChildren(sourceNode.children as SourceNode[], null);
+        }
         for (const v of rn.attrs.getAll('on-no-option-select')) applyEventAttr(v, rn);
       },
     },
@@ -127,33 +154,29 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
   return nav;
 }
 
-// ── Selection-driven vs action-driven spans ────────────────────────────────
+// ── Option toggles vs manual toggles ───────────────────────────────────────
 //
-// Which EVENT drives a span's change is what separates the two kinds:
-//   listbox span — opens on selection, closes on deselection  (activate: auto)
-//   toggle span  — opens on action,    closes on action       (activate: manual)
+// Everything expandable is a toggle; `{option}` names what DRIVES one:
+//   option toggle — on when selected,  off when deselected   (arrow keys)
+//   manual toggle — on when activated, off when re-activated (Tab, Enter/Space)
 //
-// Toggling is the default. `activate: auto` restores the selection-driven
-// behaviour that a bare `=> #ref` used to imply on its own. Resolution order is
-// span attribute, else node attribute, else manual.
-// See rvmark-site/tools/toggle-spans-design-note.md §1b.
+// `{option; toggle}` is redundant rather than a compose case: an option already
+// is a toggle. There is no `activate` attribute — the fork it expressed is
+// carried by `{option}`, so no span leaves the question open.
+// See rvmark-site/tools/toggle-spans-design-note.md §1c.
 
 export function spanIsSelectionDriven(span: ParsedSpanAttrs, nodeAttrs: Multimap): boolean {
-  const mode = span.get('activate') ?? nodeAttrs.get('activate');
-  if (mode !== undefined) return mode === 'auto';
-  // An explicit {option} still means "member of the listbox", which is
-  // selection-driven by definition; only a bare transclude flipped to toggling.
-  // A node declared {listbox} says the same thing about all of its spans —
-  // declaring the group and then having its members not be options would make
-  // the attribute mean nothing.
+  // A node declared {listbox} says its spans are options — declaring the group
+  // and then having its members not be options would make the attribute mean
+  // nothing.
   return span.has('option') || nodeAttrs.has('listbox') || nodeAttrs.has('listbox-volatile');
 }
 
-/** True when the span participates in the node's listbox group at all. A toggle
- *  span may ALSO be an option (§3a), in which case it is arrow-reachable but
- *  keeps toggle semantics. */
+/** True when the span participates in the node's listbox group. Identical to
+ *  being selection-driven now that options and toggles are one mechanism
+ *  (§1c); kept as its own name because call sites ask a different question. */
 export function spanIsOption(span: ParsedSpanAttrs, nodeAttrs: Multimap): boolean {
-  return span.has('option') || spanIsSelectionDriven(span, nodeAttrs);
+  return spanIsSelectionDriven(span, nodeAttrs);
 }
 
 export function isListbox(

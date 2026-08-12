@@ -2109,9 +2109,9 @@ test.describe('span toggles', () => {
     await waitForNode(page, 'st-alpha-child');
   });
 
-  test('activate: auto restores selection-driven behaviour', async ({ page }) => {
-    // Selection-driven spans are options, not toggles: they carry no toggle
-    // marker and open by being selected rather than actioned.
+  test('{option} makes a transcluding span selection-driven', async ({ page }) => {
+    // Option toggles carry no toggle marker and open by being selected rather
+    // than actioned (§1c).
     const node = await waitForNode(page, 'span-toggle-auto-node');
     await expect(node.locator('.inline-toggle')).toHaveCount(0);
     await expect(node.locator('[role="option"]')).toHaveCount(2);
@@ -2129,10 +2129,74 @@ test.describe('span toggles', () => {
     await expect(node.locator('.inline-toggle')).toHaveCount(0);
   });
 
-  test('a span overrides the node-level activate mode', async ({ page }) => {
-    const node = await waitForNode(page, 'span-toggle-override-node');
-    await expect(node.locator('[role="option"]')).toHaveCount(1);
-    await expect(node.locator('.inline-toggle')).toHaveCount(1);
+  test('a manual toggle does not claim arrow keys', async ({ page }) => {
+    // Arrows always mean listbox navigation (§1c), so ArrowRight on a focused
+    // manual toggle must not expand it.
+    const node = await waitForNode(page, 'span-toggle-node');
+    const tog  = node.locator('.inline-toggle').first();
+    await tog.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(tog).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('a knocked-off manual toggle curls up; an option stands upright', async ({ page }) => {
+    // The two temperaments (§1c). Open the manual toggle, then select the
+    // option: the toggle loses the hill and deactivates.
+    const node = await waitForNode(page, 'span-toggle-hill-node');
+    const tog  = node.locator('.inline-toggle').first();
+    const opt  = node.locator('[role="option"]').first();
+
+    await tog.click();
+    await expect(tog).toHaveAttribute('aria-expanded', 'true');
+
+    await opt.click();
+    await expect(tog).toHaveAttribute('aria-expanded', 'false');
+    await expect(opt).toHaveAttribute('aria-selected', 'true');
+    await waitForNode(page, 'st-alpha-child');
+
+    // Now the reverse: the option is knocked off but stays selected.
+    await tog.click();
+    await expect(tog).toHaveAttribute('aria-expanded', 'true');
+    await expect(opt).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('a targetless option never knocks a manual toggle off the hill', async ({ page }) => {
+    // The Euclid case: arrowing across highlight spans while a citation is
+    // open must leave the citation standing (§1c).
+    const node = await waitForNode(page, 'span-toggle-euclid-node');
+    const tog  = node.locator('.inline-toggle').first();
+    const opt  = node.locator('[role="option"]').first();
+
+    await tog.click();
+    await expect(tog).toHaveAttribute('aria-expanded', 'true');
+    await waitForNode(page, 'st-alpha-child');
+
+    await opt.click();
+    await expect(opt).toHaveAttribute('aria-selected', 'true');
+    // Still open, and its content still mounted.
+    await expect(tog).toHaveAttribute('aria-expanded', 'true');
+    await waitForNode(page, 'st-alpha-child');
+  });
+
+  test('a language switch in a block does not close a manual toggle', async ({ page }) => {
+    // The docs/philosophy shape: a citation toggle and a de/en option pair in
+    // one {= block}. Switching language must not disturb the citation (§1c) —
+    // the options are targetless, so they never take the hill.
+    const node = await waitForNode(page, 'span-toggle-langblock-node');
+    const tog  = node.locator('.inline-toggle').first();
+    const opts = node.locator('[role="option"]');
+
+    await tog.click();
+    await expect(tog).toHaveAttribute('aria-expanded', 'true');
+    await waitForNode(page, 'st-alpha-child');
+
+    await opts.nth(1).click();
+    await expect(node.locator('.inline-toggle').first()).toHaveAttribute('aria-expanded', 'true');
+    await waitForNode(page, 'st-alpha-child');
+
+    await opts.nth(0).click();
+    await expect(node.locator('.inline-toggle').first()).toHaveAttribute('aria-expanded', 'true');
+    await waitForNode(page, 'st-alpha-child');
   });
 
   test('a toggle span works inside a {= block} node', async ({ page }) => {

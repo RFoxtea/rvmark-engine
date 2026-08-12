@@ -36,11 +36,19 @@ export class ToggleSet {
   readonly expandable: boolean;
   private _unwatchChildren?: () => void;
 
-  // Which span toggle currently owns the children area, or null when the
-  // bullet does (or nothing is open). Exclusivity is IMPOSED here: unlike
-  // selection, action does not give it for free — two toggles could both be
-  // actioned, and there is only one children area. Design note §1b.
-  private _openSpan: HTMLElement | null = null;
+  // ── The hill ──────────────────────────────────────────────────────────────
+  // The children area is a hill: one holder, last taker wins, and knocking
+  // someone off puts nobody else on (no layering — releasing empties the area).
+  // Design note §1c.
+  //
+  // Only TRANSCLUDING spans ever take it. A targetless span — an option that
+  // merely sets state, or a bare {toggle} checkbox — makes no claim, so it
+  // takes nothing and knocks nobody off. That is what lets Euclid's highlight
+  // spans be arrowed across while a citation stays open.
+  private _holder: HTMLElement | 'bullet' | null = null;
+  // The holder's span ordinal — the identity that survives a re-render, since
+  // innerHTML discards the element itself. See register().
+  private _holderOrdinal: string | null = null;
   private readonly _spanMembers = new Set<HTMLElement>();
 
   constructor(rn: RenderNode, attrs: ResolvedAttrs, opts: ToggleSetOpts) {
@@ -63,35 +71,53 @@ export class ToggleSet {
   }
 
   async open(scroll = true): Promise<void> {
-    // The bullet is one member among the node's toggles, so opening it closes
-    // whatever span toggle held the area.
-    this._markSpanClosed();
+    // The bullet takes the hill like any other member.
+    this._takeHill('bullet');
     await expandNode(this.rn);
     for (const v of this.rn.sourceNode.attrs.getAll('on-expand')) applyEventAttr(v, this.rn);
     this.onExpand?.({ scroll });
   }
 
-  // ── Span toggles ─────────────────────────────────────────────────────────
-  // The second member kind. A span toggle targets a transclusion ref instead of
-  // the node's own children, but contends for the same children area, so the
-  // whole set stays "at most one open".
+  // ── Span members of the hill ─────────────────────────────────────────────
+  // A span member targets a transclusion ref instead of the node's own
+  // children, but contends for the same hill.
 
-  register(el: HTMLElement): void { this._spanMembers.add(el); }
+  /**
+   * Add a span to the set, and re-adopt it if it is the hill's holder.
+   *
+   * Wiring runs again on every re-render of a container (markdown fetch, KaTeX
+   * upgrade, a `show-when` sibling flipping) — and innerHTML replaces the DOM
+   * elements each time. Identity must therefore be the span's ORDINAL, which is
+   * stable across re-renders, not the element, which is not: a holder tracked
+   * by element goes stale the moment its container re-renders, leaving the hill
+   * pointing at a detached node while the visible span reads as closed.
+   */
+  register(el: HTMLElement): void {
+    this._spanMembers.add(el);
+    const ord = el.getAttribute('data-rvmark-span');
+    if (ord !== null && ord === this._holderOrdinal) {
+      this._holder = el;
+      el.setAttribute('aria-expanded', 'true');
+    }
+  }
 
-  isSpanOpen(el: HTMLElement): boolean { return this._openSpan === el; }
+  isSpanOpen(el: HTMLElement): boolean { return this._holder === el; }
 
-  /** Open a span toggle's target, closing whatever else in the set was open. */
+  /** True when nobody holds the hill, so the children area is free to fill. */
+  hillIsFree(): boolean { return this._holder === null; }
+
+  /** Take the hill for a MANUAL toggle span. */
   async openSpan(el: HTMLElement, ref: string): Promise<void> {
-    this._markSpanClosed();
-    this._openSpan = el;
+    this._takeHill(el);
     el.setAttribute('aria-expanded', 'true');
     await expandNode(this.rn, ref);
   }
 
-  /** Close a span toggle, emptying the children area it owned. */
+  /** Release the hill, emptying the children area. No layering: nothing is
+   *  revealed underneath. */
   closeSpan(el: HTMLElement): void {
-    if (this._openSpan !== el) return;
-    this._markSpanClosed();
+    if (this._holder !== el) return;
+    this._takeHill(null);
     this.rn.setChildren([]);
   }
 
@@ -100,10 +126,41 @@ export class ToggleSet {
     else void this.openSpan(el, ref);
   }
 
-  private _markSpanClosed(): void {
-    if (!this._openSpan) return;
-    this._openSpan.setAttribute('aria-expanded', 'false');
-    this._openSpan = null;
+  /** Take the hill for a selection-driven OPTION span. Distinct from openSpan
+   *  only in that the caller owns the transclusion — the listbox path already
+   *  calls expandNode with its own ref handling. */
+  takeHillForOption(el: HTMLElement): void {
+    this._takeHill(el);
+  }
+
+  /** Release the hill if `el` holds it, WITHOUT emptying the area — the caller
+   *  is about to fill it. Used when an option is deselected: its content goes
+   *  away because the listbox replaces or clears it, not because the hill was
+   *  knocked over. */
+  releaseIfHolder(el: HTMLElement): void {
+    if (this._holder === el) this._holder = null;
+  }
+
+  /**
+   * Hand the hill to `next`, deactivating whoever held it.
+   *
+   * The two temperaments (§1c). A knocked-off MANUAL toggle is insecure: it
+   * curls up and deactivates, so aria-expanded goes false and it is off. A
+   * knocked-off OPTION is confident: it stands upright and stays on — still
+   * selected, on-deselect unfired, its state mutations still applied — because
+   * losing the hill is a different event from being deselected. So options are
+   * simply dropped from the hill with nothing else disturbed; only spans
+   * carrying aria-expanded (manual toggles) are marked closed.
+   */
+  private _takeHill(next: HTMLElement | 'bullet' | null): void {
+    const prev = this._holder;
+    if (prev && prev !== 'bullet' && prev !== next && prev.hasAttribute('aria-expanded')) {
+      prev.setAttribute('aria-expanded', 'false');
+    }
+    this._holder = next;
+    this._holderOrdinal = (next && next !== 'bullet')
+      ? next.getAttribute('data-rvmark-span')
+      : null;
   }
 
   /** Mount transcluded content once, for the types that transclude at build
@@ -115,7 +172,7 @@ export class ToggleSet {
   }
 
   close(): void {
-    this._markSpanClosed();
+    this._takeHill(null);
     for (const v of this.rn.sourceNode.attrs.getAll('on-collapse')) applyEventAttr(v, this.rn);
     this.rn.setChildren([]);
   }

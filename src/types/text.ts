@@ -204,6 +204,7 @@ class TextTypeHandler extends BaseTypeHandler {
       sourceNode:      rn.sourceNode,
       scrollOnSelect:  false,
       volatile,
+      toggles:         this.toggles,
     });
   }
 

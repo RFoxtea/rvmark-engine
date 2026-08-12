@@ -1,18 +1,16 @@
 /**
  * span-toggle.ts
  *
- * Action-driven spans: a span in a node's label that expands its target into
- * the node's children area, and collapses it again when activated a second
- * time. The counterpart to listbox options, which are selection-driven.
+ * Manual toggles: a span in a node's label that expands its target into the
+ * node's children area, and collapses it again when activated a second time.
  *
- * The two kinds consume different events — action vs select/deselect — which is
- * what makes them genuinely different rather than one being a flag on the
- * other. Toggling is the default; `activate: auto` opts a span back into
- * selection-driven behaviour. See rvmark-site/tools/toggle-spans-design-note.md.
+ * Options are toggles too — `{option}` names what drives one. An option toggle
+ * is on while selected; a manual toggle is on from activation until
+ * re-activation. This module wires only the manual kind; the listbox path in
+ * listbox-utils.ts wires the other. See the design note §1c.
  *
- * A toggle span is a button, reached by Tab. It may ALSO be an {option}, in
- * which case the listbox still navigates to it by arrow keys but the toggle
- * owns what the children area shows (§6b).
+ * A manual toggle is a button reached by Tab, activated with Enter/Space or a
+ * click. Arrow keys are never its own — they always mean listbox navigation.
  */
 
 import type { ParsedSpanAttrs } from './markdown.js';
@@ -31,11 +29,11 @@ function makeSpanMarker(): HTMLElement {
 }
 
 /**
- * Wire every action-driven span under `root`. Returns a teardown.
+ * Wire every manual toggle under `root`. Returns a teardown.
  *
- * `nodeAttrs` is needed because `activate` may be declared node-level and
- * overridden per span — the renderer cannot see node attrs, so the role and
- * marker for these spans are settled here.
+ * `nodeAttrs` is needed because `{listbox}` may be declared node-level, making
+ * options of spans the renderer saw only as bare `=> #ref` — the renderer
+ * cannot see node attrs, so role and marker are settled here.
  */
 export function wireSpanToggles(
   root:      HTMLElement,
@@ -51,9 +49,11 @@ export function wireSpanToggles(
     const span    = spanMap.get(ordinal);
     if (!span) continue;
     if (spanIsSelectionDriven(span, nodeAttrs)) {
-      // The renderer marks a bare `=> #ref` as a toggle because that is the
-      // default, but `activate: auto` may be declared on the NODE, which the
-      // renderer cannot see. Undo the guess now that node attrs are known.
+      // The renderer marks a bare `=> #ref` as a manual toggle, but node-level
+      // `{listbox}` may make it an option — which the renderer cannot see. Undo
+      // the guess now that node attrs are known. Options are wired by the
+      // listbox path, and never get Tab or a toggle marker: DOM focus on an
+      // option would desync aria-activedescendant, which listbox.ts forbids.
       el.classList.remove('inline-toggle');
       el.classList.add('inline-option');
       el.setAttribute('role', 'option');
@@ -90,23 +90,11 @@ export function wireSpanToggles(
       e.stopPropagation();
       activate();
     };
-    // A span that is also an {option} keeps arrow keys for listbox navigation
-    // (§3a/§6b); only a plain toggle span may claim them for its own expansion.
-    const ownsArrows = !span.has('option');
 
+    // Arrow keys are never a manual toggle's (§1c). They always mean listbox
+    // navigation, so that how a span was reached tells the reader which keys
+    // apply: arrows for options, Tab then Enter/Space for manual toggles.
     const onKeydown = (e: KeyboardEvent) => {
-      if (ownsArrows && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
-        // Expansion, not tree navigation: the node's handler would otherwise
-        // expand/collapse the NODE while a span inside it holds focus.
-        const wantOpen = e.key === 'ArrowRight';
-        if (wantOpen !== toggles.isSpanOpen(el)) {
-          e.stopPropagation();
-          e.preventDefault();
-          if (wantOpen) void toggles.openSpan(el, ref);
-          else toggles.closeSpan(el);
-        }
-        return;
-      }
       if (e.key !== 'Enter' && e.key !== ' ') return;
       // The node's own handler treats Enter/Space as its bullet toggle, so the
       // event must not continue up to it.

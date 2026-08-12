@@ -211,17 +211,17 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
     2. {#listbox-block-indicator-b; show-when: &bstep == b} block step is b
 
 26. {#listbox-transclude-root; open} Listbox option transitive transclusion fixture
-  1. {#listbox-transclude-node; activate: auto} [Direct]{=> #tt-leaf} [Transitive]{=> #tt-mid}
+  1. {#listbox-transclude-node} [Direct]{option; => #tt-leaf} [Transitive]{option; => #tt-mid}
 27. {#tt-mid; => #tt-leaf} tt-mid children-mode label
 28. {#tt-leaf} tt-leaf target
   1. {#tt-leaf-child} tt-leaf child content
 
 40. {#span-toggle-root; open} Span toggle fixture root
   1. {#span-toggle-node} Toggle [first]{=> #st-alpha} and [second]{=> #st-beta} here
-  2. {#span-toggle-auto-node; activate: auto} Auto [alpha]{=> #st-alpha} and [beta]{=> #st-beta} here
+  2. {#span-toggle-auto-node} Auto [alpha]{option; => #st-alpha} and [beta]{option; => #st-beta} here
   3. {#span-toggle-mixed-node} Mixed [opt]{option; => #st-alpha} and [tog]{=> #st-beta} here
   4. {#span-toggle-listbox-node; listbox} Listbox [one]{=> #st-alpha} and [two]{=> #st-beta} here
-  5. {#span-toggle-override-node; activate: auto} Override [auto]{=> #st-alpha} and [manual]{activate: manual; => #st-beta} here
+  5. {#span-toggle-hill-node} Hill [opt]{option; => #st-alpha} and [tog]{=> #st-beta} here
   6. {#span-toggle-block-node; = block}
       ~~~
       Block prose with a [toggle]{=> #st-alpha} span in it.
@@ -229,6 +229,32 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
   7. {#span-toggle-math-block; = block}
       ~~~
       Math $x^2$ forces a re-render, and a [*styled*]{=> #st-beta} span survives it.
+      ~~~
+  8. {#span-toggle-euclid-node} Euclid [cite]{=> #st-alpha} then ([de]{selected; option; let &st-lang = de} / [en]{option; let &st-lang = en})
+  9. {#span-toggle-langblock-node; = block}
+      ~~~
+      Cite a [source]{=> #st-alpha} then switch ([de]{selected; option; let &st-lang = de} / [en]{option; let &st-lang = en}).
+      [Deutscher Text]{show-when: &st-lang == de}[English text]{show-when: &st-lang == en}
+      ~~~
+  10. {#span-toggle-langblock-peer; = block}
+      ~~~
+      A peer block writing the SAME variable ([la]{selected; option; let &st-lang = la} / [nl]{option; let &st-lang = nl} / [en]{option; let &st-lang = en}).
+      [Latine]{show-when: &st-lang == la}[Nederlands]{show-when: &st-lang == nl}
+      ~~~
+  11. {#span-toggle-wrapped-node; = block}
+      ~~~
+      A citation [*puer aeternus*,]{=> #st-alpha} in prose that
+      continues across lines before the switch.
+      ([de]{selected; option; let &st-w = de} / [en]{option; let &st-w = en})
+
+      > [Der Mensch, insofern er wirklich sein will, muß dasein,
+      und zu dem Ende muß er sich begrenzen.
+      Wer gegen das Endliche zu ekel ist, der kommt zu gar keiner Wirklichkeit,
+      sondern er verbleibt im Abstrakten.]{show-when: &st-w == de}
+      [Man, insofar as he wants to be actual, must be determinate,
+      and to that end must limit himself.
+      Whoever loathes the finite too much, he attains no actuality at all,
+      but remains in the abstract.]{show-when: &st-w == en}
       ~~~
 41. {#st-alpha} st-alpha target
   1. {#st-alpha-child} st-alpha child content
