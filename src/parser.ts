@@ -272,7 +272,7 @@ export const STATE_EVENT_ATTRS = new Set([
 //   => value   → transclude
 //   let …      → on-spawn  (declaration defaults to spawn time)
 //   set …      → on-action (assignment defaults to the node's action)
-//   remove …   → on-action
+//   remove …   → on-spawn  (the counterpart of `let`: same frame, same event)
 //   key: val   → key
 //   key        → key with empty value
 //
@@ -289,7 +289,7 @@ export function parseAttrBlock(raw: string): Multimap {
     if (p.startsWith('=>')) { out.append('transclude', p.slice(2).trim()); continue; }
     if (p.startsWith('='))  { out.append('type', p.slice(1).trim()); continue; }
     const kw = p.match(/^(let|set|remove)\b/);
-    if (kw) { out.append(kw[1] === 'let' ? 'on-spawn' : 'on-action', p); continue; }
+    if (kw) { out.append(kw[1] === 'set' ? 'on-action' : 'on-spawn', p); continue; }
     // Retired sigil syntax. Without this guard a leftover `{&x=1}` or `{?&x==1}`
     // would parse as an attribute literally named "&x=1" and then be silently
     // ignored at render time — the failure mode the keyword grammar exists to

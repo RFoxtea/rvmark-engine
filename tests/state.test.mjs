@@ -506,10 +506,20 @@ test('parseStateEntries: let does declare on own frame, not ancestor', () => {
 
 // ── attr-block keyword sugar ──────────────────────────────────────────────────
 
-test('parseAttrBlock: bare let → on-spawn, bare set → on-action', () => {
+// `remove` is the counterpart of `let` — same frame, same event — so it
+// defaults to spawn. Only `set` defaults to the node's action.
+test('parseAttrBlock: bare let/remove → on-spawn, bare set → on-action', () => {
   assert.deepEqual(parseAttrBlock('let &x = "1"').allEntries(), [['on-spawn', 'let &x = "1"']]);
   assert.deepEqual(parseAttrBlock('set &x = "2"').allEntries(), [['on-action', 'set &x = "2"']]);
-  assert.deepEqual(parseAttrBlock('remove &x').allEntries(),     [['on-action', 'remove &x']]);
+  assert.deepEqual(parseAttrBlock('remove &x').allEntries(),     [['on-spawn', 'remove &x']]);
+});
+
+// The bare form is only emitted when the keyword's default event matches the
+// attr it sits on, so a bare `remove` must come back as on-spawn, and a
+// non-default pairing must keep its explicit `key: val` spelling.
+test('bare remove round-trips as on-spawn', () => {
+  assert.deepEqual(parseAttrBlock('remove &x').allEntries(), [['on-spawn', 'remove &x']]);
+  assert.deepEqual(parseAttrBlock('on-action: remove &x').allEntries(), [['on-action', 'remove &x']]);
 });
 
 test('parseAttrBlock: explicit event attr keeps the keyword meaning', () => {

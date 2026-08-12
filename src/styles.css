@@ -491,14 +491,21 @@ footer {
 /* Same visual vocabulary as the node bullet — the masked --icon-toggle glyph,
    rotating on expand.
 
-   Italic rather than underlined: the marker already announces the affordance,
-   and an underline mid-sentence reads as a link. Distinct from .inline-option,
-   which stays underlined — the two kinds behave differently, so they should not
-   look identical. */
+   Dotted underline rather than italic: a citation is a reference, and italics
+   fight the surrounding prose where titles and emphasis already use them.
+   Distinct from .inline-option's solid underline — the two kinds behave
+   differently, so they should not look identical. Same underline offset, so
+   the two sit on a common baseline where they share a label. */
 .inline-toggle {
   color: var(--fg);
-  font-style: italic;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
   cursor: pointer;
+  /* The marker is a separate inline box sitting in front of the label, so a
+     line break can otherwise fall between them and strand the glyph at the end
+     of a line, away from what it opens. Keeping the whole toggle on one line
+     also stops the underline being cut in two mid-citation. */
+  white-space: nowrap;
 }
 /* Focus shows on the marker itself rather than as a ring around the span: the
    span sits inline in prose, where an outline boxes a run of text mid-sentence
