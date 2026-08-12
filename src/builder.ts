@@ -176,6 +176,10 @@ export interface SpanSpec {
   transclude?: string;
   /** Marks the span an option (`option`). */
   option?:     boolean;
+  /** Marks the span a manual toggle (`toggle`). Only needed to opt out of a
+   *  node-level `{listbox}`/`{listbox-volatile}`, which otherwise makes every
+   *  span an option. */
+  toggle?:     boolean;
   class?:      string;
   /** Any other `key: val` params, in order. */
   extra?:      Record<string, string>;
@@ -185,7 +189,7 @@ export interface SpanSpec {
  * Construct an inline span `[text]{params}` for embedding in a node label — the
  * construct-direction counterpart to markdown.ts's parseInlineSpanParams. The
  * visible `text` is label-escaped; params are emitted in the canonical order
- * (state, transclude, option, class, extra) joined by '; '.
+ * (state, transclude, option, toggle, class, extra) joined by '; '.
  *
  * Example: span('A', { state: '&e-ri<<A|point' }) → `[A]{&e-ri<<A|point}`
  */
@@ -196,6 +200,7 @@ export function span(text: string, spec: SpanSpec = {}): string {
   }
   if (spec.transclude != null) params.push(`=> ${spec.transclude}`);
   if (spec.option) params.push('option');
+  if (spec.toggle) params.push('toggle');
   if (spec.class != null) params.push(`class: ${spec.class}`);
   for (const [k, v] of Object.entries(spec.extra ?? {})) params.push(`${k}: ${v}`);
 

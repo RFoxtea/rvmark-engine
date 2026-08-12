@@ -513,6 +513,32 @@ export function parse(src: string): RawFile {
  * Runs top-down: a node's permalinkId feeds its children's. Idempotent for a
  * fully-explicit tree; safe to re-run after mutating the tree.
  */
+/**
+ * Whether a node claims its slug as a name in a file's nodeMap.
+ *
+ * Only a DECLARED id does. `#11` means "the node whose id is 11" — never "the
+ * 11th node", which is not a name the node asked for. An ordinal is meaningful
+ * only among siblings (that scope is carried by permalinkId and numbering), so
+ * indexing bare ordinals in a flat per-file map lets an unlabelled node squat
+ * on a declared id's name. Euclid surfaced it: {#11} (Proposition 11) lost to
+ * `hr` separators falling on ordinal 11 inside later proofs, and citations to
+ * it expanded to nothing.
+ *
+ * Ordinal-only nodes stay reachable by compound path (`43-proof.11`) and by the
+ * root-ordinal form (`.11`) through resolveSlugInFile's anchor and root walks,
+ * which resolve by numbering rather than by this map.
+ *
+ * There are two nodeMaps — assignOrdinals builds the RawNode one at parse/build
+ * time, resolveFile the SourceNode one the RUNTIME resolves refs against. They
+ * index different types over different tree shapes, so both must exist; this
+ * predicate is what keeps their naming policy from drifting apart. It drifting
+ * is exactly how `#11` stayed broken in the browser after the build-time map
+ * was fixed.
+ */
+function claimsNodeMapName(n: { attrs: Multimap }): boolean {
+  return n.attrs.get('id') !== undefined;
+}
+
 export function assignOrdinals(
   siblings: RawNode[],
   nodeMap?: Record<string, RawNode>,
@@ -532,7 +558,7 @@ export function assignOrdinals(
     n.numbering   = ordinal;
     n.slug        = idAttr ?? ordinal;
     n.permalinkId = idAttr ?? (parentId ? `${parentId}.${ordinal}` : `.${ordinal}`);
-    if (nodeMap) nodeMap[n.slug] = n;
+    if (nodeMap && claimsNodeMapName(n)) nodeMap[n.slug] = n;
     assignOrdinals(n.children, nodeMap, n.permalinkId);
   }
 }
@@ -557,7 +583,7 @@ export function resolveFile(rawFile: RawFile, inheritedHead: Head): {
   function resolveNode(raw: RawNode, parentBag: InheritedBag): SourceNode {
     const bag  = deriveBag(parentBag, raw, resolvedTagDefs);
     const node = { ...raw, ...bag, children: [] } as unknown as SourceNode;
-    nodeMap[node.slug] = node;
+    if (claimsNodeMapName(node)) nodeMap[node.slug] = node;
     node.children = raw.children.map(c => resolveNode(c, bag));
     return node;
   }

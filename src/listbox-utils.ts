@@ -166,10 +166,20 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
 // See rvmark-site/tools/toggle-spans-design-note.md §1c.
 
 export function spanIsSelectionDriven(span: ParsedSpanAttrs, nodeAttrs: Multimap): boolean {
+  // `{option}` is explicit and settles it.
+  if (span.has('option')) return true;
+  // An explicit span-level `{toggle}` opts OUT of an inherited node-level
+  // listbox. Without this a node carrying {listbox-volatile} — which Euclid
+  // applies to every node through the [.euclid] tag — would demote its
+  // citations to options, and §1c's "Why Euclid works" needs exactly the mix it
+  // forbade: targetless highlight options arrowed across while a manual-toggle
+  // citation holds the hill. Span-level beats node-level because the node
+  // attribute is a default for spans that do not say, not an override.
+  if (span.has('toggle')) return false;
   // A node declared {listbox} says its spans are options — declaring the group
   // and then having its members not be options would make the attribute mean
   // nothing.
-  return span.has('option') || nodeAttrs.has('listbox') || nodeAttrs.has('listbox-volatile');
+  return nodeAttrs.has('listbox') || nodeAttrs.has('listbox-volatile');
 }
 
 /** True when the span participates in the node's listbox group. Identical to

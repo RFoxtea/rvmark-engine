@@ -204,7 +204,11 @@ export function hasExplicitSlug(node: SourceNode): boolean {
 export function parseCompoundSlug(slug: string): { anchor: string; path: number[] } {
   const parts = slug.split('.');
   let anchorEnd = 0;
-  while (anchorEnd < parts.length && isNaN(parseInt(parts[anchorEnd], 10))) anchorEnd++;
+  // A path segment is a position only when it is ENTIRELY digits. parseInt
+  // accepts a digit prefix, so an id like `43-proof` read as the number 43 and
+  // ended the anchor before it began, collapsing `43-proof.11` into one opaque
+  // key that matched nothing.
+  while (anchorEnd < parts.length && !/^\d+$/.test(parts[anchorEnd])) anchorEnd++;
   return {
     anchor: parts.slice(0, anchorEnd).join('.') || slug,
     path:   parts.slice(anchorEnd).map(s => parseInt(s, 10)).filter(n => !isNaN(n)),
