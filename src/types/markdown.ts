@@ -29,7 +29,7 @@ import { wireListbox, isListbox } from '../listbox-utils.js';
 import { wireSpanVisibility } from '../span-visibility.js';
 import type { ListboxNav } from '../listbox.js';
 import { wireSelectThenAction } from '../interaction.js';
-import { mdToHtmlWithSpans, staticMdToHtml, ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../markdown.js';
+import { mdToHtmlWithSpans, staticMdToHtml, ensureKatex, hasMath, katexLoaded, clipboardHtml, spanIsInteractive } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
 
 // ── Overflow fade ──────────────────────────────────────────────────────────────
@@ -160,6 +160,29 @@ class MarkdownTypeHandler extends BaseTypeHandler {
         e.preventDefault();
         e.stopPropagation();
       }
+    });
+
+    // The scroll area is reachable by Tab and by Enter (focusBody), because a
+    // keyboard reader needs somewhere to stand to scroll a long body. A mouse
+    // user does not: they scroll with the wheel, and the click belongs to the
+    // node. Left unhandled, mousedown focuses the scroller and the node's click
+    // handler takes focus back on mouseup — a flicker for as long as the button
+    // is held.
+    //
+    // Only the focus is suppressed, and only for the primary button: the event
+    // is not defaulted, so drag-selecting body text still works (the Ctrl+C path
+    // depends on it), and tabindex is left alone because focus gating owns it
+    // (see wireFocusGating — it snapshots the attribute, so stripping it here
+    // would corrupt the restore).
+    scroller.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      // A toggle or option in the body is focusable in its own right and owns
+      // its click — stealing focus for the node here would fight it.
+      if (spanIsInteractive(e.target as HTMLElement)) return;
+      // Re-focusing the node is what cancels the pending focus: the scroller has
+      // not been focused yet at mousedown time, and moving focus to the node now
+      // means the browser's default lands where it already is.
+      if (document.activeElement !== content) content.focus();
     });
     outer.appendChild(scroller);
 

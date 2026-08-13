@@ -1823,6 +1823,22 @@ test.describe('listbox block-node border reset', () => {
     await page.mouse.click(box.x + box.width - 2, box.y + box.height / 2);
     await expect(optA).toHaveAttribute('aria-selected', 'true');
   });
+
+  test('holding the mouse down in the body never focuses the scroll area', async ({ page }) => {
+    // The scroller is a keyboard destination, not a mouse one. Focus must stay
+    // on the node for the whole gesture — checked while the button is still
+    // held, which is when the flicker used to be visible.
+    const { node } = await selectOptionA(page);
+    const scroller = node.locator('.md-body-scroll');
+    const box = await scroller.boundingBox();
+
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await expect(scroller).not.toBeFocused();
+    await page.mouse.up();
+    await expect(scroller).not.toBeFocused();
+  });
+
 });
 
 // Fixture: #listbox-transclude-node has two inline options. [Direct] embeds
@@ -2281,6 +2297,30 @@ test.describe('span toggles', () => {
     const node = await waitForNode(page, 'span-toggle-nonempty-implicit');
     await expect(node.locator('[role="option"]').nth(0)).toHaveAttribute('aria-selected', 'true');
     await expect(node.getByText('First')).toBeVisible();
+  });
+
+  test('double-clicking a manual toggle leaves focus on the toggle', async ({ page }) => {
+    // The span owns the whole gesture. The node's select-then-action wiring used
+    // to preventDefault on the second mousedown to suppress native word
+    // selection, which blurred the span and dropped focus back on the node.
+    const node = await waitForNode(page, 'span-toggle-block-node');
+    const tog  = node.locator('.inline-toggle').first();
+
+    await tog.dblclick();
+    await expect(tog).toBeFocused();
+  });
+
+  test('the scroll area is still reachable by keyboard', async ({ page }) => {
+    // Suppressing focus on mousedown must not cost the keyboard path: Enter
+    // still sends focus into an overflowing body so it can be scrolled.
+    const node = await waitForNode(page, 'span-toggle-wrapped-node');
+    const scroller = node.locator('.md-body-scroll');
+    const overflows = await scroller.evaluate(el => el.scrollHeight > el.clientHeight);
+    test.skip(!overflows, 'fixture body does not overflow at this viewport');
+
+    await node.click();
+    await page.keyboard.press('Enter');
+    await expect(scroller).toBeFocused();
   });
 
   test('a toggle span works inside a {= block} node', async ({ page }) => {

@@ -43,6 +43,12 @@ class TextTypeHandler extends BaseTypeHandler {
     // like links: focusable only while this node is selected. Without them here
     // every citation in the document stays in the tab order at once, which on a
     // page like Euclid's Elements is thousands of stops.
+    //
+    // Deliberately NOT INTERACTIVE_SPAN_SELECTOR: that names the spans that own
+    // their own click, which includes options, and an option must never take DOM
+    // focus — listbox.ts drives selection through aria-activedescendant, which
+    // real focus on an option would desync. Tab-reachability and click-ownership
+    // are different questions with different answers.
     super(rn, '.node-label a[href], .node-label .inline-toggle');
     const sourceNode = rn.sourceNode;
     const attrs = resolveAttrs(sourceNode);

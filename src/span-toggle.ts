@@ -14,7 +14,7 @@
  */
 
 import type { ParsedSpanAttrs } from './markdown.js';
-import { BARE_MUTATION_KEY } from './markdown.js';
+import { BARE_MUTATION_KEY, INTERACTIVE_SPAN_CLASSES } from './markdown.js';
 import type { Multimap } from './multimap.js';
 import type { RenderNode } from './render-node.js';
 import type { ToggleSet } from './toggle-set.js';
@@ -77,8 +77,8 @@ export function wireSpanToggles(
       // the guess now that node attrs are known. Options are wired by the
       // listbox path, and never get Tab or a toggle marker: DOM focus on an
       // option would desync aria-activedescendant, which listbox.ts forbids.
-      el.classList.remove('inline-toggle');
-      el.classList.add('inline-option');
+      el.classList.remove(INTERACTIVE_SPAN_CLASSES.toggle);
+      el.classList.add(INTERACTIVE_SPAN_CLASSES.option);
       el.setAttribute('role', 'option');
       continue;
     }
@@ -90,7 +90,7 @@ export function wireSpanToggles(
     // ordinary span path.
     if (!ref) continue;
 
-    el.classList.add('inline-toggle');
+    el.classList.add(INTERACTIVE_SPAN_CLASSES.toggle);
     if (!el.hasAttribute('role')) el.setAttribute('role', 'button');
     el.setAttribute('aria-expanded', 'false');
     // Tab-reachable: the baseline keyboard model for a toggle span is a button,

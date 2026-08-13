@@ -13,6 +13,7 @@
 import { scrollRowIntoMiddle } from './scroll.js';
 import { exhibitIsOpen, exhibitClose } from './exhibit.js';
 import { RenderNode } from './render-node.js';
+import { spanIsInteractive } from './markdown.js';
 
 // ── Select-then-action click ───────────────────────────────────────────────
 
@@ -31,9 +32,13 @@ export function wireSelectThenAction(
 ): void {
   let wasSelected = false;
   let downX = 0, downY = 0;
+  // A span that handles its own clicks — a manual toggle, an option — owns the
+  // whole gesture, including the second click of a double. It is focusable in
+  // its own right, so suppressing the default below would blur it and drop
+  // focus back on the node mid-gesture.
   target.addEventListener('mousedown', (e) => {
     const et = e.target as HTMLElement;
-    if (et.tagName === 'A' || isExcluded(et)) return;
+    if (et.tagName === 'A' || isExcluded(et) || spanIsInteractive(et)) return;
     // detail >= 2 means this mousedown is part of a double/triple-click;
     // preventDefault here (not on 'dblclick') is what actually stops the
     // browser's native word/paragraph selection. A held modifier opts out.
@@ -44,7 +49,7 @@ export function wireSelectThenAction(
   });
   target.addEventListener('click', (e) => {
     const et = e.target as HTMLElement;
-    if (et.tagName === 'A' || isExcluded(et)) return;
+    if (et.tagName === 'A' || isExcluded(et) || spanIsInteractive(et)) return;
     if (hasModifier(e)) return;
     const moved = Math.hypot(e.clientX - downX, e.clientY - downY) > DRAG_THRESHOLD_PX;
     if (wasSelected && !moved) doAction(undefined, { scroll: false });

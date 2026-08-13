@@ -250,6 +250,25 @@ export type ParsedSpanAttrs = Multimap;
 // `on-action:`, which always means the action gesture and is never re-filed.
 export const BARE_MUTATION_KEY = 'rvmark-bare-mutation';
 
+// The span kinds that handle their own clicks and carry their own focus. Kept
+// here, beside the code that stamps the classes, so the set has one definition:
+// callers ask spanIsInteractive rather than re-writing the selector, and a new
+// interactive kind is added in one place instead of found by grep.
+export const INTERACTIVE_SPAN_CLASSES = {
+  toggle: 'inline-toggle',
+  option: 'inline-option',
+} as const;
+
+export const INTERACTIVE_SPAN_SELECTOR =
+  Object.values(INTERACTIVE_SPAN_CLASSES).map(c => `.${c}`).join(', ');
+
+/** True when `el` is, or sits inside, a span that owns its own click gesture.
+ *  Node-level wiring uses this to keep its hands off: focus-stealing or
+ *  default-suppression on the node's behalf must never reach such a span. */
+export function spanIsInteractive(el: HTMLElement | null): boolean {
+  return !!el?.closest(INTERACTIVE_SPAN_SELECTOR);
+}
+
 export function parseInlineSpanParams(raw: string): ParsedSpanAttrs {
   const out = new Multimap();
   for (const part of splitSegments(raw)) {
@@ -299,10 +318,10 @@ function renderInlineSpan(token: any, label: string): string {
   // role/marker once node attrs are known.
   // See listbox-utils.spanIsSelectionDriven and the design note §1c.
   if (attrs.has('option') || attrs.has('on-action')) {
-    classes.push('inline-option');
+    classes.push(INTERACTIVE_SPAN_CLASSES.option);
     role = 'option';
   } else if (attrs.has('transclude') || attrs.has('toggle')) {
-    classes.push('inline-toggle');
+    classes.push(INTERACTIVE_SPAN_CLASSES.toggle);
     // aria-expanded is added at wiring time — a span the node turns into an
     // option must not carry a disclosure role.
   }
