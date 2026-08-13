@@ -118,13 +118,13 @@ export function wireSpanToggles(
     // ArrowUp/Down walk to the previous/next node — the same gestures a node's
     // bullet answers to, so a focused span navigates like the row it sits in.
     //
-    // §1c says arrows are never a manual toggle's, because at the NODE level
-    // they mean listbox navigation. That rule is untouched here: while a span
-    // has DOM focus the node is in "mode" (FocusGating.modeActive), and both the
-    // node's own arrow cases and its listbox dispatch bail on `inMode` — so
-    // arrows reach nothing at all once a toggle is focused. Binding them on the
-    // focused span takes no gesture away from the listbox; arrowing across
-    // options still requires focus on the node itself.
+    // This supersedes §1c's "arrows are never a manual toggle's". That rule was
+    // wrong: a span holding DOM focus is the thing being operated, and refusing
+    // it the obvious gesture bought nothing. Nothing is taken from the listbox
+    // either — while a span has DOM focus the node is in "mode"
+    // (FocusGating.modeActive), and both the node's own arrow cases and its
+    // listbox dispatch bail on `inMode`, so arrowing across options still
+    // requires focus on the node itself.
     const onKeydown = (e: KeyboardEvent) => {
       const open = toggles.isSpanOpen(el);
       switch (e.key) {

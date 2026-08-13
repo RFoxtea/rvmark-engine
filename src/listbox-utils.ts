@@ -16,6 +16,7 @@ import { createListboxNav } from './listbox.js';
 import { Multimap } from './multimap.js';
 import type { ListboxNav } from './listbox.js';
 import type { ParsedSpanAttrs } from './markdown.js';
+import { BARE_MUTATION_KEY } from './markdown.js';
 import type { RenderNode, SourceNode } from './render-node.js';
 import type { ToggleSet } from './toggle-set.js';
 import { expandNode, applyEventAttr } from './handler-utils.js';
@@ -191,7 +192,15 @@ export function spanIsSelectionDriven(span: ParsedSpanAttrs, nodeAttrs: Multimap
   // A node declared {listbox} says its spans are options — declaring the group
   // and then having its members not be options would make the attribute mean
   // nothing.
-  return nodeAttrs.has('listbox') || nodeAttrs.has('listbox-volatile');
+  if (nodeAttrs.has('listbox') || nodeAttrs.has('listbox-volatile')) return true;
+  // A targetless mutating span is an option by inference: it goes nowhere, so
+  // the only thing it can be driven by is selection. isListbox() already builds
+  // a listbox out of such spans (`[A]{set &step = a}` with no marker anywhere),
+  // and the two must agree — a span that is a listbox member there but not
+  // selection-driven here would have its mutation left under on-action and
+  // never fire, since selection is the only event it ever sees.
+  return !span.get('transclude') &&
+    (span.has(BARE_MUTATION_KEY) || span.has('on-select') || span.has('on-deselect'));
 }
 
 /** True when the span participates in the node's listbox group. Identical to

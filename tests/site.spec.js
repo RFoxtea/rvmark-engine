@@ -2129,13 +2129,18 @@ test.describe('span toggles', () => {
     await expect(node.locator('.inline-toggle')).toHaveCount(0);
   });
 
-  test('a manual toggle does not claim arrow keys', async ({ page }) => {
-    // Arrows always mean listbox navigation (§1c), so ArrowRight on a focused
-    // manual toggle must not expand it.
+  test('a focused manual toggle answers to arrows without taking them from the listbox', async ({ page }) => {
+    // A focused manual toggle answers to arrows: ArrowRight opens, ArrowLeft
+    // closes, mirroring a node's own bullet. This supersedes §1c's "arrows are
+    // never a manual toggle's", which was simply wrong — a span holding DOM
+    // focus is the thing being operated, and denying it the obvious gesture
+    // bought nothing.
     const node = await waitForNode(page, 'span-toggle-node');
     const tog  = node.locator('.inline-toggle').first();
     await tog.focus();
     await page.keyboard.press('ArrowRight');
+    await expect(tog).toHaveAttribute('aria-expanded', 'true');
+    await page.keyboard.press('ArrowLeft');
     await expect(tog).toHaveAttribute('aria-expanded', 'false');
   });
 
@@ -2197,6 +2202,46 @@ test.describe('span toggles', () => {
     await opts.nth(0).click();
     await expect(node.locator('.inline-toggle').first()).toHaveAttribute('aria-expanded', 'true');
     await waitForNode(page, 'st-alpha-child');
+  });
+
+  test("a targetless option's mutation fires on selection, not on action", async ({ page }) => {
+    // A bare `let` on an option is selection-driven: arrowing onto the option
+    // applies it, with no action gesture involved. The show-when readers in the
+    // fixture are the visible proof that the state actually changed.
+    const node = await waitForNode(page, 'span-toggle-langblock-node');
+    const opts = node.locator('[role="option"]');
+
+    // {selected} boots on the first option, so `de` is applied from the start.
+    await expect(node.getByText('Deutscher Text')).toBeVisible();
+
+    // Arrow across, without ever pressing Enter.
+    await node.click();
+    await page.keyboard.press('ArrowRight');
+    await expect(opts.nth(1)).toHaveAttribute('aria-selected', 'true');
+    await expect(node.getByText('English text')).toBeVisible();
+    await expect(node.getByText('Deutscher Text')).toBeHidden();
+  });
+
+  test('Enter on a targetless option is not consumed by the listbox', async ({ page }) => {
+    // The option has no action of its own — its `let` rides on-select — so it
+    // consumes nothing and Enter reaches the node. What the node then does with
+    // it is the node's business: this markdown body is short enough that
+    // focusBody() declines to focus a non-scrolling region, so the observable
+    // fact here is that Enter did NOT re-fire the option's mutation, which is
+    // what being swallowed used to look like.
+    const node = await waitForNode(page, 'span-toggle-langblock-node');
+    const opts = node.locator('[role="option"]');
+
+    await node.click();
+    await page.keyboard.press('ArrowRight');
+    await expect(opts.nth(1)).toHaveAttribute('aria-selected', 'true');
+    await expect(node.getByText('English text')).toBeVisible();
+
+    await page.keyboard.press('Enter');
+    // Selection and state are unchanged: Enter committed nothing, because there
+    // was nothing of the option's to commit.
+    await expect(opts.nth(1)).toHaveAttribute('aria-selected', 'true');
+    await expect(node.getByText('English text')).toBeVisible();
   });
 
   test('a toggle span works inside a {= block} node', async ({ page }) => {
