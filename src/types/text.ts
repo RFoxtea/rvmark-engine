@@ -90,7 +90,7 @@ class TextTypeHandler extends BaseTypeHandler {
     this._installWatch();
     this.buildLabel(lblHtml, spanMap, hasListbox, hasLink, sourceNode);
 
-    if (hasListbox) this.buildListbox(spanMap, attrs.has('listbox-volatile'));
+    if (hasListbox) this.buildListbox(spanMap, attrs.has('listbox-volatile'), attrs.has('listbox-nonempty'));
 
     if (sourceNode.attrs.get('id')) {
       const anchor = document.createElement('a');
@@ -104,7 +104,9 @@ class TextTypeHandler extends BaseTypeHandler {
       rn.state.subscribeAny(this._permalinkAnyFn);
     }
 
-    this.buildClickWiring(!!exhibitButton, hasListbox);
+    // A nonempty listbox cannot be cleared, so the bullet is not offered as a
+    // way to clear it — it keeps only whatever expand job it already had.
+    this.buildClickWiring(!!exhibitButton, hasListbox && !attrs.has('listbox-nonempty'));
     this.buildKeyboardHandler();
 
     this.deactivate();
@@ -202,7 +204,7 @@ class TextTypeHandler extends BaseTypeHandler {
     this.content.appendChild(lbl);
   }
 
-  private buildListbox(spanMap: Map<number, ParsedSpanAttrs>, volatile: boolean) {
+  private buildListbox(spanMap: Map<number, ParsedSpanAttrs>, volatile: boolean, nonempty: boolean) {
     const { rn, lbl, content } = this;
     this._listboxNav = wireListbox({
       navRoot:         content,
@@ -212,6 +214,7 @@ class TextTypeHandler extends BaseTypeHandler {
       sourceNode:      rn.sourceNode,
       scrollOnSelect:  false,
       volatile,
+      nonempty,
       toggles:         this.toggles,
     });
   }

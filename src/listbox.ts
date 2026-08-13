@@ -33,13 +33,17 @@ interface ListboxCallbacks {
   onSelect?:   (idx: number, el: HTMLElement) => void;
   onActivate?: (idx: number, el: HTMLElement) => boolean | void;
   onReset?:    () => void;
+  /** No no-option state: reset() is refused and ArrowLeft off the first option
+   *  falls through instead of clearing. The caller is responsible for selecting
+   *  one option up front — see wireListbox. */
+  nonempty?:   boolean;
 }
 
 export function createListboxNav(
   content:    HTMLElement,
   listboxEl:  HTMLElement,
   getOptions: () => HTMLElement[],
-  { onSelect, onActivate, onReset }: ListboxCallbacks = {},
+  { onSelect, onActivate, onReset, nonempty }: ListboxCallbacks = {},
 ) {
   let activeIdx = -1;
 
@@ -57,7 +61,12 @@ export function createListboxNav(
     }
   }
 
+  // A nonempty listbox has no no-option state, so every route to it is refused
+  // here rather than at each call site — the bullet, the block's border strip,
+  // ArrowLeft off the first option, and the volatile deselect all funnel through
+  // reset(), and a guard in one of them would leave the others open.
   function reset() {
+    if (nonempty) return;
     options().forEach(el => el.setAttribute('aria-selected', 'false'));
     listboxEl.removeAttribute('aria-activedescendant');
     activeIdx = -1;
@@ -75,7 +84,10 @@ export function createListboxNav(
     const opts = options();
     if (!opts.length) return false;
     if (activeIdx > 0)   { setActive(activeIdx - 1); return true; }
-    if (activeIdx === 0) { reset(); return true; }
+    // ArrowLeft off the first option clears the selection — unless there is no
+    // such state, in which case the key was not consumed and falls through to
+    // its ordinary meaning (collapse, or move to the parent).
+    if (activeIdx === 0 && !nonempty) { reset(); return true; }
     return false;
   }
 

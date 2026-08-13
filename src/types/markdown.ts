@@ -225,6 +225,7 @@ class MarkdownTypeHandler extends BaseTypeHandler {
       sourceNode,
       scrollOnSelect:  true,
       volatile:        attrs.has('listbox-volatile'),
+      nonempty:        attrs.has('listbox-nonempty'),
       toggles:         this._toggles,
     });
 
@@ -244,7 +245,11 @@ class MarkdownTypeHandler extends BaseTypeHandler {
     // is themeable — any px/rem/em value an author picks resolves in CSS, where
     // reading it back out would mean parsing a unit this code cannot predict.
     const body = scroller.parentElement;
-    if (body?.classList.contains('md-body')) {
+    // A nonempty listbox has nothing for the strip to do — resetting is the only
+    // gesture it offers, and that state does not exist. Omitting it entirely
+    // rather than wiring a dead one keeps the pointer and hover accent off a
+    // target that would do nothing (see wireBulletActions).
+    if (body?.classList.contains('md-body') && !attrs.has('listbox-nonempty')) {
       const strip = document.createElement('div');
       strip.className = 'md-body-reset';
       strip.setAttribute('aria-hidden', 'true');   // keyboard path is ArrowLeft

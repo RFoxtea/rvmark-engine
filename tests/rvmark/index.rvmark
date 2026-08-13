@@ -256,6 +256,17 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
       Whoever loathes the finite too much, he attains no actuality at all,
       but remains in the abstract.]{show-when: &st-w == en}
       ~~~
+  12. {#span-toggle-nonempty-node; = block; listbox-nonempty}
+      ~~~
+      A citation [source]{=> #st-alpha} beside a switch that can never be
+      cleared ([la]{selected; option; let &st-ne = la} / [en]{option; let &st-ne = en}).
+      [Latine]{show-when: &st-ne == la}[English]{show-when: &st-ne == en}
+      ~~~
+  13. {#span-toggle-nonempty-implicit; = block; listbox-nonempty}
+      ~~~
+      No option marked selected ([one]{option; let &st-ni = one} / [two]{option; let &st-ni = two}).
+      [First]{show-when: &st-ni == one}[Second]{show-when: &st-ni == two}
+      ~~~
 41. {#st-alpha} st-alpha target
   1. {#st-alpha-child} st-alpha child content
 42. {#st-beta} st-beta target

@@ -38,8 +38,15 @@ export interface ListboxConfig {
   sourceNode: SourceNode;
   /** If true, scroll the selected option to the centre of optionContainer on select. */
   scrollOnSelect?: boolean;
-  /** If true, reset the listbox to no-option when the owning node is deselected. */
+  /** If true, reset the listbox to its resting state when the owning node is
+   *  deselected. That state is no-option normally, and the default option when
+   *  `nonempty` — the two attributes are independent. */
   volatile?: boolean;
+  /** If true, the no-option state does not exist: one option is selected from
+   *  the start and nothing can deselect it. For a listbox that is a setting
+   *  rather than a browsing state — a language switch, say — where "none" is
+   *  not a meaningful reading position. */
+  nonempty?: boolean;
   /** The node's toggle set, so a transcluding option can take the hill (§1c).
    *  Optional: a listbox on a node with no toggle set still works, it simply
    *  has no one to contend with. */
@@ -47,7 +54,7 @@ export interface ListboxConfig {
 }
 
 export function wireListbox(cfg: ListboxConfig): ListboxNav {
-  const { optionContainer, navRoot, spanMap, rn, sourceNode, scrollOnSelect, volatile, toggles } = cfg;
+  const { optionContainer, navRoot, spanMap, rn, sourceNode, scrollOnSelect, volatile, nonempty, toggles } = cfg;
 
   // Annotate DOM elements with their parsed span attrs
   for (const el of optionContainer.querySelectorAll<HTMLElement>('[data-rvmark-span]')) {
@@ -148,18 +155,27 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
         }
         for (const v of rn.attrs.getAll('on-no-option-select')) applyEventAttr(v, rn);
       },
+      nonempty,
     },
   );
 
   optionContainer.querySelectorAll<HTMLElement>('[role="option"]').forEach(el => nav.wireOption(el));
 
-  // Apply default {selected} if any option declares it
+  // Apply default {selected} if any option declares it. A nonempty listbox has
+  // no no-option state to rest in, so it falls back to the first option — the
+  // author gets the guarantee without having to mark one, and {selected} stays
+  // the way to choose which.
   const options    = [...optionContainer.querySelectorAll<HTMLElement>('[role="option"]')];
-  const defaultIdx = options.findIndex(el => (el as any)._rvmarkSpan?.has('selected'));
+  const explicitIdx = options.findIndex(el => (el as any)._rvmarkSpan?.has('selected'));
+  const defaultIdx  = explicitIdx !== -1 ? explicitIdx : (nonempty && options.length ? 0 : -1);
   if (defaultIdx !== -1) nav.select(defaultIdx);
 
   if (volatile) {
+    // Volatile returns the listbox to its resting state on deselect. For a
+    // nonempty listbox that state is the default option, not none — the two
+    // attributes are independent, and reset() would refuse anyway.
     navRoot.addEventListener('rvmark-deselect', () => {
+      if (nonempty) { if (nav.activeIdx() !== defaultIdx) nav.select(defaultIdx); return; }
       if (nav.activeIdx() !== -1) nav.reset();
     });
   }
@@ -192,6 +208,12 @@ export function spanIsSelectionDriven(span: ParsedSpanAttrs, nodeAttrs: Multimap
   // A node declared {listbox} says its spans are options — declaring the group
   // and then having its members not be options would make the attribute mean
   // nothing.
+  //
+  // {listbox-nonempty} is deliberately NOT in this list. It constrains the
+  // listbox that exists (no no-option state); it does not claim the node's spans
+  // the way {listbox} does. A block carrying a citation toggle beside a language
+  // switch — docs/philosophy — declares it for the switch, and the citation must
+  // stay a manual toggle.
   if (nodeAttrs.has('listbox') || nodeAttrs.has('listbox-volatile')) return true;
   // A targetless mutating span is an option by inference: it goes nowhere, so
   // the only thing it can be driven by is selection. isListbox() already builds
@@ -218,6 +240,10 @@ export function isListbox(
   // mutations are re-filed from one to the other once its kind is known (see
   // retargetBareMutations). This runs before that pass today, but testing both
   // keeps the answer stable regardless of call order.
+  // {listbox-nonempty} is not tested here either: it says how the listbox
+  // behaves, not that there is one. A node with only toggles and that attribute
+  // has no listbox, and building an empty one would give it a role=listbox with
+  // nothing to select.
   return attrs.has('listbox') ||
     [...spanMap.values()].some(s =>
       s.has('option') || s.has('on-action') || s.has('on-select') || spanIsSelectionDriven(s, attrs));

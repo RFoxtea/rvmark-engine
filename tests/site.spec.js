@@ -2244,6 +2244,45 @@ test.describe('span toggles', () => {
     await expect(node.getByText('English text')).toBeVisible();
   });
 
+  test('{listbox-nonempty} refuses every route back to no-option', async ({ page }) => {
+    // The none state does not exist, so ArrowLeft off the first option and the
+    // block's border strip — the two gestures that clear a listbox — must both
+    // leave the selection standing.
+    const node = await waitForNode(page, 'span-toggle-nonempty-node');
+    const opts = node.locator('[role="option"]');
+    await expect(opts.nth(0)).toHaveAttribute('aria-selected', 'true');
+
+    await node.click();
+    await page.keyboard.press('ArrowLeft');
+    await expect(opts.nth(0)).toHaveAttribute('aria-selected', 'true');
+    await expect(node.getByText('Latine')).toBeVisible();
+
+    // The strip is not built at all on a nonempty listbox, so there is nothing
+    // in the bullet column to click.
+    await expect(node.locator('.md-body-reset')).toHaveCount(0);
+  });
+
+  test('{listbox-nonempty} does not demote a citation toggle to an option', async ({ page }) => {
+    // The attribute constrains the listbox; it does not claim the node's spans
+    // the way {listbox} does. The docs/philosophy shape — a citation toggle
+    // beside a language switch — must keep the citation a manual toggle.
+    const node = await waitForNode(page, 'span-toggle-nonempty-node');
+    const tog  = node.locator('.inline-toggle');
+    await expect(tog).toHaveCount(1);
+    await expect(tog.first()).toHaveAttribute('aria-expanded', 'false');
+    await tog.first().click();
+    await expect(tog.first()).toHaveAttribute('aria-expanded', 'true');
+    await waitForNode(page, 'st-alpha-child');
+  });
+
+  test('{listbox-nonempty} selects the first option when none is marked', async ({ page }) => {
+    // Reading B: the guarantee holds from the start, so an author who declares
+    // the attribute need not also mark a {selected}.
+    const node = await waitForNode(page, 'span-toggle-nonempty-implicit');
+    await expect(node.locator('[role="option"]').nth(0)).toHaveAttribute('aria-selected', 'true');
+    await expect(node.getByText('First')).toBeVisible();
+  });
+
   test('a toggle span works inside a {= block} node', async ({ page }) => {
     const node = await waitForNode(page, 'span-toggle-block-node');
     const tog = node.locator('.inline-toggle').first();
