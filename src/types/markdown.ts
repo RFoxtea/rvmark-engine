@@ -167,28 +167,17 @@ class MarkdownTypeHandler extends BaseTypeHandler {
       }
     });
 
-    // The scroll area is reachable by Tab and by Enter (focusBody), because a
-    // keyboard reader needs somewhere to stand to scroll a long body. A mouse
-    // user does not: they scroll with the wheel, and the click belongs to the
-    // node. Left unhandled, mousedown focuses the scroller and the node's click
-    // handler takes focus back on mouseup — a flicker for as long as the button
-    // is held.
-    //
-    // Only the focus is suppressed, and only for the primary button: the event
-    // is not defaulted, so drag-selecting body text still works (the Ctrl+C path
-    // depends on it), and tabindex is left alone because focus gating owns it
-    // (see wireFocusGating — it snapshots the attribute, so stripping it here
-    // would corrupt the restore).
+    // Pressing in the body must leave focus on the node, like every other node
+    // type. Chromium focuses an overflowing scroll container on mousedown even
+    // at tabindex -1, and it has to: that focus is what hosts the drag
+    // selection, so preventDefault or an immediate blur takes the selection with
+    // it. Taking focus back on the next frame keeps the selection and paints no
+    // frame with the scroller focused.
     scroller.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-      // A toggle or option in the body is focusable in its own right and owns
-      // its click — stealing focus for the node here would fight it.
-      if (spanIsInteractive(e.target as HTMLElement)) return;
-      // Re-focusing the node is what cancels the pending focus: the scroller has
-      // not been focused yet at mousedown time, and moving focus to the node now
-      // means the browser's default lands where it already is.
-      if (document.activeElement !== content) content.focus();
+      if (e.button !== 0 || spanIsInteractive(e.target as HTMLElement)) return;
+      requestAnimationFrame(() => content.focus());
     });
+
     outer.appendChild(scroller);
 
     // KaTeX is fetched on demand (see ensureKatex in markdown.ts). Math renders
@@ -330,12 +319,11 @@ class MarkdownTypeHandler extends BaseTypeHandler {
     });
   }
 
+  // No tabIndex assignment: focus gating owns it, and writing it here left the
+  // attribute behind, making the scroller mouse-focusable for good.
   private focusBody(): void {
     const scroller = this.content.querySelector<HTMLElement>('.md-body-scroll');
-    if (scroller && scroller.scrollHeight > scroller.clientHeight) {
-      scroller.tabIndex = 0;
-      scroller.focus();
-    }
+    if (scroller && scroller.scrollHeight > scroller.clientHeight) scroller.focus();
   }
 
   // ── TypeHandler interface ──────────────────────────────────────────────────

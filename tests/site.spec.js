@@ -1825,18 +1825,16 @@ test.describe('listbox block-node border reset', () => {
   });
 
   test('holding the mouse down in the body never focuses the scroll area', async ({ page }) => {
-    // The scroller is a keyboard destination, not a mouse one. Focus must stay
-    // on the node for the whole gesture — checked while the button is still
-    // held, which is when the flicker used to be visible.
+    // Checked mid-gesture, with the button held — when the flicker was visible.
     const { node } = await selectOptionA(page);
     const scroller = node.locator('.md-body-scroll');
     const box = await scroller.boundingBox();
 
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await expect(scroller).not.toBeFocused();
+    await expect(node).toBeFocused();
     await page.mouse.up();
-    await expect(scroller).not.toBeFocused();
+    await expect(node).toBeFocused();
   });
 
 });
@@ -2299,6 +2297,62 @@ test.describe('span toggles', () => {
     await expect(node.getByText('First')).toBeVisible();
   });
 
+  test('clicking an overflowing body keeps focus on the node', async ({ page }) => {
+    const node = await waitForNode(page, 'span-toggle-tall-block');
+    const scroller = node.locator('.md-body-scroll');
+    // Asserted, not skipped: a non-overflowing body passes this vacuously.
+    expect(await scroller.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+
+    await node.click();
+    await expect(node).toBeFocused();
+
+    const box = await scroller.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await expect(node).toBeFocused();
+    await page.mouse.up();
+    await expect(node).toBeFocused();
+  });
+
+  test('focusing the body by keyboard does not make it mouse-focusable forever', async ({ page }) => {
+    // Needs the full cycle: keyboard-focus the body, leave, return, then click.
+    const node  = await waitForNode(page, 'span-toggle-tall-block');
+    const other = await waitForNode(page, 'span-toggle-block-node');
+    const scroller = node.locator('.md-body-scroll');
+    expect(await scroller.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+
+    await node.click();
+    // The click's refocus lands on the next frame; Enter must come after it.
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+    await page.keyboard.press('Enter');
+    await expect(scroller).toBeFocused();
+
+    await other.click();
+    await node.click();
+    await expect(node).toBeFocused();
+
+    const box = await scroller.boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(node).toBeFocused();
+  });
+
+  test('dragging to select body text keeps focus on the node', async ({ page }) => {
+    const node = await waitForNode(page, 'span-toggle-tall-block');
+    const scroller = node.locator('.md-body-scroll');
+    expect(await scroller.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+
+    await node.click();
+    const box = await scroller.boundingBox();
+    const y = box.y + 20;
+    await page.mouse.move(box.x + 20, y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 200, y, { steps: 8 });
+    await expect(node).toBeFocused();
+    await page.mouse.up();
+    await expect(node).toBeFocused();
+    expect(await page.evaluate(() => window.getSelection()?.toString().length ?? 0)).toBeGreaterThan(0);
+  });
+
   test('double-clicking a manual toggle leaves focus on the toggle', async ({ page }) => {
     // The span owns the whole gesture. The node's select-then-action wiring used
     // to preventDefault on the second mousedown to suppress native word
@@ -2313,12 +2367,12 @@ test.describe('span toggles', () => {
   test('the scroll area is still reachable by keyboard', async ({ page }) => {
     // Suppressing focus on mousedown must not cost the keyboard path: Enter
     // still sends focus into an overflowing body so it can be scrolled.
-    const node = await waitForNode(page, 'span-toggle-wrapped-node');
+    const node = await waitForNode(page, 'span-toggle-tall-block');
     const scroller = node.locator('.md-body-scroll');
-    const overflows = await scroller.evaluate(el => el.scrollHeight > el.clientHeight);
-    test.skip(!overflows, 'fixture body does not overflow at this viewport');
+    expect(await scroller.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
 
     await node.click();
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
     await page.keyboard.press('Enter');
     await expect(scroller).toBeFocused();
   });
