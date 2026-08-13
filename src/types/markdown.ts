@@ -105,7 +105,12 @@ class MarkdownTypeHandler extends BaseTypeHandler {
     if (this._actionVal === 'exhibit') {
       wireSelectThenAction(content, () => { exhibitOpenFromNode(rn); applyOnAction(rn); });
     } else {
-      wireSelectThenAction(content, () => { applyOnAction(rn); });
+      // A block is prose first: unless it declares on-action there is nothing a
+      // re-click does, and double-click must select a word like anywhere else.
+      wireSelectThenAction(
+        content, () => { applyOnAction(rn); }, content, undefined,
+        () => attrs.has('on-action'),
+      );
     }
 
     // Built before the body: renderInto wires span toggles against it, and the

@@ -100,12 +100,18 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
         wireSelectThenAction(content, (expand) => {
           if (rn.toggleable) this._toggles.toggle(expand);
           applyOnAction(rn);
-        });
+        }, content, undefined,
+        () => rn.toggleable || attrs.has('on-action'));
       }
     } else if (this._actionVal === 'exhibit') {
       wireSelectThenAction(content, () => { exhibitOpenFromNode(rn); applyOnAction(rn); });
     } else {
-      wireSelectThenAction(content, () => { applyOnAction(rn); });
+      // Leaf row: on-action or nothing. A cell of table text should be
+      // double-click selectable when the row does nothing.
+      wireSelectThenAction(
+        content, () => { applyOnAction(rn); }, content, undefined,
+        () => attrs.has('on-action'),
+      );
     }
 
     this.buildKeyboardHandler();

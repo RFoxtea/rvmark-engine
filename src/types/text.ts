@@ -257,11 +257,23 @@ class TextTypeHandler extends BaseTypeHandler {
         if (rn.toggleable) toggles.toggle(expand, { scroll: false });
         else content.focus();
         applyOnAction(rn);
-      }, content, notTog);
+      }, content, notTog,
+      // Toggleability is not fixed at wiring time — a node becomes expandable
+      // once its children resolve — so this is asked per gesture.
+      () => rn.toggleable || rn.sourceNode.attrs.has('on-action'));
     } else {
       // Leaf (or always-open) node: nothing type-specific happens on re-click,
       // but it is still an action gesture, so on-action must fire here as well.
-      wireSelectThenAction(content, () => { applyOnAction(rn); }, content, notTog);
+      // If the node declares no on-action there is nothing to protect, and the
+      // reader gets ordinary double-click-to-select back.
+      //
+      // {action: link} needs no exception: the anchor is a real <a>, which both
+      // handlers skip outright, so a click that reaches here landed beside the
+      // link and does nothing. {action: none} is inert by definition.
+      wireSelectThenAction(
+        content, () => { applyOnAction(rn); }, content, notTog,
+        () => rn.sourceNode.attrs.has('on-action'),
+      );
     }
   }
 

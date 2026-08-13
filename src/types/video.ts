@@ -91,7 +91,9 @@ class VideoTypeHandler extends BaseTypeHandler {
 
     // ── Click wiring ──────────────────────────────────────────────────────────
 
-    wireSelectThenAction(content, () => {});
+    // No re-click action at all — the embed handles its own clicks — so a
+    // double-click here is just the reader selecting text.
+    wireSelectThenAction(content, () => {}, content, undefined, () => false);
 
     const li = renderNode.li;
 

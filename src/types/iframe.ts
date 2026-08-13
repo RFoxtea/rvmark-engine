@@ -185,7 +185,8 @@ class IframeTypeHandler extends BaseTypeHandler {
 
     // ── Click / exhibit wiring ────────────────────────────────────────────────
 
-    wireSelectThenAction(content, () => {});
+    // No re-click action: the iframe owns its own interior clicks.
+    wireSelectThenAction(content, () => {}, content, undefined, () => false);
 
     const li = renderNode.li;
 

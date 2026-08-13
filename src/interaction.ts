@@ -29,6 +29,12 @@ export function wireSelectThenAction(
   doAction: (expand?: boolean, opts?: { scroll?: boolean }) => void,
   focusTarget: HTMLElement = target,
   isExcluded: (el: HTMLElement) => boolean = () => false,
+  // Whether a re-click actually does something. Only the caller knows: it
+  // depends on the node's type, its attrs, and whether it can expand — all of
+  // which can change after wiring, so this is a predicate rather than a flag.
+  // Defaults to "yes", which is the conservative answer for a caller that has
+  // not been taught the question.
+  hasAction: () => boolean = () => true,
 ): void {
   let wasSelected = false;
   let downX = 0, downY = 0;
@@ -41,8 +47,11 @@ export function wireSelectThenAction(
     if (et.tagName === 'A' || isExcluded(et) || spanIsInteractive(et)) return;
     // detail >= 2 means this mousedown is part of a double/triple-click;
     // preventDefault here (not on 'dblclick') is what actually stops the
-    // browser's native word/paragraph selection. A held modifier opts out.
-    if (e.detail >= 2 && !hasModifier(e)) e.preventDefault();
+    // browser's native word/paragraph selection. A held modifier opts out, and
+    // so does a node with nothing to do on re-click: the suppression exists to
+    // protect an action from being lost to a text selection, so where there is
+    // no action it buys nothing and only costs the reader double-click-to-select.
+    if (e.detail >= 2 && !hasModifier(e) && hasAction()) e.preventDefault();
     const rn: RenderNode | undefined = (target.closest<HTMLElement>('.node') as any)?._renderNode;
     wasSelected = !!rn && RenderNode.currentSelection === rn;
     downX = e.clientX; downY = e.clientY;
@@ -51,6 +60,9 @@ export function wireSelectThenAction(
     const et = e.target as HTMLElement;
     if (et.tagName === 'A' || isExcluded(et) || spanIsInteractive(et)) return;
     if (hasModifier(e)) return;
+    // A double-click on an inert node is the reader selecting a word. Taking
+    // focus mid-gesture would collapse that selection, so leave it alone.
+    if (e.detail >= 2 && !hasAction()) return;
     const moved = Math.hypot(e.clientX - downX, e.clientY - downY) > DRAG_THRESHOLD_PX;
     if (wasSelected && !moved) doAction(undefined, { scroll: false });
     else focusTarget.focus();
