@@ -243,13 +243,24 @@ export type ParsedSpanAttrs = Multimap;
 // Bare `let`/`set`/`remove` on a span defaults to on-action: the mutation fires
 // when the span is activated. (On a node, a bare `let` means on-spawn instead —
 // a span has no spawn of its own, so there is nothing for it to hook.)
+//
+// An OPTION span re-files these to on-select once node attrs settle the span's
+// kind — see retargetBareMutations in span-toggle.ts. The bare form is recorded
+// under BARE_MUTATION_KEY so that pass can tell it from an explicitly written
+// `on-action:`, which always means the action gesture and is never re-filed.
+export const BARE_MUTATION_KEY = 'rvmark-bare-mutation';
+
 export function parseInlineSpanParams(raw: string): ParsedSpanAttrs {
   const out = new Multimap();
   for (const part of splitSegments(raw)) {
     const trimmed = part.trim();
     if (!trimmed) continue;
     if (trimmed.startsWith('=>')) { out.append('transclude', trimmed.slice(2).trim()); continue; }
-    if (/^(let|set|remove)\b/.test(trimmed)) { out.append('on-action', trimmed); continue; }
+    if (/^(let|set|remove)\b/.test(trimmed)) {
+      out.append('on-action', trimmed);
+      out.append(BARE_MUTATION_KEY, trimmed);
+      continue;
+    }
     const colon = trimmed.indexOf(':');
     if (colon === -1) out.append(trimmed, '');
     else out.append(trimmed.slice(0, colon).trim(), trimmed.slice(colon + 1).trim());

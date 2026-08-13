@@ -19,14 +19,19 @@
  *   nav.select(idx)      — programmatically select
  *   nav.reset()          — deselect all
  *   nav.activeIdx()      — current index (-1 if none)
- *   nav.activate()       — activate current option (Enter/Space)
+ *   nav.activate()       — activate current option (Enter/Space); false if the
+ *                          option had no action, so the caller can fall through
  */
 
 let _rvmarkOptionCounter = 0;
 
+// onActivate returns whether the option actually did something. An option with
+// no action of its own reports false, and the gesture falls through to the
+// node — so Enter on a targetless highlight span still reaches the node's own
+// Enter behaviour instead of being swallowed by the listbox.
 interface ListboxCallbacks {
   onSelect?:   (idx: number, el: HTMLElement) => void;
-  onActivate?: (idx: number, el: HTMLElement) => void;
+  onActivate?: (idx: number, el: HTMLElement) => boolean | void;
   onReset?:    () => void;
 }
 
@@ -74,9 +79,13 @@ export function createListboxNav(
     return false;
   }
 
-  function activate() {
+  // True when the active option consumed the gesture. No active option, or an
+  // option with nothing of its own to run, is a miss — the caller then treats
+  // the key as unhandled and lets the node act on it.
+  function activate(): boolean {
     const opts = options();
-    if (activeIdx >= 0) onActivate?.(activeIdx, opts[activeIdx]);
+    if (activeIdx < 0) return false;
+    return onActivate?.(activeIdx, opts[activeIdx]) === true;
   }
 
   function wireOption(el: HTMLElement) {

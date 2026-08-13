@@ -14,6 +14,7 @@
  */
 
 import type { ParsedSpanAttrs } from './markdown.js';
+import { BARE_MUTATION_KEY } from './markdown.js';
 import type { Multimap } from './multimap.js';
 import type { RenderNode } from './render-node.js';
 import type { ToggleSet } from './toggle-set.js';
@@ -36,6 +37,26 @@ function makeSpanMarker(): HTMLElement {
  * options of spans the renderer saw only as bare `=> #ref` — the renderer
  * cannot see node attrs, so role and marker are settled here.
  */
+// An option is selection-driven, so a bare `let`/`set`/`remove` on it means
+// "when this becomes current" — not "on the action gesture". The span parser
+// cannot tell: whether a span is an option depends on node attrs it never sees
+// (`{listbox}`), so it files every bare mutation under on-action and records it
+// under BARE_MUTATION_KEY. Here, with the kind settled, the bare ones move to
+// on-select.
+//
+// An explicitly written `{on-action: …}` is left exactly where it is. The author
+// named the gesture key, so it keeps firing on Enter/Space — and makes the
+// option consume that key, rather than passing it to the node.
+function retargetBareMutations(span: ParsedSpanAttrs): void {
+  const bare = span.getAll(BARE_MUTATION_KEY);
+  if (!bare.length) return;
+  const explicit = span.getAll('on-action').filter(v => !bare.includes(v));
+  span.delete('on-action');
+  for (const v of explicit) span.append('on-action', v);
+  for (const v of bare)     span.append('on-select', v);
+  span.delete(BARE_MUTATION_KEY);
+}
+
 export function wireSpanToggles(
   root:      HTMLElement,
   spanMap:   Map<number, ParsedSpanAttrs>,
@@ -50,6 +71,7 @@ export function wireSpanToggles(
     const span    = spanMap.get(ordinal);
     if (!span) continue;
     if (spanIsSelectionDriven(span, nodeAttrs)) {
+      retargetBareMutations(span);
       // The renderer marks a bare `=> #ref` as a manual toggle, but node-level
       // `{listbox}` may make it an option — which the renderer cannot see. Undo
       // the guess now that node attrs are known. Options are wired by the

@@ -174,21 +174,29 @@ export function makeErrorNode(host: SourceNode, ref: string, reason: 'error' | '
 // Centralized keyboard handling for inline option spans in a node's label.
 // Handlers with a listbox should call this from their keydown listener.
 //
-//   Enter + active option → activate + fire on-action
+//   Enter + active option → activate + fire on-action (only if the option acts)
 //   ArrowRight            → next option
 //   ArrowLeft             → prev option (returns false at leftmost so caller can fall through)
 //
 // Returns true if the event was consumed.
+//
+// An option with no action of its own does not consume Enter: activate()
+// reports false and this returns false, so the caller's own Enter branch runs
+// and the node keeps its key. Without that, a node whose options are targetless
+// — Euclid's highlight spans — would lose Enter to the listbox the moment any
+// option was selected, and a markdown node could never focus its scroll area.
+// on-action is left to the caller on that path; firing it here too would run
+// the node's mutations twice for one keypress.
 export function listboxKeydown(
   e: KeyboardEvent,
-  listboxNav: { activeIdx(): number; activate(): void; next(): boolean; prev(): boolean } | null | undefined,
+  listboxNav: { activeIdx(): number; activate(): boolean; next(): boolean; prev(): boolean } | null | undefined,
   rn: RenderNode,
 ): boolean {
   if (!listboxNav) return false;
   const content = rn.content;
 
   if (e.key === 'Enter' && e.target === content && listboxNav.activeIdx() >= 0) {
-    listboxNav.activate();
+    if (!listboxNav.activate()) return false;
     applyOnAction(rn);
     e.preventDefault();
     return true;

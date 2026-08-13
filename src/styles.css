@@ -495,7 +495,12 @@ footer {
    fight the surrounding prose where titles and emphasis already use them.
    Distinct from .inline-option's solid underline — the two kinds behave
    differently, so they should not look identical. Same underline offset, so
-   the two sit on a common baseline where they share a label. */
+   the two sit on a common baseline where they share a label.
+
+   The label stays --fg in both states. It is prose — a citation or a phrase the
+   sentence is built around — and muting it dims the reading text itself rather
+   than the affordance. Nothing recolours on expand: the marker turns, and that
+   is the whole state change, as in the tree. */
 .inline-toggle {
   color: var(--fg);
   text-decoration: underline dotted;
@@ -507,35 +512,39 @@ footer {
      also stops the underline being cut in two mid-citation. */
   white-space: nowrap;
 }
-/* Focus shows on the marker itself rather than as a ring around the span: the
-   span sits inline in prose, where an outline boxes a run of text mid-sentence
-   and breaks the line. */
 .inline-toggle:focus,
 .inline-toggle:focus-visible {
   outline: none;
-}
-.inline-toggle:focus > .span-toggle-marker,
-.inline-toggle:focus-visible > .span-toggle-marker {
-  background-color: var(--accent);
 }
 /* Same size as the node bullet's glyph: 1em at --text-chrome, so both markers
    are the same mark at the same scale wherever they appear. Sizing off the
    chrome token rather than the surrounding prose also keeps the box off
    fractional pixels — the glyph's flat back edge is a hard vertical line, and
-   at a fractional size it antialiases into a stray sliver beside the arrow. */
+   at a fractional size it antialiases into a stray sliver beside the arrow.
+
+   Muted in every state, matching .toggle: same mark, same job, same colour, and
+   open/closed carried by the rotation alone. An explicit colour rather than
+   currentColor — the label is --fg, and the marker should not follow it. */
 .span-toggle-marker {
   display: inline-block;
   width: var(--text-chrome);
   height: var(--text-chrome);
   margin-right: 0.15em;
   vertical-align: -0.12em;
-  background-color: currentColor;
+  background-color: var(--muted);
   -webkit-mask: var(--icon-toggle) no-repeat center / contain;
           mask: var(--icon-toggle) no-repeat center / contain;
   transition: transform 0.15s;
 }
 .inline-toggle[aria-expanded="true"] > .span-toggle-marker {
   transform: rotate(90deg);
+}
+/* Focus shows on the marker itself rather than as a ring around the span: the
+   span sits inline in prose, where an outline boxes a run of text mid-sentence
+   and breaks the line. */
+.inline-toggle:focus > .span-toggle-marker,
+.inline-toggle:focus-visible > .span-toggle-marker {
+  background-color: var(--accent);
 }
 @media (prefers-reduced-motion: reduce) {
   .span-toggle-marker { transition: none; }

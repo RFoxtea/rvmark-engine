@@ -68,9 +68,10 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
 
   const applyOptionSelection = (el: HTMLElement) => {
     const params = spanOf(el);
-    // A span's state mutations live under on-action (bare `let`/`set`/`remove`
-    // normalize to it), and every one of them applies — hence getAll.
-    for (const v of params.getAll('on-action')) applyEventAttr(v, rn);
+    // No on-action here: an option is selection-driven, so its own mutations
+    // ride on-select and are fired by the caller. `on-action` on an option means
+    // what it means everywhere — the context-sensitive gesture — and belongs to
+    // onActivate alone.
     const transclude = params.get('transclude');
     // Only a TRANSCLUDING option takes the hill (§1c). A targetless option —
     // Euclid's `[BCD]{let &e-ri = …}`, thousands of them — makes no claim on
@@ -111,9 +112,20 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
             (elRect.top - containerRect.top) - (optionContainer.clientHeight / 2 - el.clientHeight / 2);
         }
       },
+      // Action is the context-sensitive gesture (Enter/Space, committing click),
+      // never selection — an option's own state mutations ride `on-select` and
+      // have already fired by the time we get here. So this runs only what the
+      // author explicitly filed under `on-action`, and consumes the key only if
+      // there was something to run.
+      //
+      // An option that consumes nothing leaves Enter to the node, which is what
+      // lets a markdown node still focus its scroll area while one of its
+      // options is selected.
       onActivate(_idx, el) {
-        fireSpanEvent(el, 'on-action');
-        if (el.tagName === 'A') (el as HTMLAnchorElement).click();
+        const actions = spanOf(el).getAll('on-action');
+        for (const v of actions) applyEventAttr(v, rn);
+        if (el.tagName === 'A') { (el as HTMLAnchorElement).click(); return true; }
+        return actions.length > 0;
       },
       onReset() {
         let heldHill = false;
@@ -193,6 +205,11 @@ export function isListbox(
   attrs: Multimap,
   spanMap: Map<number, ParsedSpanAttrs>,
 ): boolean {
+  // `on-select` is tested alongside `on-action` because an option's bare
+  // mutations are re-filed from one to the other once its kind is known (see
+  // retargetBareMutations). This runs before that pass today, but testing both
+  // keeps the answer stable regardless of call order.
   return attrs.has('listbox') ||
-    [...spanMap.values()].some(s => s.has('option') || s.has('on-action') || spanIsSelectionDriven(s, attrs));
+    [...spanMap.values()].some(s =>
+      s.has('option') || s.has('on-action') || s.has('on-select') || spanIsSelectionDriven(s, attrs));
 }
