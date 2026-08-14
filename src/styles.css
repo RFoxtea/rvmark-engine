@@ -1399,7 +1399,7 @@ html.rvmark-exhibit-guest footer { display: none; }
 }
 
 .md-body-scroll {
-  max-height: 30vh;
+  max-height: 50vh;
   overflow-y: auto;
   outline: none;
   padding: 0.4rem 0.6rem 0.4rem 0.6rem;
