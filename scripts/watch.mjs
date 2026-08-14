@@ -65,12 +65,13 @@ export function watchPaths(targets, onChange, { debounceMs = 100 } = {}) {
   const handler = (_eventType, filename) => {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
+      // Committed only on a reported change: a build writing into a watched path
+      // raises events whose check would otherwise absorb a just-made edit.
       const changed = targets.filter(t => {
         const next = snapshot(t);
-        const prev = snapshots.get(t);
-        const differs = snapshotsDiffer(prev, next);
+        if (!snapshotsDiffer(snapshots.get(t), next)) return false;
         snapshots.set(t, next);
-        return differs;
+        return true;
       });
       if (changed.length === 0) return;
       console.log(`  change detected: ${filename || '(unknown)'}`);
@@ -79,7 +80,12 @@ export function watchPaths(targets, onChange, { debounceMs = 100 } = {}) {
   };
   const watchers = [];
   for (const target of targets) {
-    try { watchers.push(watch(target, { recursive: true }, handler)); } catch (_) {}
+    // Recursive watch on a plain file throws on Linux; theme and template are files.
+    try {
+      watchers.push(watch(target, { recursive: true }, handler));
+    } catch (_) {
+      try { watchers.push(watch(target, handler)); } catch (_) {}
+    }
   }
   return watchers;
 }
