@@ -453,6 +453,8 @@ test.describe('?--static view', () => {
   test('search widget is entirely absent', async ({ page }) => {
     await page.goto('/?--static');
     await expect(page.locator('.search-widget')).toHaveCount(0);
-    await expect(page.locator('#search-root')).toBeEmpty();
+    // Not merely empty: initSearch never runs in this view, and #search-root is
+    // built there rather than in template.html, so the element is never created.
+    await expect(page.locator('#search-root')).toHaveCount(0);
   });
 });
