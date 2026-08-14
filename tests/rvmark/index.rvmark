@@ -266,17 +266,69 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
       ~~~
   14. {#span-toggle-tall-block; = block}
       ~~~
-      A body taller than the scroller's 30vh cap. Line two.
-      Line three. Line four. Line five. Line six. Line seven. Line eight.
-      Line nine. Line ten. Line eleven. Line twelve. Line thirteen.
-      Line fourteen. Line fifteen. Line sixteen. Line seventeen.
-      Line eighteen. Line nineteen. Line twenty. Line twenty-one.
-      Line twenty-two. Line twenty-three. Line twenty-four.
-      Line twenty-five. Line twenty-six. Line twenty-seven.
-      Line twenty-eight. Line twenty-nine. Line thirty. Line thirty-one.
-      Line thirty-two. Line thirty-three. Line thirty-four.
-      Line thirty-five. Line thirty-six. Line thirty-seven.
-      Line thirty-eight. Line thirty-nine. Line forty.
+      Deliberately far taller than any viewport-relative cap on the scroller,
+      so raising that cap does not stop this body overflowing.
+
+      Line one.
+      Line two.
+      Line three.
+      Line four.
+      Line five.
+      Line six.
+      Line seven.
+      Line eight.
+      Line nine.
+      Line ten.
+      Line eleven.
+      Line twelve.
+      Line thirteen.
+      Line fourteen.
+      Line fifteen.
+      Line sixteen.
+      Line seventeen.
+      Line eighteen.
+      Line nineteen.
+      Line twenty.
+      Line twenty-one.
+      Line twenty-two.
+      Line twenty-three.
+      Line twenty-four.
+      Line twenty-five.
+      Line twenty-six.
+      Line twenty-seven.
+      Line twenty-eight.
+      Line twenty-nine.
+      Line thirty.
+      Line thirty-one.
+      Line thirty-two.
+      Line thirty-three.
+      Line thirty-four.
+      Line thirty-five.
+      Line thirty-six.
+      Line thirty-seven.
+      Line thirty-eight.
+      Line thirty-nine.
+      Line forty.
+      Line forty-one.
+      Line forty-two.
+      Line forty-three.
+      Line forty-four.
+      Line forty-five.
+      Line forty-six.
+      Line forty-seven.
+      Line forty-eight.
+      Line forty-nine.
+      Line fifty.
+      Line fifty-one.
+      Line fifty-two.
+      Line fifty-three.
+      Line fifty-four.
+      Line fifty-five.
+      Line fifty-six.
+      Line fifty-seven.
+      Line fifty-eight.
+      Line fifty-nine.
+      Line sixty.
       ~~~
   13. {#span-toggle-nonempty-implicit; = block; listbox-nonempty}
       ~~~
