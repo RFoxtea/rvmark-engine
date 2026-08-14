@@ -1,5 +1,5 @@
 /**
- * types/markdown.ts
+ * types/block.ts
  *
  * Implements the `block` node type: a multiline Markdown body rendered inside a
  * node. Body lines are collected by the parser from a following fenced code
@@ -79,7 +79,7 @@ function extractMdSection(text: string, sectionSlug: string): string {
 
 // ── Type handler ───────────────────────────────────────────────────────────────
 
-class MarkdownTypeHandler extends BaseTypeHandler {
+class BlockTypeHandler extends BaseTypeHandler {
   readonly managesReady = true as const;
   private _listboxNav?: ListboxNav;
   private _actionVal:  string | null = null;
@@ -94,7 +94,7 @@ class MarkdownTypeHandler extends BaseTypeHandler {
   }
 
   constructor(rn: RenderNode) {
-    super(rn, 'a[href], pre, .md-body-scroll, .md-math-block, .katex-display, .katex-html');
+    super(rn, 'a[href], pre, .block-body-scroll, .md-math-block, .katex-display, .katex-html');
     const sourceNode = rn.sourceNode;
     const attrs = resolveAttrs(sourceNode);
     applyOnSpawn(attrs, rn);
@@ -155,9 +155,9 @@ class MarkdownTypeHandler extends BaseTypeHandler {
   ): void {
     const { content } = this;
     const outer   = document.createElement('div');
-    outer.className = 'md-body';
+    outer.className = 'block-body';
     const scroller = document.createElement('div');
-    scroller.className = 'md-body-scroll';
+    scroller.className = 'block-body-scroll';
 
     scroller.addEventListener('keydown', (e) => {
       if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.target === scroller) {
@@ -248,7 +248,7 @@ class MarkdownTypeHandler extends BaseTypeHandler {
 
     // Clicking the left border clears the option selection — the same gesture a
     // text node's bullet offers, on the block's own analogue of one. The border
-    // is deliberately aligned to the bullet column (see .md-body in styles.css),
+    // is deliberately aligned to the bullet column (see .block-body in styles.css),
     // so this is the same target in the same place.
     //
     // The painted border is only --body-border-w, far too thin to aim at, so the
@@ -266,9 +266,9 @@ class MarkdownTypeHandler extends BaseTypeHandler {
     // gesture it offers, and that state does not exist. Omitting it entirely
     // rather than wiring a dead one keeps the pointer and hover accent off a
     // target that would do nothing (see wireBulletActions).
-    if (body?.classList.contains('md-body') && !attrs.has('listbox-nonempty')) {
+    if (body?.classList.contains('block-body') && !attrs.has('listbox-nonempty')) {
       const strip = document.createElement('div');
-      strip.className = 'md-body-reset';
+      strip.className = 'block-body-reset';
       strip.setAttribute('aria-hidden', 'true');   // keyboard path is ArrowLeft
       // No expand: a block node renders no children (this handler never calls
       // setChildren), so its bullet column only ever resets.
@@ -299,7 +299,7 @@ class MarkdownTypeHandler extends BaseTypeHandler {
           if (e.ctrlKey || e.metaKey) {
             // Defer to the browser whenever there is a selection to copy.
             if (this._src && !window.getSelection()?.toString()) {
-              const body = content.querySelector<HTMLElement>('.md-body-scroll');
+              const body = content.querySelector<HTMLElement>('.block-body-scroll');
               const html = body ? clipboardHtml(body) : '';
               navigator.clipboard.write([
                 new ClipboardItem({
@@ -322,7 +322,7 @@ class MarkdownTypeHandler extends BaseTypeHandler {
   // No tabIndex assignment: focus gating owns it, and writing it here left the
   // attribute behind, making the scroller mouse-focusable for good.
   private focusBody(): void {
-    const scroller = this.content.querySelector<HTMLElement>('.md-body-scroll');
+    const scroller = this.content.querySelector<HTMLElement>('.block-body-scroll');
     if (scroller && scroller.scrollHeight > scroller.clientHeight) scroller.focus();
   }
 
@@ -334,7 +334,7 @@ class MarkdownTypeHandler extends BaseTypeHandler {
 
 const blockFactory: NodeTypeFactory = {
   create(renderNode) {
-    return new MarkdownTypeHandler(renderNode);
+    return new BlockTypeHandler(renderNode);
   },
   staticRenderBody(node, ctx) {
     const rawSrc = (node.attrs.get('src') ?? node.label ?? '').trim();

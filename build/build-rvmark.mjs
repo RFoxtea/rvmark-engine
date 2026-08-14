@@ -70,7 +70,7 @@ const { SourceFile } = await import('../out/source-file.js');
 // Import type files for their side effects (they call RvmarkRegistry.register).
 await import('../out/types/text.js');
 const { staticMdInline, staticMdToHtml } = await import('../out/markdown.js');
-await import('../out/types/markdown.js');
+await import('../out/types/block.js');
 await import('../out/types/video.js');
 await import('../out/types/iframe.js');
 await import('../out/types/image.js');

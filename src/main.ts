@@ -23,7 +23,7 @@ import { scrollBehavior } from './scroll.js';
 // Side-effect imports: register all built-in types via factoryRegister
 import './types/text.js';
 import './markdown.js';
-import './types/markdown.js';
+import './types/block.js';
 import './types/video.js';
 import './types/iframe.js';
 import './types/image.js';

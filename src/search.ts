@@ -30,7 +30,7 @@
  * (RenderNode.setSelection), and selection can change for reasons unrelated
  * to search (e.g. clicking elsewhere), so marks don't react to it.
  * Highlighting wraps the matched substring anywhere in a node's own rendered
- * .node-content — .node-label, a block's .md-body, or table/tr .tr-cells,
+ * .node-content — .node-label, a block's .block-body, or table/tr .tr-cells,
  * since a row's visible text does not all live in .node-label. A match that
  * spans an inline formatting boundary (e.g. part bold, part not) still counts
  * as a match but isn't wrapped, since splitting across element boundaries
@@ -322,7 +322,7 @@ function markTextNode(textNode: Text, needle: string): void {
 
 // Marks are scoped to the node's own .node-content — not just its .node-label.
 // A row's visible text does not all live in .node-label: block bodies render
-// into a sibling .md-body, and table/tr rows have no .node-label at all (their
+// into a sibling .block-body, and table/tr rows have no .node-label at all (their
 // cells are .tr-cell children of .node-content). Walking .node-content covers
 // all three, and the `:scope >` keeps it to this node's own row — descendant
 // rows are separate <li>s and get marked from their own SearchMatch.
@@ -691,7 +691,7 @@ function observeTreeShape(): void {
   // recomputes, not real tree-shape changes, so they must not retrigger us.
   // Identified by the injected elements themselves (.search-mark /
   // .search-indicator) rather than by which container they landed in: marks go
-  // wherever a node's visible text lives (.node-label, .md-body, .tr-cell …),
+  // wherever a node's visible text lives (.node-label, .block-body, .tr-cell …),
   // so a container-based check would silently miss cases and self-retrigger.
   const isOwnWrite = (m: MutationRecord): boolean => {
     const el = m.target instanceof HTMLElement ? m.target : m.target.parentElement;

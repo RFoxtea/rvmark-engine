@@ -798,14 +798,14 @@ test.describe('markdown bodies', () => {
   test('{type: markdown} body renders HTML immediately (always open)', async ({ page }) => {
     await page.goto('/');
     await waitForTree(page);
-    // Markdown nodes are always open — body visible without interaction
-    await expect((await nodeLi(page, 'child-markdown')).locator('.md-body').first()).toBeVisible();
+    // Block nodes are always open — body visible without interaction
+    await expect((await nodeLi(page, 'child-markdown')).locator('.block-body').first()).toBeVisible();
   });
 
   test('markdown body renders inline code', async ({ page }) => {
     await page.goto('/');
     await waitForTree(page);
-    const code = (await nodeLi(page, 'child-markdown')).locator('.md-body code').first();
+    const code = (await nodeLi(page, 'child-markdown')).locator('.block-body code').first();
     await expect(code).toBeVisible();
     await expect(code).toHaveText('code');
   });
@@ -813,7 +813,7 @@ test.describe('markdown bodies', () => {
   test('markdown body renders a table', async ({ page }) => {
     await page.goto('/');
     await waitForTree(page);
-    await expect((await nodeLi(page, 'child-markdown')).locator('.md-body table').first()).toBeVisible();
+    await expect((await nodeLi(page, 'child-markdown')).locator('.block-body table').first()).toBeVisible();
   });
 });
 
@@ -1775,7 +1775,7 @@ test.describe('listbox table-row bullet reset', () => {
 });
 
 // A block node's left border is its analogue of a text node's bullet: clicking
-// it clears the option selection. The border belongs to .md-body, which also
+// it clears the option selection. The border belongs to .block-body, which also
 // wraps the scroller, so the handler distinguishes the strip by offsetX — these
 // pin both halves of that (border resets, content does not).
 //
@@ -1799,26 +1799,26 @@ test.describe('listbox block-node border reset', () => {
 
   test('clicking the left border clears the option selection', async ({ page }) => {
     const { node, optA } = await selectOptionA(page);
-    const box  = await node.locator('.md-body').boundingBox();
-    // On the border itself, at .md-body's leading edge.
+    const box  = await node.locator('.block-body').boundingBox();
+    // On the border itself, at .block-body's leading edge.
     await page.mouse.click(box.x + 1, box.y + box.height / 2);
     await expect(optA).toHaveAttribute('aria-selected', 'false');
   });
 
   // The target is --bullet-w wide centred on the border, so half of it sits out
-  // in .md-body's margin — outside the element, but still a valid target.
+  // in .block-body's margin — outside the element, but still a valid target.
   test('clicking just left of the border also clears it', async ({ page }) => {
     const { node, optA } = await selectOptionA(page);
-    const box  = await node.locator('.md-body').boundingBox();
+    const box  = await node.locator('.block-body').boundingBox();
     await page.mouse.click(box.x - 4, box.y + box.height / 2);
     await expect(optA).toHaveAttribute('aria-selected', 'false');
   });
 
   test('clicking inside the body does not clear the selection', async ({ page }) => {
     const { node, optA } = await selectOptionA(page);
-    const scroller = node.locator('.md-body-scroll');
+    const scroller = node.locator('.block-body-scroll');
     const box = await scroller.boundingBox();
-    // Right edge: inside .md-body but past the end of the text, so this lands on
+    // Right edge: inside .block-body but past the end of the text, so this lands on
     // the scroller with no option under it.
     await page.mouse.click(box.x + box.width - 2, box.y + box.height / 2);
     await expect(optA).toHaveAttribute('aria-selected', 'true');
@@ -1827,7 +1827,7 @@ test.describe('listbox block-node border reset', () => {
   test('holding the mouse down in the body never focuses the scroll area', async ({ page }) => {
     // Checked mid-gesture, with the button held — when the flicker was visible.
     const { node } = await selectOptionA(page);
-    const scroller = node.locator('.md-body-scroll');
+    const scroller = node.locator('.block-body-scroll');
     const box = await scroller.boundingBox();
 
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -2273,7 +2273,7 @@ test.describe('span toggles', () => {
 
     // The strip is not built at all on a nonempty listbox, so there is nothing
     // in the bullet column to click.
-    await expect(node.locator('.md-body-reset')).toHaveCount(0);
+    await expect(node.locator('.block-body-reset')).toHaveCount(0);
   });
 
   test('{listbox-nonempty} does not demote a citation toggle to an option', async ({ page }) => {
@@ -2299,7 +2299,7 @@ test.describe('span toggles', () => {
 
   test('clicking an overflowing body keeps focus on the node', async ({ page }) => {
     const node = await waitForNode(page, 'span-toggle-tall-block');
-    const scroller = node.locator('.md-body-scroll');
+    const scroller = node.locator('.block-body-scroll');
     // Asserted, not skipped: a non-overflowing body passes this vacuously.
     expect(await scroller.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
 
@@ -2318,7 +2318,7 @@ test.describe('span toggles', () => {
     // Needs the full cycle: keyboard-focus the body, leave, return, then click.
     const node  = await waitForNode(page, 'span-toggle-tall-block');
     const other = await waitForNode(page, 'span-toggle-block-node');
-    const scroller = node.locator('.md-body-scroll');
+    const scroller = node.locator('.block-body-scroll');
     expect(await scroller.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
 
     await node.click();
@@ -2338,7 +2338,7 @@ test.describe('span toggles', () => {
 
   test('dragging to select body text keeps focus on the node', async ({ page }) => {
     const node = await waitForNode(page, 'span-toggle-tall-block');
-    const scroller = node.locator('.md-body-scroll');
+    const scroller = node.locator('.block-body-scroll');
     expect(await scroller.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
 
     await node.click();
@@ -2368,7 +2368,7 @@ test.describe('span toggles', () => {
     // Suppressing focus on mousedown must not cost the keyboard path: Enter
     // still sends focus into an overflowing body so it can be scrolled.
     const node = await waitForNode(page, 'span-toggle-tall-block');
-    const scroller = node.locator('.md-body-scroll');
+    const scroller = node.locator('.block-body-scroll');
     expect(await scroller.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
 
     await node.click();

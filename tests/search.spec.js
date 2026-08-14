@@ -257,7 +257,7 @@ test.describe('matching and stepping to results', () => {
     await expect(page.locator('.search-input')).toHaveClass(/search-input--no-matches/);
   });
 
-  // A block's text lives in a .md-body sibling of .node-label, so marking has
+  // A block's text lives in a .block-body sibling of .node-label, so marking has
   // to walk .node-content rather than .node-label alone.
   test('text inside a block body is matchable and gets marked', async ({ page }) => {
     await page.goto('/');
@@ -266,7 +266,7 @@ test.describe('matching and stepping to results', () => {
     await page.locator('.search-input').fill('SEARCHABLE_BLOCK_TEXT');
 
     const row = await nodeContent(page, 'search-child-block');
-    await expect(row.locator('.md-body .search-mark')).toHaveCount(1);
+    await expect(row.locator('.block-body .search-mark')).toHaveCount(1);
   });
 
   // table/tr rows have no .node-label at all — their cells are .tr-cell

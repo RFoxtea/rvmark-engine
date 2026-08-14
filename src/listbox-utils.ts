@@ -1,7 +1,7 @@
 /**
  * listbox-utils.ts
  *
- * Shared listbox wiring for type handlers (text, markdown, tr).
+ * Shared listbox wiring for type handlers (text, block, tr).
  * Implements the full canonical behaviour:
  *   - state var pre-declaration
  *   - _rvmarkSpan annotation on DOM elements from spanMap
@@ -127,7 +127,7 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
       // there was something to run.
       //
       // An option that consumes nothing leaves Enter to the node, which is what
-      // lets a markdown node still focus its scroll area while one of its
+      // lets a block node still focus its scroll area while one of its
       // options is selected.
       onActivate(_idx, el) {
         const actions = spanOf(el).getAll('on-action');

@@ -401,7 +401,7 @@ function mathInlineFallback(src: string, display: boolean): string {
 //
 // Rendering is synchronous (katex.renderToString returns HTML inline), so the
 // script must be present BEFORE the markdown that needs it renders. Callers
-// therefore await ensureKatex() first. Markdown nodes declare `managesReady`, so
+// therefore await ensureKatex() first. Block nodes declare `managesReady`, so
 // the node simply does not mount until this resolves — and the MOUNT_SETTLE_MS
 // race means a fast CDN response never shows a placeholder at all. Nothing ever
 // paints in fallback form and then upgrades, so there is no flash.

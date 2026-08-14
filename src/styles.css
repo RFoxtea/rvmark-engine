@@ -439,7 +439,7 @@ footer {
 .node-content:focus .toggle { color: var(--accent); }
 
 .toggle.bullet-clickable,
-.md-body-reset.bullet-clickable { cursor: pointer; }
+.block-body-reset.bullet-clickable { cursor: pointer; }
 
 /* Hover accent, for every bullet-column target that actually takes a click.
    .toggle.leaf is included deliberately: a non-expandable listbox bullet is
@@ -447,7 +447,7 @@ footer {
    override used to suppress. */
 .toggle.bullet-clickable:hover { color: var(--accent); }
 
-/* The block strip's own hover accent lives with the .md-body focus rule below,
+/* The block strip's own hover accent lives with the .block-body focus rule below,
    which it has to outrank. */
 
 /* ── Label ── */
@@ -655,14 +655,14 @@ footer {
 .node-content[aria-selected="true"] .node-id { opacity: 1; }
 
 /* ── Body mode indicator ── */
-.node-content:has(.md-body-scroll:focus) { box-shadow: 0 0 0 1px var(--accent); border-radius: 3px; }
-.node-content:focus .md-body { border-left-color: var(--accent-dim); }
+.node-content:has(.block-body-scroll:focus) { box-shadow: 0 0 0 1px var(--accent); border-radius: 3px; }
+.node-content:focus .block-body { border-left-color: var(--accent-dim); }
 
 /* The block node's reset strip paints nothing of its own — it is a bare hit
    area over the border — so hovering it accents that border instead, in the
    same --accent-dim the focused state uses: it is the same border reading as
    live, not a second, louder state. */
-.md-body:has(> .md-body-reset.bullet-clickable:hover) { border-left-color: var(--accent-dim); }
+.block-body:has(> .block-body-reset.bullet-clickable:hover) { border-left-color: var(--accent-dim); }
 
 /* ── Minor nodes ── */
 .node-content.minor .node-label { color: var(--muted); }
@@ -1325,7 +1325,7 @@ a.static-iframe-link {
    because an exhibit/sidepanel has squeezed the tree column. */
 @container tree (max-width: 600px) {
   .tree .tree { padding: 0; }
-  .md-body { margin-left: 0; }
+  .block-body { margin-left: 0; }
 }
 
 /* ── Hide header on mobile ── */
@@ -1362,9 +1362,9 @@ html.rvmark-exhibit-guest footer { display: none; }
    ============================================================ */
 
 /* ---- markdown ---- */
-/* types/markdown.css — styles for the markdown node type */
+/* types/block.css — styles for the block node type */
 
-.md-body {
+.block-body {
   /* Border aligns with centre of child bullet column (same x as node-children + bullet-w/2) */
   margin-top: 0.4rem;
   margin-left: calc(var(--bullet-w) / 2 - var(--body-border-w) / 2);
@@ -1376,7 +1376,7 @@ html.rvmark-exhibit-guest footer { display: none; }
 }
 
 /* On a listbox block, clicking the left border clears the option selection (see
-   wireListboxOptions in types/markdown.ts) — the block's analogue of clicking a
+   wireListboxOptions in types/block.ts) — the block's analogue of clicking a
    text node's bullet.
    The painted border is only --body-border-w, far too thin to aim at, so the
    target is a strip as wide as a bullet, centred on that border: the same hit
@@ -1384,9 +1384,9 @@ html.rvmark-exhibit-guest footer { display: none; }
    only exists to be clicked, so its whole geometry lives here — the element is
    appended by markdown.ts but never measured there, which keeps it correct for
    any --bullet-w a theme sets, in whatever unit. */
-.node-content--listbox .md-body { position: relative; }
+.node-content--listbox .block-body { position: relative; }
 
-.md-body-reset {
+.block-body-reset {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -1398,7 +1398,7 @@ html.rvmark-exhibit-guest footer { display: none; }
      wireBulletActions sets only when there is a listbox to clear. */
 }
 
-.md-body-scroll {
+.block-body-scroll {
   max-height: 50vh;
   overflow-y: auto;
   outline: none;
@@ -1409,46 +1409,46 @@ html.rvmark-exhibit-guest footer { display: none; }
 }
 
 /* ── Scroll fade masks ── */
-.md-body[data-overflow]:not([data-scrolled-to-top]):not([data-scrolled-to-bottom]) .md-body-scroll {
+.block-body[data-overflow]:not([data-scrolled-to-top]):not([data-scrolled-to-bottom]) .block-body-scroll {
   mask-image: linear-gradient(to bottom, transparent 0%, black var(--md-fade-h), black calc(100% - var(--md-fade-h)), transparent 100%);
   -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black var(--md-fade-h), black calc(100% - var(--md-fade-h)), transparent 100%);
 }
-.md-body[data-overflow][data-scrolled-to-top]:not([data-scrolled-to-bottom]) .md-body-scroll {
+.block-body[data-overflow][data-scrolled-to-top]:not([data-scrolled-to-bottom]) .block-body-scroll {
   mask-image: linear-gradient(to bottom, black calc(100% - var(--md-fade-h)), transparent 100%);
   -webkit-mask-image: linear-gradient(to bottom, black calc(100% - var(--md-fade-h)), transparent 100%);
 }
-.md-body[data-overflow][data-scrolled-to-bottom]:not([data-scrolled-to-top]) .md-body-scroll {
+.block-body[data-overflow][data-scrolled-to-bottom]:not([data-scrolled-to-top]) .block-body-scroll {
   mask-image: linear-gradient(to bottom, transparent 0%, black var(--md-fade-h), black 100%);
   -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black var(--md-fade-h), black 100%);
 }
 
 /* ── Block elements ── */
-.md-body p  { margin: 0.3rem 0; }
+.block-body p  { margin: 0.3rem 0; }
 
-.md-body h1, .md-body h2, .md-body h3,
-.md-body h4, .md-body h5, .md-body h6 {
+.block-body h1, .block-body h2, .block-body h3,
+.block-body h4, .block-body h5, .block-body h6 {
   margin: 0.6rem 0 0.2rem;
   font-weight: 600;
 }
-.md-body h2 { font-size: var(--text-h2); }
-.md-body h3 { font-size: var(--text-h3); }
-.md-body h4 { font-size: var(--text-h4); }
-.md-body h5 { font-size: var(--text-h5); }
-.md-body h6 { font-size: var(--text-h6); color: var(--muted); }
+.block-body h2 { font-size: var(--text-h2); }
+.block-body h3 { font-size: var(--text-h3); }
+.block-body h4 { font-size: var(--text-h4); }
+.block-body h5 { font-size: var(--text-h5); }
+.block-body h6 { font-size: var(--text-h6); color: var(--muted); }
 
-.md-body ul, .md-body ol {
+.block-body ul, .block-body ol {
   padding-left: 1.2rem;
   margin: 0.3rem 0;
 }
 
-.md-body blockquote {
+.block-body blockquote {
   border-left: 2px solid var(--border);
   padding-left: 0.6rem;
   color: var(--muted);
   margin: 0.3rem 0;
 }
 
-.md-body pre {
+.block-body pre {
   background: var(--surface);
   padding: 0.5rem;
   border-radius: 3px;
@@ -1456,9 +1456,9 @@ html.rvmark-exhibit-guest footer { display: none; }
   margin: 0.4rem 0;
   line-height: 1.45;
 }
-.md-body pre code { padding: 0; background: inherit; }
+.block-body pre code { padding: 0; background: inherit; }
 
-.md-body code {
+.block-body code {
   background: var(--surface);
   padding: 0 3px;
   border-radius: 2px;
@@ -1466,29 +1466,29 @@ html.rvmark-exhibit-guest footer { display: none; }
   font-size: 0.85em;
 }
 
-.md-body a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.block-body a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 
 /* ── Tables ── */
-.md-body table {
+.block-body table {
   border-collapse: collapse;
   margin: 0.4rem 0;
   font-size: 0.92em;
   width: 100%;
 }
-.md-body th, .md-body td {
+.block-body th, .block-body td {
   border: 1px solid var(--border);
   padding: 0.2rem 0.5rem;
   text-align: left;
 }
-.md-body thead th {
+.block-body thead th {
   background: var(--surface-2);
   font-weight: 500;
 }
-.md-body tbody tr:nth-child(even) { background: var(--bg); }
+.block-body tbody tr:nth-child(even) { background: var(--bg); }
 
 /* code inside td/th: don't shrink further inside already-smaller table text */
-.md-body td code,
-.md-body th code {
+.block-body td code,
+.block-body th code {
   font-size: 1em;
 }
 
@@ -2052,7 +2052,7 @@ body.exhibit-open .exhibit-panel {
   }
 
   /* Scroll fade masks and inner scroll clipping are screen-only. */
-  .md-body-scroll {
+  .block-body-scroll {
     max-height: none;
     overflow: visible;
     mask-image: none;
@@ -2063,7 +2063,7 @@ body.exhibit-open .exhibit-panel {
      but leave the row (label/caption text) in place. */
   .video-wrap, .html-body-iframe { display: none; }
 
-  pre, .md-body table, .img-body img {
+  pre, .block-body table, .img-body img {
     break-inside: avoid;
   }
 }

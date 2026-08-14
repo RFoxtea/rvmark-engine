@@ -184,7 +184,7 @@ export function makeErrorNode(host: SourceNode, ref: string, reason: 'error' | '
 // reports false and this returns false, so the caller's own Enter branch runs
 // and the node keeps its key. Without that, a node whose options are targetless
 // — Euclid's highlight spans — would lose Enter to the listbox the moment any
-// option was selected, and a markdown node could never focus its scroll area.
+// option was selected, and a block node could never focus its scroll area.
 // on-action is left to the caller on that path; firing it here too would run
 // the node's mutations twice for one keypress.
 export function listboxKeydown(
