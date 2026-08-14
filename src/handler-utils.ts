@@ -23,6 +23,7 @@ import { resolveAttrs } from './source-file.js';
 import type { ResolvedAttrs } from './source-file.js';
 import { RenderNode } from './render-node.js';
 import { resolveRef, resolveEffectiveChildren, resolveTransclusionConfig } from './transclusion.js';
+import { parseTranscludeEntry } from './shared.js';
 import { TRANSCLUDE_DEADLINE_MS } from './constants.js';
 import type { PassEntry, PassMode, StateNode } from './state.js';
 import { exhibitOpenFromNode } from './exhibit.js';
@@ -111,10 +112,11 @@ export async function expandNode(rn: RenderNode, transcludeRef?: string): Promis
     const TIMED_OUT = Symbol('timed-out');
     const deadline = new Promise<typeof TIMED_OUT>(res => setTimeout(() => res(TIMED_OUT), TRANSCLUDE_DEADLINE_MS));
     const outcomes = await Promise.all(childrenList.map(async (rawRef) => {
-      if (rawRef === '*') return { rawRef, star: true, node: null as SourceNode | null, timedOut: false };
+      if (rawRef === '*') return { rawRef, star: true, wholeNode: false, node: null as SourceNode | null, timedOut: false };
+      const { wholeNode } = parseTranscludeEntry(rawRef);
       const node = await Promise.race([resolveRef(rawRef, addr), deadline]);
-      if (node === TIMED_OUT) return { rawRef, star: false, node: null, timedOut: true };
-      return { rawRef, star: false, node: node as SourceNode | null, timedOut: false };
+      if (node === TIMED_OUT) return { rawRef, star: false, wholeNode, node: null, timedOut: true };
+      return { rawRef, star: false, wholeNode, node: node as SourceNode | null, timedOut: false };
     }));
 
     const allNodes: SourceNode[] = [];
@@ -122,7 +124,10 @@ export async function expandNode(rn: RenderNode, transcludeRef?: string): Promis
       if (o.star) {
         if (sourceNode.children.length) allNodes.push(...sourceNode.children as SourceNode[]);
       } else if (o.node) {
-        allNodes.push(...await resolveEffectiveChildren(o.node, new Set([o.rawRef])));
+        // '^' asks for the target as a row rather than for what is under it —
+        // so it is pushed whole, subtree and all, and the unwrap is skipped.
+        if (o.wholeNode) allNodes.push(o.node);
+        else allNodes.push(...await resolveEffectiveChildren(o.node, new Set([o.rawRef])));
       } else {
         allNodes.push(makeErrorNode(sourceNode, o.rawRef, o.timedOut ? 'timeout' : 'error'));
       }

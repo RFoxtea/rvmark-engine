@@ -11,7 +11,7 @@
  *   isOrContainsPermalink      — walk parsed tree to check if targetSlug is node or descendant
  */
 
-import { resolveSlugInFile, resolveAddress, addressToSlug, addressOrigin, RVMARK_SEGMENT } from './shared.js';
+import { resolveSlugInFile, resolveAddress, addressToSlug, addressOrigin, parseTranscludeEntry, RVMARK_SEGMENT } from './shared.js';
 import { loadRvmarkFile } from './loader.js';
 import type { SourceNode, NodeAttrs, OriginDef } from './parser.js';
 
@@ -186,10 +186,14 @@ export function resolveTransclusionConfig(node: SourceNode, attrs: NodeAttrs): T
 // ── resolveRef ────────────────────────────────────────────────────────────
 // Resolve a raw ref string to a SourceNode.
 // sourceFileAddress is the .rvmark file that owns the node containing the ref.
+// Accepts an entry with or without its '^' prefix — the prefix selects what the
+// CALLER does with the result, and never changes which node is resolved.
 export async function resolveRef(
-  rawRef:            string | null | undefined,
+  rawRefIn:          string | null | undefined,
   sourceFileAddress: string,
 ): Promise<SourceNode | null> {
+  if (!rawRefIn) return null;
+  const rawRef = parseTranscludeEntry(rawRefIn).ref;
   if (!rawRef) return null;
   try {
     // Sigil ref: '@alice', '@alice/path', '@alice/path#slug'.
@@ -247,6 +251,10 @@ export async function resolveEffectiveChildren(
       if (visited.has(entry)) continue;
       const node = await resolveRef(entry, targetNode.sourceFile.pageAddress);
       if (!node) continue;
+      // A '^' entry contributes the node itself, so the chain stops here: there
+      // is nothing to unwrap, and recursing would discard the very row it asks
+      // for. Its own children ride along with it, resolved lazily on expand.
+      if (parseTranscludeEntry(entry).wholeNode) { result.push(node); continue; }
       const branchVisited = new Set(visited);
       branchVisited.add(entry);
       result.push(...await resolveEffectiveChildren(node, branchVisited));

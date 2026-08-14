@@ -26,7 +26,7 @@ import { readFileSync, writeFileSync, readdirSync, mkdirSync, cpSync, rmSync, ex
 import { join, dirname, posix } from 'path';
 import { createRequire } from 'module';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { fileToUrlStem, relativeUrl, resolveAddress, resolveMediaAddress, addressToFile, addressToSlug, addressToHref } from '../out/shared.js';
+import { fileToUrlStem, relativeUrl, resolveAddress, resolveMediaAddress, addressToFile, addressToSlug, addressToHref, parseTranscludeEntry } from '../out/shared.js';
 
 // Engine package root — this file lives at <ENGINE_ROOT>/build/build-rvmark.mjs.
 const ENGINE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -477,7 +477,13 @@ function renderStaticNode(node, sourceFile) {
   const isHidden = attrs.has('hidden');
 
   const transcludeRaw = attrs.get('transclude') ?? null;
-  const embedList  = transcludeRaw ? transcludeRaw.split(',').map(s => s.trim()).filter(Boolean) : null;
+  // The '^' prefix selects what the hydrated page puts in the children area; the
+  // static fallback renders every transclusion as a hyperlink either way, so the
+  // prefix is stripped here and the link is the same. Left on, it would reach
+  // resolveAddress as a literal path segment and yield a dead href.
+  const embedList  = transcludeRaw
+    ? transcludeRaw.split(',').map(s => parseTranscludeEntry(s).ref).filter(Boolean)
+    : null;
   const hasLabel   = (node.label || '').trim() !== '';
   const isChildrenMode = transcludeRaw !== null && (
     hasLabel ||

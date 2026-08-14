@@ -2411,4 +2411,47 @@ test.describe('span toggles', () => {
     await expect(tog).toHaveAttribute('aria-expanded', 'true');
     await expect(tog.locator('.span-toggle-marker')).toHaveCount(1);
   });
+
+  // The '^' entry prefix: transclude the target node itself rather than the
+  // children it would otherwise be unwrapped into. The Euclid citation case —
+  // `\[[Post. 3]{=> ^./book-1#p-3; toggle}\]` — where the target is a leaf and
+  // the children reading yields nothing at all.
+  test('^ transcludes the target node itself, not its children', async ({ page }) => {
+    const cite = await spanIn(page, 'span-toggle-whole-node', 'cite');
+    await cite.click();
+    await expect(cite).toHaveAttribute('aria-expanded', 'true');
+
+    // The target's own row, which a bare `=> #st-alpha` would have unwrapped away.
+    await waitForNode(page, 'st-alpha');
+    expect(await tryNodeContent(page, 'st-alpha-child')).toBeNull();
+  });
+
+  test('a bare ref beside a ^ ref still transcludes children', async ({ page }) => {
+    const tog = await spanIn(page, 'span-toggle-whole-node', 'tog');
+    await tog.click();
+    await waitForNode(page, 'st-beta-child');
+    expect(await tryNodeContent(page, 'st-beta')).toBeNull();
+  });
+
+  // The bug that motivated the prefix: a leaf target has no children, so the
+  // children reading opens onto an empty area and the toggle looks broken.
+  test('^ on a childless target shows the target rather than nothing', async ({ page }) => {
+    const post = await spanIn(page, 'span-toggle-whole-leaf-node', 'post');
+    await post.click();
+    await expect(post).toHaveAttribute('aria-expanded', 'true');
+    await waitForNode(page, 'st-leaf');
+  });
+
+  test('^ and bare refs contend for the one children area', async ({ page }) => {
+    const cite = await spanIn(page, 'span-toggle-whole-node', 'cite');
+    const tog  = await spanIn(page, 'span-toggle-whole-node', 'tog');
+
+    await cite.click();
+    await waitForNode(page, 'st-alpha');
+
+    await tog.click();
+    await waitForNode(page, 'st-beta-child');
+    await expect(cite).toHaveAttribute('aria-expanded', 'false');
+    expect(await tryNodeContent(page, 'st-alpha')).toBeNull();
+  });
 });

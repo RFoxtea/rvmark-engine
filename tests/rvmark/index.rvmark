@@ -236,6 +236,8 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
       Cite a [source]{=> #st-alpha} then switch ([de]{selected; option; let &st-lang = de} / [en]{option; let &st-lang = en}).
       [Deutscher Text]{show-when: &st-lang == de}[English text]{show-when: &st-lang == en}
       ~~~
+  15. {#span-toggle-whole-node} Whole [cite]{=> ^#st-alpha} beside children [tog]{=> #st-beta} here
+  16. {#span-toggle-whole-leaf-node} Leaf cite [post]{=> ^#st-leaf} here
   10. {#span-toggle-langblock-peer; = block}
       ~~~
       A peer block writing the SAME variable ([la]{selected; option; let &st-lang = la} / [nl]{option; let &st-lang = nl} / [en]{option; let &st-lang = en}).
@@ -285,6 +287,7 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
   1. {#st-alpha-child} st-alpha child content
 42. {#st-beta} st-beta target
   1. {#st-beta-child} st-beta child content
+43. {#st-leaf} st-leaf target with no children
 
 19. {#event-root; open} Event attrs fixture root
   1. {#event-spawn-parent; let &spawned = 1} on-spawn parent

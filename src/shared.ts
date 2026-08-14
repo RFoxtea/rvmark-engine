@@ -199,6 +199,34 @@ export function hasExplicitSlug(node: SourceNode): boolean {
   return node.attrs.has('id');
 }
 
+// ── Transclusion entry prefix: '^' ─────────────────────────────────────────
+// A transclusion entry may carry a leading '^', meaning "the target node
+// itself" rather than the children it would otherwise be unwrapped into.
+//
+// The choice is per-ENTRY, not per-declaration: a multiple-transclusion must be
+// able to mix the two — `{=> ^#p-3, #chapter-4, *}` brings postulate 3 as a row,
+// chapter 4's children, and the node's own children. That is why this is not an
+// attribute (node-scoped, orthogonal to a ref-scoped choice) and not a distinct
+// arrow (declaration-scoped, same problem).
+//
+// '^' cannot collide with anything already in the ref grammar: '@' opens a
+// sigil, '*' is the wildcard entry, '.' and '/' open paths, '#' opens a bare
+// slug. It sits outside a sigil ref ('^@alice/path#slug') because it modifies
+// the resolution, while '@' names where to resolve.
+//
+// It lives here, in the dependency-free address module, rather than in
+// transclusion.ts: the static builder needs it before it has installed the
+// globalThis stubs that transclusion.js's import graph requires at module init.
+const WHOLE_NODE_PREFIX = '^';
+
+/** Split a transclusion entry into its '^' flag and the bare ref beneath it. */
+export function parseTranscludeEntry(entry: string): { ref: string; wholeNode: boolean } {
+  const trimmed = entry.trim();
+  return trimmed.startsWith(WHOLE_NODE_PREFIX)
+    ? { ref: trimmed.slice(WHOLE_NODE_PREFIX.length).trim(), wholeNode: true }
+    : { ref: trimmed, wholeNode: false };
+}
+
 // ── Slug resolution ────────────────────────────────────────────────────────────
 
 export function parseCompoundSlug(slug: string): { anchor: string; path: number[] } {
