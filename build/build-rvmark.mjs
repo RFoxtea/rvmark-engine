@@ -509,6 +509,33 @@ function staticContentClasses(node, sourceFile, attrs) {
 const BULLET_TYPES      = new Set(['text', 'tr', 'table']);
 const ALWAYS_OPEN_TYPES = new Set(['block']);
 
+// Bullet icons are painted as CSS masks, and a mask fetch is subject to CORS.
+// A file:// document has an opaque origin, so Firefox refuses to read even a
+// sibling file ("CORS request not http") and the gutter renders empty. Inlining
+// the SVG as a data: URI removes the fetch entirely — no origin, no CORS check
+// — and costs nothing on a served site, where icon sets are small and already
+// inlined once per page rather than requested per node.
+//
+// Only the static rendering does this. The hydrated path keeps real URLs: it
+// runs from http(s), where the fetch is cached across every node that shares an
+// icon, and applyBulletProps still has its load-failure fallback.
+const bulletDataUriCache = new Map();
+function inlineBulletUrls(styles, RVMARK_DIR) {
+  return styles.map(decl => decl.replace(/url\("([^"]+)"\)/g, (whole, url) => {
+    if (!url.endsWith('.svg') || /^(data:|https?:)/.test(url)) return whole;
+    if (bulletDataUriCache.has(url)) return bulletDataUriCache.get(url);
+    // Strip the mount prefix, then read from the content tree it mirrors.
+    const rel = url.replace(/^\/?_rvmark\//, '').replace(/^\//, '');
+    let out = whole;
+    try {
+      const svg = readFileSync(join(RVMARK_DIR, rel), 'utf8');
+      out = `url("data:image/svg+xml,${encodeURIComponent(svg).replace(/'/g, '%27')}")`;
+    } catch { /* missing icon: leave the URL, CSS falls back to the dot */ }
+    bulletDataUriCache.set(url, out);
+    return out;
+  }));
+}
+
 // Wrap a row + its children in the collapsed-by-default disclosure. The static
 // page has no JS to drive expansion, so <details> supplies it natively: the
 // engine's own expansion is async (children are built on demand, see
@@ -562,7 +589,11 @@ function renderStaticNode(node, sourceFile, depth = 0) {
   // {hidden} marker stays on the li: it suppresses the whole row, children
   // included, and .node-content would only reach the row itself.
   const contentClasses = staticContentClasses(node, sourceFile, attrs);
-  const liClasses = [isHidden ? 'static-hidden' : '', 'node'].filter(Boolean);
+  const liClasses = [
+    isHidden ? 'static-hidden' : '',
+    'node',
+    attrs.get('open') === 'always' ? 'static-always-open' : '',
+  ].filter(Boolean);
   const liClassAttr = ` class="${escHtml(liClasses.join(' '))}"`;
 
   const exhibitVal = attrs.get('exhibit') ?? null;
@@ -577,13 +608,28 @@ function renderStaticNode(node, sourceFile, depth = 0) {
 
   const nodeType   = attrs.get('type') ?? 'text';
   const hasBullet  = BULLET_TYPES.has(nodeType);
-  const collapsible = !ALWAYS_OPEN_TYPES.has(nodeType);
+
+  // The `open` attribute, read exactly as text.ts/toggle-set.ts read it:
+  // bare `{open}` and `open: true` start expanded; `always` is not collapsible
+  // at all; `never` is not expandable at all; `false` is the plain default.
+  const openVal    = attrs.get('open');
+  const openAlways = openVal === 'always';
+  const openNever  = openVal === 'never';
+  const openInit   = attrs.has('open') && (openVal === '' || openVal === 'true');
+
+  // `always` gets no disclosure at all: the row stays a <div> and the children
+  // sit beside it, permanently visible — the same shape ALWAYS_OPEN_TYPES uses.
+  // `never` likewise, so the fallback never offers a collapse the hydrated page
+  // refuses. Both rely on the !isSummary branches below to stay out of
+  // <details>, which synthesises a "Details" summary around a non-summary row.
+  const collapsible = !ALWAYS_OPEN_TYPES.has(nodeType) && !openAlways && !openNever;
 
   // Bullet props only mean anything to a type that draws a bullet; asking for
   // them elsewhere would put .li or a bullet image on a row with no gutter.
-  const { classes: bulletClasses, styles: bulletStyles, bulletAlt } = hasBullet
+  const { classes: bulletClasses, styles: rawBulletStyles, bulletAlt } = hasBullet
     ? staticBulletProps(node, attrs)
     : { classes: [], styles: [], bulletAlt: null };
+  const bulletStyles = inlineBulletUrls(rawBulletStyles, RVMARK_DIR);
   const styleAttr = bulletStyles.length ? ` style="${escHtml(bulletStyles.join(';'))}"` : '';
 
   // Build the .node-content row. `leaf` mirrors setExpandable: a row with no
@@ -627,12 +673,16 @@ function renderStaticNode(node, sourceFile, depth = 0) {
     }
   }
 
-  const hasChildren = node.children.length > 0;
+  // `open: never` is not expandable, so its children are unreachable in the
+  // hydrated page. Emitting them here would leave them permanently visible —
+  // the exact inverse of the attribute — so they are dropped outright.
+  const hasChildren = node.children.length > 0 && !openNever;
   const childrenHtml = hasChildren ? renderStaticNodes(node.children, sourceFile, depth + 1) : '';
-  // Everything starts collapsed, matching renderRoot in main.ts: the hydrated
-  // page mounts roots[0] and selects it without expanding. The fallback has no
-  // selection to show for it, so the two agree on the painted result.
-  const open = false;
+  // Collapsed by default, matching renderRoot in main.ts: the hydrated page
+  // mounts roots[0] and selects it without expanding. The fallback has no
+  // selection to show for it, so the two agree on the painted result. An
+  // authored {open}/`open: true` overrides that, as it does when hydrated.
+  const open = openInit;
   // An always-open type keeps its children, but not behind a disclosure — so
   // its row stays a <div> and the children sit beside it, always visible.
   const isSummary = hasChildren && collapsible;
@@ -653,6 +703,13 @@ function renderStaticNode(node, sourceFile, depth = 0) {
   // Text node: label + children
   const lbl = `<span class="node-label">${tags}${staticMdInline(node.label || '')}${exhibitLinkHtml}</span>`;
   const rowHtml = row(lbl, isSummary, open);
+  // A non-summary row must never go inside <details>: the element requires a
+  // <summary> first child and synthesises a "Details" one when it is missing.
+  // Same shape as the typed branch above — children sit beside the row.
+  if (!isSummary) {
+    const kids = childrenHtml ? `<div class="node-children">${childrenHtml}</div>` : '';
+    return `<li${liClassAttr}>${rowHtml.replace(/^<(summary|div)/, `<$1${idAttr}`)}${kids}</li>\n`;
+  }
   return `<li${liClassAttr}>${wrapDisclosure(rowHtml, childrenHtml, open, idAttr)}</li>\n`;
 }
 
@@ -679,13 +736,22 @@ function renderStaticTableNode(node, sourceFile, depth, typeName) {
     'node',
     isTable ? 'table-node' : 'tr-row',
     attrs.has('hidden') ? 'static-hidden' : '',
+    attrs.get('open') === 'always' ? 'static-always-open' : '',
   ].filter(Boolean);
 
   // The header/row cells come from the type's own staticRenderBody, which
   // already emits .node-content--table / .node-content with .tr-cell children.
   const rowHtml = factory?.staticRenderBody?.(node, buildCtx) ?? '';
 
-  const hasChildren = node.children.length > 0;
+  // Same `open` contract as renderStaticNode — see the comment there. `never`
+  // drops its children; `always` shows them with no toggle; `true` ships the
+  // checkbox pre-checked, which is what :checked ~ .node-children reads.
+  const openVal    = attrs.get('open');
+  const openAlways = openVal === 'always';
+  const openNever  = openVal === 'never';
+  const openInit   = attrs.has('open') && (openVal === '' || openVal === 'true');
+
+  const hasChildren = node.children.length > 0 && !openNever;
   const childrenHtml = hasChildren
     ? `<div class="node-children">${renderStaticNodes(node.children, sourceFile, depth + 1)}</div>`
     : '';
@@ -695,11 +761,15 @@ function renderStaticTableNode(node, sourceFile, depth, typeName) {
 
   let toggleHtml;
   let inputHtml = '';
-  if (hasChildren) {
+  if (hasChildren && openAlways) {
+    // Always-open: children are shown outright, so no checkbox and no label —
+    // a leaf bullet, matching the hydrated row that offers no collapse either.
+    toggleHtml = staticRenderBullet(true, bulletAlt, escHtml).replace('class="toggle leaf"', `class="${togClass} leaf"`);
+  } else if (hasChildren) {
     // The id has to be unique per page and stable across builds; the permalink
     // id already is both.
     const tid = `rvt-${node.permalinkId ?? `${depth}-${node.slug ?? ''}`}`;
-    inputHtml = `<input type="checkbox" class="static-toggle" id="${escHtml(tid)}">`;
+    inputHtml = `<input type="checkbox" class="static-toggle" id="${escHtml(tid)}"${openInit ? ' checked' : ''}>`;
     const alt = bulletAlt ? `<span class="visually-hidden">${escHtml(bulletAlt)} </span>` : '';
     toggleHtml = `<label class="${togClass}" for="${escHtml(tid)}">${alt}<span class="toggle-badge" aria-hidden="true"></span></label>`;
   } else {
@@ -777,7 +847,42 @@ for (const [relPath, sourceFile] of sourceFiles) {
   const author      = meta?.get('author') ?? '';
   const footerLabel = meta?.get('footer-label') ?? 'rvmark';
 
-  const staticHtml = renderStaticNodes(sourceFile.roots, sourceFile);
+  // Asset URLs come out of addressToHref root-absolute ('/_rvmark/…'), which a
+  // server resolves correctly but a file:// reader does not — there '/' is the
+  // filesystem root, so every bullet, image and link 404s and the fallback
+  // renders bare. The template's own assets already go through {{BASE}} for
+  // exactly this reason; this applies the same base to the rendered markup.
+  // Root pages have an empty base, where '/_rvmark/' → '_rvmark/' is still the
+  // correct relative form.
+  // Both quote forms occur: plain " in href/src, and &quot; inside the escaped
+  // style attribute that carries --node-bullet-image.
+  //
+  // Cross-page transclusion links (static-ref hrefs) are the other root-
+  // absolute case: transclusionHref returns addressToHref's page form
+  // ('/docs/writing#slug'), same problem as the asset form. It has no access
+  // to this page's `base` — that is computed per-page, here, not inside
+  // transclusionHref — so it is corrected after the fact like the asset URLs
+  // rather than threaded through the whole render call chain.
+  //
+  // href="/..." (root-absolute) is rewritten; href="//host/..." (protocol-
+  // relative) and href="/_rvmark/..." (already handled above) are excluded so
+  // neither is rewritten twice or wrongly.
+  //
+  // What's left after that exclusion is always a page URL stem
+  // ('docs/navigating', optionally '#slug') — never a real file. A server
+  // maps that stem to docs/navigating/index.html implicitly; file:// has no
+  // server, so the literal filename has to be in the href, inserted before
+  // any fragment.
+  const rebase = (html) => {
+    const rel = base + mountPath.replace(/^\//, '');
+    return html
+      .replaceAll(`"${mountPath}`, `"${rel}`)
+      .replaceAll(`&quot;${mountPath}`, `&quot;${rel}`)
+      .replace(/href="\/(?!\/)([^"#]*)(#[^"]*)?"/g, (_, stem, frag) =>
+        `href="${base}${stem}${stem && !stem.endsWith('/') ? '/' : ''}index.html${frag ?? ''}"`);
+  };
+
+  const staticHtml = rebase(renderStaticNodes(sourceFile.roots, sourceFile));
 
   let html = TEMPLATE;
   html = html.replaceAll('{{TITLE}}',         escHtml(title));

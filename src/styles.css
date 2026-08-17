@@ -664,6 +664,11 @@ details > .node-children { display: block; }
    the table family's collapse further down, forcing every table open. */
 .node:has(> .node-content > .block-body) > .node-children { display: block; }
 
+/* `open: always` on an ordinary node — same situation: no disclosure, so
+   nothing flips the default display:none. Marked on the li at build time,
+   since there is no structural tell the way .block-body is one. */
+.node.static-always-open > .node-children { display: block; }
+
 /* The row inside a disclosure is a <summary>, which defaults to
    display:list-item to carry the native disclosure triangle. .node-content's
    own display:flex already replaces that layout, and the three rules here
@@ -1991,6 +1996,17 @@ body.exhibit-open .exhibit-panel {
   display: block;
 }
 
+/* `open: always` — shown outright, with no checkbox to key off. The two rules
+   above are what a checked toggle buys; these are the same result reached
+   without one, since an always-open node offers no collapse to drive. */
+.table-node.static-always-open > .node-children {
+  display: contents;
+  margin-left: 0;
+}
+.tr-row.static-always-open > .node-children {
+  display: block;
+}
+
 /* Toggle glyphs, mirroring the aria-expanded rules for each family. */
 .table-node > .static-toggle:checked ~ .table-toggle:not(.leaf)::before {
   -webkit-mask-image: var(--icon-collapse);
@@ -2068,8 +2084,12 @@ label.tr-toggle:not(.leaf):hover { color: var(--accent); }
 
   /* Collapsed subtrees print as collapsed, matching the on-screen state.
      The fallback's disclosures do this natively — a closed <details> prints
-     closed — so only the hydrated form needs asserting here. */
-  .node:not(:has(> .node-content[aria-expanded="true"])):not(:has(> details)) > .node-children {
+     closed — so only the hydrated form needs asserting here.
+
+     Always-open nodes and the tr/table family are exempt: they have no
+     aria-expanded and no <details>, so their open state lives on the checkbox
+     or on .static-always-open. Without the exemption they print collapsed. */
+  .node:not(:has(> .node-content[aria-expanded="true"])):not(:has(> details)):not(.static-always-open):not(:has(> .static-toggle:checked)) > .node-children {
     display: none;
   }
 
