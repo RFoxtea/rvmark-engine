@@ -337,6 +337,14 @@ const blockFactory: NodeTypeFactory = {
     return new BlockTypeHandler(renderNode);
   },
   staticRenderBody(node, ctx) {
+    // Same two-element shape the hydrated handler builds (see buildBody):
+    // .block-body owns the border and margins, .block-body-scroll the padding
+    // and line-height. Emitting only the outer div would drop both.
+    // The scroller's max-height is left in place deliberately — a long block
+    // scrolls in the fallback exactly as it does hydrated.
+    const wrap = (inner: string) =>
+      `<div class="block-body"><div class="block-body-scroll">${inner}</div></div>`;
+
     const rawSrc = (node.attrs.get('src') ?? node.label ?? '').trim();
     if (rawSrc) {
       const hashIdx = rawSrc.indexOf('#');
@@ -347,15 +355,15 @@ const blockFactory: NodeTypeFactory = {
       if (!sourceFile) return null;
       const targetRel = resolveSiblingPath(sourceFile.address, filePart);
       const text = ctx.readFile(targetRel);
-      if (text === null) return `<div class="static-body">[unreadable: ${rawSrc}]</div>`;
+      if (text === null) return wrap(`[unreadable: ${rawSrc}]`);
 
       let body: string;
       try { body = sectionSlug ? extractMdSection(text, sectionSlug) : text; }
-      catch (e) { return `<div class="static-body">[${(e as Error).message}]</div>`; }
-      return `<div class="static-body">${staticMdToHtml(body)}</div>`;
+      catch (e) { return wrap(`[${(e as Error).message}]`); }
+      return wrap(staticMdToHtml(body));
     }
     if (!node.bodyLines?.length) return null;
-    return `<div class="static-body">${staticMdToHtml(node.bodyLines.join('\n'))}</div>`;
+    return wrap(staticMdToHtml(node.bodyLines.join('\n')));
   },
 };
 

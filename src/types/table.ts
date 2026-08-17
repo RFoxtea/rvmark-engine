@@ -26,14 +26,18 @@ const tableFactory: NodeTypeFactory = {
   create(renderNode) {
     return new TableTypeHandler(renderNode);
   },
+  // Emits the same grid header row the handler builds — .node-content--table
+  // with .tr-cell children — not a <table>. The fallback keeps the CSS grid so
+  // cells stay aligned with the rows beneath them; see renderStaticTableNode in
+  // build-rvmark.mjs, which supplies the surrounding li.table-node and toggle.
+  //
+  // --table-cols is set on the li by that caller, so it is not repeated here.
   staticRenderBody(node) {
     const cells = parseCells(node.label);
-    const colsParam = node.attrs.get('cols') ?? null;
-    const cols = cells.length || 1;
-    const gridCols = colsParam ?? `repeat(${cols}, 1fr)`;
-    const style = ` style="grid-template-columns:${gridCols}"`;
-    const headerCells = cells.map(c => `<th>${staticMdInline(c)}</th>`).join('');
-    return `<table class="static-table"${style}><thead><tr>${headerCells}</tr></thead><tbody>`;
+    const headerCells = cells
+      .map(c => `<div class="tr-cell table-header-cell">${staticMdInline(c)}</div>`)
+      .join('');
+    return `<div class="node-content node-content--table">${headerCells}</div>`;
   },
 };
 

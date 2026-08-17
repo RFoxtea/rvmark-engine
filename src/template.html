@@ -67,6 +67,18 @@
   </header>
 
   <noscript><style>#static-content{display:block!important}</style></noscript>
+  <script>
+    // Opened as a local file, not served. The engine is a module, and browsers
+    // refuse to load one over file:// — so main.js never runs, nothing reveals
+    // the static rendering, and <noscript> does not apply either (JS is on; the
+    // script just never arrived). Without this the page is blank. Classic and
+    // inline, because those are the two things that do still run here.
+    if (location.protocol === 'file:') {
+      var s = document.createElement('style');
+      s.textContent = '#static-content{display:block!important}';
+      document.head.appendChild(s);
+    }
+  </script>
   <div id="static-content" style="display:none;">
     {{STATIC_HTML}}
   </div>

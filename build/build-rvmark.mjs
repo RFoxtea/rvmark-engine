@@ -65,10 +65,13 @@ const { parse, resolveFile } = await import('../out/parser.js');
 const { Multimap } = await import('../out/multimap.js');
 
 const { factoryGet } = await import('../out/render-node.js');
-const { SourceFile } = await import('../out/source-file.js');
+const { SourceFile, resolveAttrs } = await import('../out/source-file.js');
 
 // Import type files for their side effects (they call RvmarkRegistry.register).
-await import('../out/types/text.js');
+// text.js also exports the static bullet helpers — bullets belong to the types
+// that draw them (text, and the tr/table family via tr-base), not to this
+// builder, which only asks for them and never knows how they are made.
+const { staticRenderBullet, staticBulletProps } = await import('../out/types/text.js');
 const { staticMdInline, staticMdToHtml } = await import('../out/markdown.js');
 await import('../out/types/block.js');
 await import('../out/types/video.js');
@@ -76,6 +79,9 @@ await import('../out/types/iframe.js');
 await import('../out/types/image.js');
 await import('../out/types/tr.js');
 await import('../out/types/table.js');
+// parseCells is the single definition of how a `a | b | c` label splits, shared
+// with the handlers so the static column count can never drift from theirs.
+const { parseCells } = await import('../out/types/tr-base.js');
 await import('../out/types/hr.js');
 await import('../out/types/gap.js');
 // exhibit.js is not needed at build time (no static rendering) — skip it.
@@ -450,6 +456,9 @@ function transclusionHref(val, sourceFile) {
   return addressToHref(address.startsWith(mountPath) ? mountPath + targetFile + (address.includes('#') ? '#' + addressToSlug(address) : '') : address);
 }
 
+// String twin of buildTagChips (tags.ts). Same classes, same order, same
+// trailing space — the space is a real character there for clipboard reasons,
+// and matching it keeps copied text identical between the two renderings.
 function buildStaticTagChips(tags, sourceFile) {
   return tags
     .map(({ name, props }) => {
@@ -457,23 +466,74 @@ function buildStaticTagChips(tags, sourceFile) {
       if (def.has('internal')) return '';
       const color = def.get('color');
       const tip   = def.get('tip');
-      const cls   = def.getAll('class').join(' ');
       const href  = def.get('href');
       const label = def.get('label');
       const style = color ? ` style="--tag-color:${escHtml(color)}"` : '';
       const title = tip   ? ` title="${escHtml(tip)}"` : '';
-      const extraClass = cls ? ' ' + escHtml(cls) : '';
       const displayName = staticMdInline(label ?? name);
       if (href) {
-        return `<a class="static-tag static-tag--link${extraClass}" href="${escHtml(href)}"${style}${title}>${displayName}</a> `;
+        return `<a class="node-tag node-tag--link" href="${escHtml(href)}"${style}${title}>${displayName}</a> `;
       }
-      return `<span class="static-tag${extraClass}"${style}${title}>${displayName}</span> `;
+      return `<span class="node-tag"${style}${title}>${displayName}</span> `;
     })
     .join('');
 }
 
-function renderStaticNode(node, sourceFile) {
-  const attrs = node.attrs;
+// Class list for .node-content, mirroring applyTagClasses (handler-utils.ts):
+// tag-defined classes first, then the node's own {class} attrs.
+function staticContentClasses(node, sourceFile, attrs) {
+  const out = [];
+  for (const { name, props } of node.tags) {
+    const def = resolveTag(name, sourceFile, props);
+    for (const cls of def.getAll('class')) out.push(...cls.split(/\s+/).filter(Boolean));
+  }
+  // `attrs` is the resolved view, so this picks up tag-supplied `node.class`
+  // alongside the node's own — the same two sources, in the same order, as
+  // applyTagClasses.
+  for (const cls of attrs.getAll('class')) out.push(...cls.split(/\s+/).filter(Boolean));
+  return [...new Set(out)];
+}
+
+// Which types draw a bullet, and which can collapse. Both answers belong to the
+// type, not to this builder — but a plain data table is the honest way to say
+// so from here without bolting build-time hooks onto NodeTypeFactory, which is
+// a runtime interface every type implements.
+//
+// BULLET_TYPES mirrors who calls buildToggleBullet in the DOM: text, and the
+// tr/table family via tr-base. Everything else supplies its own chrome (block's
+// left border strip) or is a bare band across the row (hr, gap, image, video).
+//
+// ALWAYS_OPEN_TYPES mirrors ToggleSet({ alwaysOpen: true }): a block's children
+// are never behind a disclosure, so wrapping one in <details> would invent a
+// collapse the hydrated page does not offer.
+const BULLET_TYPES      = new Set(['text', 'tr', 'table']);
+const ALWAYS_OPEN_TYPES = new Set(['block']);
+
+// Wrap a row + its children in the collapsed-by-default disclosure. The static
+// page has no JS to drive expansion, so <details> supplies it natively: the
+// engine's own expansion is async (children are built on demand, see
+// setChildren in render-node.ts) and cannot be handed to the browser, but at
+// build time every child already exists, which is exactly the case <details>
+// assumes.
+//
+// aria-expanded is written literally so the [aria-expanded] presence rules —
+// the ones that draw a triangle instead of a dot — match with no CSS change.
+// The ="true" rules key off `details[open] >` instead; see styles.css.
+// The permalink id rides on whichever element is outermost for this node —
+// <details> when there are children, the row itself when there are not — so a
+// '#id' link lands on the node either way, and :target can reach the <details>
+// it needs to force open.
+function wrapDisclosure(rowHtml, childrenHtml, open, idAttr) {
+  if (!childrenHtml) return rowHtml.replace(/^<(summary|div)/, `<$1${idAttr}`);
+  return `<details${open ? ' open' : ''}${idAttr}>${rowHtml}<div class="node-children">${childrenHtml}</div></details>`;
+}
+
+function renderStaticNode(node, sourceFile, depth = 0) {
+  // Merged view: tag-supplied `node.*` attrs (e.g. a {.book} tag defining
+  // node.bullet) plus the node's own. The hydrated page reads exactly this via
+  // resolveAttrs, so reading raw node.attrs here would silently drop every
+  // tag-driven bullet, {li} and {class} from the fallback.
+  const attrs = resolveAttrs(node);
   const isHidden = attrs.has('hidden');
 
   const transcludeRaw = attrs.get('transclude') ?? null;
@@ -498,15 +558,12 @@ function renderStaticNode(node, sourceFile) {
 
   const tags = buildStaticTagChips(node.tags, sourceFile);
 
-  const liClasses = [
-    isHidden ? 'static-hidden' : '',
-    ...node.tags.flatMap(({ name, props }) => {
-      const def = resolveTag(name, sourceFile, props);
-      return def.getAll('class').flatMap(c => c.split(/\s+/).filter(Boolean));
-    }),
-    ...attrs.getAll('class').flatMap(c => c.split(/\s+/).filter(Boolean)),
-  ].filter(Boolean);
-  const liClassAttr = liClasses.length ? ` class="${escHtml(liClasses.join(' '))}"` : '';
+  // Tag/attr classes belong on .node-content, matching applyTagClasses. The
+  // {hidden} marker stays on the li: it suppresses the whole row, children
+  // included, and .node-content would only reach the row itself.
+  const contentClasses = staticContentClasses(node, sourceFile, attrs);
+  const liClasses = [isHidden ? 'static-hidden' : '', 'node'].filter(Boolean);
+  const liClassAttr = ` class="${escHtml(liClasses.join(' '))}"`;
 
   const exhibitVal = attrs.get('exhibit') ?? null;
   let exhibitLinkHtml = '';
@@ -517,6 +574,35 @@ function renderStaticNode(node, sourceFile) {
       exhibitLinkHtml = ` <a class="static-exhibit-link" href="${escHtml(href)}" title="Open exhibit (requires JavaScript for interactive view)">◧</a>`;
     }
   }
+
+  const nodeType   = attrs.get('type') ?? 'text';
+  const hasBullet  = BULLET_TYPES.has(nodeType);
+  const collapsible = !ALWAYS_OPEN_TYPES.has(nodeType);
+
+  // Bullet props only mean anything to a type that draws a bullet; asking for
+  // them elsewhere would put .li or a bullet image on a row with no gutter.
+  const { classes: bulletClasses, styles: bulletStyles, bulletAlt } = hasBullet
+    ? staticBulletProps(node, attrs)
+    : { classes: [], styles: [], bulletAlt: null };
+  const styleAttr = bulletStyles.length ? ` style="${escHtml(bulletStyles.join(';'))}"` : '';
+
+  // Build the .node-content row. `leaf` mirrors setExpandable: a row with no
+  // children draws a dot and carries no aria-expanded at all.
+  //
+  // aria-expanded states the disclosure's INITIAL state and nothing more. The
+  // browser flips <details open> as the reader clicks and cannot be asked to
+  // update an ARIA attribute alongside it, so this attribute goes stale the
+  // moment anything is toggled. That is tolerable only because <summary>
+  // announces its own open/closed state natively — the attribute is here for
+  // the CSS presence rules ([aria-expanded] draws a triangle rather than a
+  // dot), not for assistive tech, which reads the disclosure instead.
+  const row = (innerHtml, isSummary, open = false, extraClasses = []) => {
+    const cls = ['node-content', ...contentClasses, ...bulletClasses, ...extraClasses].join(' ');
+    const expanded = isSummary ? ` aria-expanded="${open}"` : '';
+    const tag = isSummary ? 'summary' : 'div';
+    const bullet = hasBullet ? staticRenderBullet(!isSummary, bulletAlt, escHtml) : '';
+    return `<${tag} class="${escHtml(cls)}"${expanded}${styleAttr}>${bullet}${innerHtml}</${tag}>`;
+  };
 
   // Transclusion — render as hyperlink (embedding, no id)
   const transcludeVal = embedVal ?? childrenLinkVal;
@@ -531,43 +617,111 @@ function renderStaticNode(node, sourceFile) {
         linkLabel = resolved.node.label || linkLabel || transcludeVal;
         const targetSourceFile = sourceFiles.get(resolved.file);
         const targetTags = targetSourceFile ? buildStaticTagChips(resolved.node.tags, targetSourceFile) : '';
-        return `<li${liClassAttr}>${tags}${targetTags}<a class="${refClass}" href="${escHtml(href)}">${staticMdInline(linkLabel)}</a></li>\n`;
+        const lbl = `<span class="node-label">${tags}${targetTags}<a class="${refClass}" href="${escHtml(href)}">${staticMdInline(linkLabel)}</a></span>`;
+        return `<li${liClassAttr}>${row(lbl, false)}</li>\n`;
       }
     }
     if (href) {
-      return `<li${liClassAttr}>${tags}<a class="${refClass}" href="${escHtml(href)}">${staticMdInline(linkLabel || transcludeVal)}</a></li>\n`;
+      const lbl = `<span class="node-label">${tags}<a class="${refClass}" href="${escHtml(href)}">${staticMdInline(linkLabel || transcludeVal)}</a></span>`;
+      return `<li${liClassAttr}>${row(lbl, false)}</li>\n`;
     }
   }
+
+  const hasChildren = node.children.length > 0;
+  const childrenHtml = hasChildren ? renderStaticNodes(node.children, sourceFile, depth + 1) : '';
+  // Everything starts collapsed, matching renderRoot in main.ts: the hydrated
+  // page mounts roots[0] and selects it without expanding. The fallback has no
+  // selection to show for it, so the two agree on the painted result.
+  const open = false;
+  // An always-open type keeps its children, but not behind a disclosure — so
+  // its row stays a <div> and the children sit beside it, always visible.
+  const isSummary = hasChildren && collapsible;
 
   // For typed nodes, render body directly via factory.
   const typeName = attrs.get('type');
   if (typeName) {
     const factory = factoryGet(typeName);
     const bodyHtml = (!factory?.isComposite ? factory?.staticRenderBody?.(node, buildCtx) : null) ?? null;
-    let html = `<li${idAttr}${liClassAttr}>`;
-    if (bodyHtml) html += bodyHtml;
-    if (node.children.length > 0) {
-      html += renderStaticNodes(node.children, sourceFile);
+    const rowHtml = row(bodyHtml ?? '', isSummary, open);
+    if (!isSummary) {
+      const kids = childrenHtml ? `<div class="node-children">${childrenHtml}</div>` : '';
+      return `<li${liClassAttr}>${rowHtml.replace(/^<(summary|div)/, `<$1${idAttr}`)}${kids}</li>\n`;
     }
-    html += '</li>\n';
-    return html;
+    return `<li${liClassAttr}>${wrapDisclosure(rowHtml, childrenHtml, open, idAttr)}</li>\n`;
   }
 
   // Text node: label + children
-  let html = `<li${idAttr}${liClassAttr}>`;
-  html += `${tags}${staticMdInline(node.label || '')}${exhibitLinkHtml}`;
-
-  if (node.children.length > 0) {
-    html += renderStaticNodes(node.children, sourceFile);
-  }
-
-  html += '</li>\n';
-  return html;
+  const lbl = `<span class="node-label">${tags}${staticMdInline(node.label || '')}${exhibitLinkHtml}</span>`;
+  const rowHtml = row(lbl, isSummary, open);
+  return `<li${liClassAttr}>${wrapDisclosure(rowHtml, childrenHtml, open, idAttr)}</li>\n`;
 }
 
-function renderStaticNodes(nodes, sourceFile) {
+// Static twin of TrTypeHandlerBase (types/tr-base.ts) — the table/tr family.
+//
+// These cannot use <details> like the rest of the tree. Their children are grid
+// items of an ancestor (.tr-row > .node-children is grid-column 2/-1; a table's
+// .node-children is display:contents so its rows join the table grid), and a
+// <details> wraps everything after its <summary> in an anonymous slot box that
+// display:contents does not dissolve. That box becomes the grid item instead,
+// and every cell alignment in the table collapses.
+//
+// So the disclosure here is a hidden checkbox with the toggle bullet as its
+// <label>. It adds no box of its own — the input is display:none and the label
+// IS the bullet element the grid already places — so the box tree is exactly
+// what the hydrated page builds, and :checked ~ .node-children drives the same
+// collapse aria-expanded drives there.
+function renderStaticTableNode(node, sourceFile, depth, typeName) {
+  const attrs  = resolveAttrs(node);
+  const isTable = typeName === 'table';
+  const factory = factoryGet(typeName);
+
+  const liClasses = [
+    'node',
+    isTable ? 'table-node' : 'tr-row',
+    attrs.has('hidden') ? 'static-hidden' : '',
+  ].filter(Boolean);
+
+  // The header/row cells come from the type's own staticRenderBody, which
+  // already emits .node-content--table / .node-content with .tr-cell children.
+  const rowHtml = factory?.staticRenderBody?.(node, buildCtx) ?? '';
+
+  const hasChildren = node.children.length > 0;
+  const childrenHtml = hasChildren
+    ? `<div class="node-children">${renderStaticNodes(node.children, sourceFile, depth + 1)}</div>`
+    : '';
+
+  const { bulletAlt } = staticBulletProps(node, attrs);
+  const togClass = isTable ? 'table-toggle toggle' : 'tr-toggle toggle';
+
+  let toggleHtml;
+  let inputHtml = '';
+  if (hasChildren) {
+    // The id has to be unique per page and stable across builds; the permalink
+    // id already is both.
+    const tid = `rvt-${node.permalinkId ?? `${depth}-${node.slug ?? ''}`}`;
+    inputHtml = `<input type="checkbox" class="static-toggle" id="${escHtml(tid)}">`;
+    const alt = bulletAlt ? `<span class="visually-hidden">${escHtml(bulletAlt)} </span>` : '';
+    toggleHtml = `<label class="${togClass}" for="${escHtml(tid)}">${alt}<span class="toggle-badge" aria-hidden="true"></span></label>`;
+  } else {
+    toggleHtml = staticRenderBullet(true, bulletAlt, escHtml).replace('class="toggle leaf"', `class="${togClass} leaf"`);
+  }
+
+  // The grid's column track list lives on the li, matching table.ts's onSetup.
+  // A tr inherits its columns from the table's subgrid, so only a table sets it.
+  let styleAttr = '';
+  if (isTable) {
+    const colCount = parseCells(node.label).length || 1;
+    const cols = attrs.get('cols') ?? `repeat(${colCount}, 1fr)`;
+    styleAttr = ` style="--table-cols:${escHtml(cols)}"`;
+  }
+
+  const idAttr = node.permalinkId ? ` id="${escHtml(node.permalinkId)}"` : '';
+  return `<li class="${escHtml(liClasses.join(' '))}"${idAttr}${styleAttr}>${inputHtml}${toggleHtml}${rowHtml}${childrenHtml}</li>\n`;
+}
+
+function renderStaticNodes(nodes, sourceFile, depth = 0) {
   if (!nodes.length) return '';
-  let html = '<ul class="static-tree">\n';
+  let html = '<ul class="tree">\n';
   let i = 0;
   while (i < nodes.length) {
     const node = nodes[i];
@@ -578,31 +732,20 @@ function renderStaticNodes(nodes, sourceFile) {
       const runStart = i;
       while (i < nodes.length && (nodes[i].attrs.get('type') ?? 'text') === typeName) i++;
       const run = nodes.slice(runStart, i);
-      html += '<li>';
+      html += '<li class="node">';
       for (const rn of run) {
         html += factory.staticRenderBody?.(rn, buildCtx) ?? '';
       }
       html += '</li>\n';
       const firstWithChildren = run.find(rn => rn.children.length > 0);
       if (firstWithChildren) {
-        html += `<li>${renderStaticNodes(firstWithChildren.children, sourceFile)}</li>\n`;
+        html += `<li class="node">${renderStaticNodes(firstWithChildren.children, sourceFile, depth + 1)}</li>\n`;
       }
-    } else if (typeName === 'table') {
-      const tableOpen = factory?.staticRenderBody?.(node, buildCtx) ?? '<table class="static-table"><tbody>';
-      html += `<li id="${escHtml(node.permalinkId ?? '')}">`;
-      html += tableOpen + '\n';
-      for (const child of node.children) {
-        const cf = factoryGet(child.attrs.get('type') ?? 'text');
-        html += cf?.staticRenderBody?.(child, buildCtx) ?? '';
-        if (child.children.length > 0) {
-          const cols = node.label.split(/\s*\|\s*/).length || 1;
-          html += `<tr><td colspan="${cols}">${renderStaticNodes(child.children, sourceFile)}</td></tr>\n`;
-        }
-      }
-      html += '</tbody></table></li>\n';
+    } else if (typeName === 'table' || typeName === 'tr') {
+      html += renderStaticTableNode(node, sourceFile, depth, typeName);
       i++;
     } else {
-      html += renderStaticNode(node, sourceFile);
+      html += renderStaticNode(node, sourceFile, depth);
       i++;
     }
   }

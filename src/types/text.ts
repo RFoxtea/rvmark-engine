@@ -397,3 +397,75 @@ factoryRegister('text', textFactory);
 export function staticRenderTextLabel(label: string): string {
   return staticMdInline(label || '');
 }
+
+// ── Static bullet ─────────────────────────────────────────────────────────────
+// Build-time twin of buildToggleBullet + makeToggleBadge + applyBulletAlt.
+//
+// Lives here, not in the site builder, because drawing a bullet is a property
+// of the types that have one — text and the tr/table family, which share it the
+// same way they share applyBulletProps in the hydrated path. Types with no
+// bullet (block, image, hr, gap, video, iframe) never call this, which is
+// exactly how they opt out in the DOM: by not calling buildToggleBullet.
+//
+// `escape` is passed in rather than imported so this stays free of any
+// Node-only dependency — the module is loaded by the browser bundle too.
+export function staticRenderBullet(
+  isLeaf:    boolean,
+  bulletAlt: string | null,
+  escape:    (s: string) => string,
+): string {
+  // The alt name is real text rather than aria-label: .toggle is a bare span
+  // with no role, and aria-label on a roleless element is widely ignored. The
+  // trailing space keeps it from running into the label in the flat string a
+  // screen reader builds from the row.
+  const alt = bulletAlt
+    ? `<span class="visually-hidden">${escape(bulletAlt)} </span>`
+    : '';
+  return `<span class="toggle${isLeaf ? ' leaf' : ''}">${alt}<span class="toggle-badge" aria-hidden="true"></span></span>`;
+}
+
+// The CSS custom properties and classes the bullet rules read — the static twin
+// of applyBulletProps + applyListItemProps. Returns plain data so the caller can
+// merge it into whatever element it is building.
+//
+// Unlike the hydrated path there is no load probe: a build cannot observe a
+// dead icon URL, so a broken {bullet} leaves an empty gutter here where the
+// hydrated page would fall back to the default marker.
+export function staticBulletProps(
+  node:  SourceNode,
+  attrs: ResolvedAttrs,
+): { classes: string[]; styles: string[]; bulletAlt: string | null } {
+  const classes: string[] = [];
+  const styles:  string[] = [];
+
+  const bullet = attrs.get('bullet');
+  if (bullet !== undefined) {
+    const url = node.sourceFile.resolveMediaUrl(bullet);
+    if (url) {
+      classes.push('node-content--bullet-image');
+      styles.push(`--node-bullet-image:url("${url.replace(/[\\"]/g, '\\$&')}")`);
+      const open = attrs.get('bullet-open');
+      if (open !== undefined) {
+        const openUrl = node.sourceFile.resolveMediaUrl(open);
+        if (openUrl) {
+          classes.push('node-content--bullet-open');
+          styles.push(`--node-bullet-image-open:url("${openUrl.replace(/[\\"]/g, '\\$&')}")`);
+        }
+      }
+    }
+  }
+  if (attrs.has('bullet-spins')) classes.push('node-content--bullet-spins');
+
+  // Only list-item types may be numbered — a divider must not carry .li or it
+  // would consume a list number via the CSS counter (see applyListItemProps).
+  if (attrs.has('li')) {
+    classes.push('li');
+    const raw = attrs.get('li');
+    if (raw) {
+      const n = Number.parseInt(raw, 10);
+      if (Number.isFinite(n)) styles.push(`--li-start:${n}`);
+    }
+  }
+
+  return { classes, styles, bulletAlt: attrs.get('bullet-alt') ?? null };
+}

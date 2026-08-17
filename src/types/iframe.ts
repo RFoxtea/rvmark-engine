@@ -268,7 +268,7 @@ const iframeFactory: NodeTypeFactory = {
       return `<a class="static-iframe-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(rawUrl)}</a>`;
     }
     if (!node.bodyLines?.length) return null;
-    return `<div class="static-body html-body">${node.bodyLines.join('\n')}</div>`;
+    return `<div class="block-body html-body">${node.bodyLines.join('\n')}</div>`;
   },
 };
 

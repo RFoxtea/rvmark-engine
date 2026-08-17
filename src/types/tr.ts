@@ -30,9 +30,13 @@ const trFactory: NodeTypeFactory = {
   create(renderNode) {
     return new TrTypeHandler(renderNode);
   },
+  // Grid row, matching the handler's DOM — not a <tr>. The surrounding
+  // li.tr-row and the toggle come from renderStaticTableNode in
+  // build-rvmark.mjs, the same split as the table type above.
   staticRenderBody(node) {
     const cells = parseCells(node.label);
-    return '<tr>' + cells.map(c => `<td>${staticMdInline(c)}</td>`).join('') + '</tr>';
+    const cellHtml = cells.map(c => `<div class="tr-cell">${staticMdInline(c)}</div>`).join('');
+    return `<div class="node-content">${cellHtml}</div>`;
   },
 };
 

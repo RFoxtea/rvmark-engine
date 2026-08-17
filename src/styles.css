@@ -306,7 +306,8 @@ footer {
 
    Non-expandable rows never reach this rule (:not(.leaf) + [aria-expanded]), so
    a bullet-open on a childless node is simply inert rather than stuck open. */
-.node-content--bullet-open[aria-expanded="true"] .toggle:not(.leaf)::before {
+.node-content--bullet-open[aria-expanded="true"] .toggle:not(.leaf)::before,
+details[open] > .node-content--bullet-open .toggle:not(.leaf)::before {
   -webkit-mask-image: var(--node-bullet-image-open);
           mask-image: var(--node-bullet-image-open);
 }
@@ -358,7 +359,8 @@ footer {
 /* The triangle is centred in its own mask box, so it pivots about the box
    centre. Rotation lives on the inner element, together with the mask, so the
    ring on the parent follows the rotated shape. */
-.node-content--bullet-image[aria-expanded="true"]:not(.node-content--bullet-spins):not(.node-content--bullet-open) .toggle:not(.leaf) > .toggle-badge::before {
+.node-content--bullet-image[aria-expanded="true"]:not(.node-content--bullet-spins):not(.node-content--bullet-open) .toggle:not(.leaf) > .toggle-badge::before,
+details[open] > .node-content--bullet-image:not(.node-content--bullet-spins):not(.node-content--bullet-open) .toggle:not(.leaf) > .toggle-badge::before {
   transform: rotate(90deg);
   transform-origin: center center;
 }
@@ -406,7 +408,8 @@ footer {
   filter: drop-shadow(1px 0 0 var(--row-bg, var(--bg))) drop-shadow(-1px 0 0 var(--row-bg, var(--bg)))
           drop-shadow(0 1px 0 var(--row-bg, var(--bg))) drop-shadow(0 -1px 0 var(--row-bg, var(--bg)));
 }
-.node-content.li[aria-expanded="true"] .toggle:not(.leaf) > .toggle-badge::before {
+.node-content.li[aria-expanded="true"] .toggle:not(.leaf) > .toggle-badge::before,
+details[open] > .node-content.li .toggle:not(.leaf) > .toggle-badge::before {
   transform: rotate(90deg);
   transform-origin: center center;
 }
@@ -420,10 +423,12 @@ footer {
    their corner instead of being swung around the bullet for the duration of
    every expand/collapse transition. */
 .node-content[aria-expanded="true"]:not(.node-content--bullet-image):not(.li) .toggle:not(.leaf)::before,
+details[open] > .node-content:not(.node-content--bullet-image):not(.li) .toggle:not(.leaf)::before,
 /* {bullet-open} wins over {bullet-spins} where an author sets both: swapping to
    a drawn open-state icon is the more specific intent, and spinning it too would
    rotate an icon that already reads as open. */
-.node-content[aria-expanded="true"].node-content--bullet-spins:not(.node-content--bullet-open) .toggle:not(.leaf)::before { transform: rotate(90deg); }
+.node-content[aria-expanded="true"].node-content--bullet-spins:not(.node-content--bullet-open) .toggle:not(.leaf)::before,
+details[open] > .node-content.node-content--bullet-spins:not(.node-content--bullet-open) .toggle:not(.leaf)::before { transform: rotate(90deg); }
 /* Readers who ask for less motion get the spin as an instant state change: the
    bullet still turns ▶ → ▼ so the open/closed distinction survives, it just does
    not sweep. Both markers are covered — the ::before glyph and the ::after
@@ -644,6 +649,42 @@ footer {
 }
 
 .node:has(> .node-content[aria-expanded="true"]) > .node-children { display: block; }
+
+/* Static fallback: <details> already hides its own content when closed, so the
+   .node-children default above would keep it hidden when open. The disclosure
+   owns visibility here; the div is only a layout wrapper. */
+details > .node-children { display: block; }
+
+/* An always-open type (block) gets no disclosure in the fallback, matching its
+   ToggleSet alwaysOpen — its children sit beside the row and are never hidden,
+   so nothing would ever flip the default display:none for them.
+
+   Keyed off the row actually being an always-open type rather than off
+   #static-content: an id selector would outrank the :checked rules that drive
+   the table family's collapse further down, forcing every table open. */
+.node:has(> .node-content > .block-body) > .node-children { display: block; }
+
+/* The row inside a disclosure is a <summary>, which defaults to
+   display:list-item to carry the native disclosure triangle. .node-content's
+   own display:flex already replaces that layout, and the three rules here
+   clear the marker itself across engines: list-style for the modern path,
+   ::marker as a belt-and-braces for engines that keep a marker box under
+   flex, and ::-webkit-details-marker for older Safari, which used a
+   pseudo-element rather than ::marker. The tree draws its own bullet in
+   .toggle, so a second marker would be a duplicate. */
+summary.node-content { list-style: none; }
+summary.node-content::-webkit-details-marker { display: none; }
+summary.node-content::marker { content: ''; }
+
+/* A permalink into a collapsed subtree must land somewhere visible. Opening
+   the targeted disclosure is not enough — every ancestor is closed too — so
+   :has() matches any disclosure containing the target, which is the whole
+   chain. Without this a deep '#id' link in the fallback scrolls to content the
+   browser is still hiding.
+   The [open] attribute is untouched: this forces the content visible, so the
+   reader can still collapse the node afterwards. */
+details:target > .node-children,
+details:has(:target) > .node-children { display: block; }
 
 /* ── Nested tree ── */
 .tree .tree {
@@ -1160,7 +1201,17 @@ footer .footer-section { white-space: nowrap; }
           mask: var(--icon-error) no-repeat center / contain;
 }
 
-/* ── Static content (no-JS fallback) ── */
+/* ── Static content (no-JS fallback) ──
+   The fallback renders the SAME markup as the hydrated tree — .node,
+   .node-content, .toggle, .node-label, .node-tag, .node-children — so
+   everything above styles it already. What lives here is only what the two
+   renderings genuinely do not share.
+
+   The one structural difference: an expandable static row is a <summary>
+   inside <details> (native, JS-free disclosure), where the hydrated row is a
+   <div> whose aria-expanded the engine drives. See wrapDisclosure in
+   build-rvmark.mjs, and the details[open] companions on the open-state rules
+   above. */
 #static-content {
   flex: 1 1 0;
   overflow-y: auto;
@@ -1172,119 +1223,20 @@ footer .footer-section { white-space: nowrap; }
   --node-w: min(var(--node-max-w), 100cqi - 1.5rem);
 }
 
-.static-tree {
-  list-style: none;
-  padding-left: var(--indent);
-  margin: 0;
-}
-
-/* Top-level list has no indent */
-#static-content > .static-tree {
-  padding-left: 0;
-}
-
-#static-content > .static-tree > li + li {
+#static-content > .tree > li + li {
   margin-top: 1em;
 }
 
-.static-tree > li {
-  position: relative;
-  font-size: var(--text-chrome);
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-/* Tree bullet */
-.static-tree > li::before {
-  content: '';
-  width: 0.85em;
-  height: 0.85em;
-  background-color: currentColor;
-  -webkit-mask: var(--icon-bullet) no-repeat center / contain;
-          mask: var(--icon-bullet) no-repeat center / contain;
-  position: absolute;
-  left: calc(-1 * var(--bullet-w));
-  width: var(--bullet-w);
-  text-align: center;
-  color: var(--muted);
-  font-size: var(--text-chrome);
-}
-
-/* Links */
-.static-tree a {
-  color: var(--accent);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.static-tree .strikethrough { text-decoration: line-through; }
-
-/* Inline formatting */
-.static-tree code {
-  background: var(--surface);
-  padding: 0 3px;
-  border-radius: 2px;
-  font-size: 0.85em;
-}
-
-/* Tag chips */
-.static-tag {
-  display: inline-block;
-  font-size: var(--text-annotation);
-  line-height: 1.2;
-  padding: 0 5px;
-  border: 1px solid var(--tag-color, var(--border-tag));
-  border-radius: 3px;
-  color: var(--tag-color, var(--muted));
-  vertical-align: 0.05em;
-  white-space: nowrap;
-  text-decoration: none;
-}
-
-.static-tag--link {
-  cursor: pointer;
-}
-.static-tag--link:hover {
-  background: var(--tag-color, var(--border-tag));
-  color: var(--bg);
-}
-
-/* Hidden nodes */
+/* Hidden nodes. Unlike the hydrated page there is no show-hidden toggle to
+   reveal these — nothing in the fallback drives runtime state — so {hidden}
+   is unconditional here. */
 .static-hidden { display: none; }
 
-/* Markdown body blocks */
-.static-body {
-  margin: 0.3rem 0 0.5rem;
-  padding-left: 0.5rem;
-  border-left: 2px solid var(--border-tree);
-  font-size: var(--text-chrome);
-  color: var(--fg);
-}
-
-.static-body pre {
-  background: var(--surface);
-  padding: 0.5rem;
-  border-radius: 3px;
-  overflow-x: auto;
-  margin: 0.4rem 0;
-}
-
-.static-body pre code {
-  padding: 0;
-  background: inherit;
-}
-
-.static-body p { margin: 0.3rem 0; }
-
-.static-body table {
-  border-collapse: collapse;
-  margin: 0.4rem 0;
-}
-.static-body th, .static-body td {
-  border: 1px solid var(--border);
-  padding: 0.2rem 0.5rem;
-  font-size: var(--text-chrome);
-}
+/* The bullet column is a real target in the fallback (it is inside the
+   <summary>), so it gets the pointer the hydrated page asserts via
+   .bullet-clickable — which is set by JS that never runs here. */
+summary.node-content .toggle:not(.leaf) { cursor: pointer; }
+summary.node-content:hover .toggle:not(.leaf) { color: var(--accent); }
 
 /* Transclusion references — distinct from regular links */
 a.static-ref {
@@ -1320,12 +1272,6 @@ a.static-iframe-link {
   text-underline-offset: 3px;
   font-family: var(--mono, monospace);
   font-size: 0.85em;
-}
-
-.static-remote {
-  color: var(--muted);
-  font-style: italic;
-  font-size: var(--text-chrome);
 }
 
 /* ── Divider ── */
@@ -1918,6 +1864,7 @@ body.exhibit-open .exhibit-panel {
 /* .tr-toggle also carries .toggle, so the leaf dot and the box metrics are
    already inherited from .toggle::before — this rule only swaps the dot for the
    expand triangle. */
+.tr-row:has(> .static-toggle) > .tr-toggle:not(.leaf)::before,
 .tr-row:has(> .node-content[aria-expanded]) > .tr-toggle:not(.leaf)::before {
   -webkit-mask-image: var(--icon-toggle);
           mask-image: var(--icon-toggle);
@@ -2020,6 +1967,51 @@ body.exhibit-open .exhibit-panel {
   border-radius: 0;
 }
 
+/* ── Static fallback: table/tr disclosure ──
+   The table family renders the same grid in both modes, so the fallback needs
+   a collapse that adds no box of its own. <details> cannot do it: everything
+   after its <summary> goes into an anonymous slot box that display:contents
+   does not dissolve, and that box — not .node-children — becomes the grid
+   item, so `grid-column: 2 / -1` is ignored and every cell alignment breaks.
+
+   A checkbox has no such box. The input is display:none and its <label> IS
+   the toggle element the grid already places, so the box tree is exactly the
+   hydrated one and :checked can drive the same rules aria-expanded drives. */
+.static-toggle { display: none; }
+
+/* Table: children are display:contents so the tr rows join the table's grid —
+   the static twin of the [aria-expanded="true"] rule above. */
+.static-toggle:checked ~ .node-children {
+  display: contents;
+  margin-left: 0;
+}
+
+/* tr: the expansion panel is a plain grid item in columns 2+. */
+.tr-row > .static-toggle:checked ~ .node-children {
+  display: block;
+}
+
+/* Toggle glyphs, mirroring the aria-expanded rules for each family. */
+.table-node > .static-toggle:checked ~ .table-toggle:not(.leaf)::before {
+  -webkit-mask-image: var(--icon-collapse);
+          mask-image: var(--icon-collapse);
+}
+.tr-row > .static-toggle:checked ~ .tr-toggle:not(.leaf)::before {
+  transform: rotate(90deg);
+}
+
+/* Row borders keyed off the open state, matching the :has([aria-expanded])
+   rules above — a tr following an open expansion panel regains its top border. */
+.tr-row:has(> .static-toggle:checked) + .tr-row > .node-content {
+  border-top: 1px solid var(--border, #ddd);
+}
+
+/* The label is the click target, so it says so. */
+label.table-toggle:not(.leaf),
+label.tr-toggle:not(.leaf) { cursor: pointer; }
+label.table-toggle:not(.leaf):hover,
+label.tr-toggle:not(.leaf):hover { color: var(--accent); }
+
 /* ============================================================
    Print
    ============================================================ */
@@ -2065,7 +2057,7 @@ body.exhibit-open .exhibit-panel {
      is already showing (hydrated tree in the normal case, static fallback
      only if JS never ran) is what prints — same "print what's on screen"
      rule as expand/collapse state. */
-  .tree, .static-tree { overflow: visible; }
+  .tree { overflow: visible; }
 
   .node-content {
     width: auto;
@@ -2074,8 +2066,10 @@ body.exhibit-open .exhibit-panel {
 
   .node-label { word-break: break-word; }
 
-  /* Collapsed subtrees print as collapsed, matching the on-screen state. */
-  .node:not(:has(> .node-content[aria-expanded="true"])) > .node-children {
+  /* Collapsed subtrees print as collapsed, matching the on-screen state.
+     The fallback's disclosures do this natively — a closed <details> prints
+     closed — so only the hydrated form needs asserting here. */
+  .node:not(:has(> .node-content[aria-expanded="true"])):not(:has(> details)) > .node-children {
     display: none;
   }
 
