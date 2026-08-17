@@ -348,6 +348,32 @@ export function makeToggleBadge(): HTMLElement {
   return badge;
 }
 
+// Give a bullet its `bullet-alt` name, if it has one.
+//
+// The marker is a masked box: no text, no alt, nothing in the accessibility
+// tree. So a {.warning} row announces its label and nothing else, and the icon's
+// meaning — often NOT repeated in the label — is lost to anyone not looking at
+// it. This adds that meaning as visually-hidden text inside .toggle.
+//
+// Real text rather than aria-label, because .toggle is a bare span with no role:
+// aria-label on a roleless element is ignored by most screen readers. Hidden
+// with the clip pattern rather than display:none, which would drop it from the
+// accessibility tree along with the pixels.
+//
+// Called after the bullet props are applied — applyBulletProps parks the value
+// on the dataset, since it runs on .node-content but the text belongs in the
+// toggle, which types build separately.
+export function applyBulletAlt(content: HTMLElement, tog: HTMLElement): void {
+  const alt = content.dataset.bulletAlt;
+  if (!alt) return;
+  const name = document.createElement('span');
+  name.className = 'visually-hidden';
+  // Trailing space so the name does not run into the label in the flat string a
+  // screen reader builds from the row: "WarningDo not…".
+  name.textContent = alt + ' ';
+  tog.prepend(name);
+}
+
 // ── Bullet-column clickability ─────────────────────────────────────────────
 //
 // The bullet column takes clicks for two unrelated reasons: expanding a node,
@@ -416,23 +442,53 @@ export function applyBulletProps(content: HTMLElement, attrs: ResolvedAttrs, sou
     // icons, the same rule markdown media and transclusion refs already follow.
     const url = sourceNode.sourceFile.resolveMediaUrl(bullet);
     if (url) {
-      // CSS url() token: escape backslashes and quotes only — the value is a
-      // resolved address, never author markup.
-      content.style.setProperty('--node-bullet-image', `url("${url.replace(/[\\"]/g, '\\$&')}")`);
-      content.classList.add('node-content--bullet-image');
-      // A masked box paints nothing if the icon 404s or the origin is offline —
-      // a silently empty gutter. Probe the URL and drop back to the default
-      // marker if it never arrives. The probe hits the same URL the mask does,
-      // so it is served from cache rather than fetched twice.
-      const probe = new Image();
-      probe.onerror = () => {
+      setBulletImage(content, '--node-bullet-image', url, () => {
         content.classList.remove('node-content--bullet-image');
         content.style.removeProperty('--node-bullet-image');
-      };
-      probe.src = url;
+      });
+      content.classList.add('node-content--bullet-image');
+    }
+
+    // `bullet-open` swaps the icon while the node is expanded, so the marker
+    // itself carries the open/closed state that the corner badge otherwise
+    // would. Only meaningful alongside a `bullet`: the default triangle already
+    // shows its own state by rotating.
+    const open = attrs.get('bullet-open');
+    if (open !== undefined) {
+      const openUrl = sourceNode.sourceFile.resolveMediaUrl(open);
+      if (openUrl) {
+        // Falling back to the closed icon (rather than the default marker) on a
+        // dead URL keeps the bullet the author chose; only the state cue is lost.
+        setBulletImage(content, '--node-bullet-image-open', openUrl, () => {
+          content.classList.remove('node-content--bullet-open');
+          content.style.removeProperty('--node-bullet-image-open');
+        });
+        content.classList.add('node-content--bullet-open');
+      }
     }
   }
   if (attrs.has('bullet-spins')) content.classList.add('node-content--bullet-spins');
+
+  // The marker is a masked box with no text and no alt, so without this a
+  // decorated node announces only its label — and the icon carries meaning the
+  // label often does not repeat ("Warning", "To do"). Applied whatever the
+  // marker is: an author may name the default bullet too.
+  const alt = attrs.get('bullet-alt');
+  if (alt) content.dataset.bulletAlt = alt;
+}
+
+// Resolve one bullet image into a custom property, with a load probe that
+// reverts it if the URL never arrives. A masked box paints nothing when the
+// icon 404s or the origin is offline — a silently empty gutter — and the probe
+// hits the same URL the mask does, so it is served from cache rather than
+// fetched twice.
+function setBulletImage(content: HTMLElement, prop: string, url: string, onFail: () => void): void {
+  // CSS url() token: escape backslashes and quotes only — the value is a
+  // resolved address, never author markup.
+  content.style.setProperty(prop, `url("${url.replace(/[\\"]/g, '\\$&')}")`);
+  const probe = new Image();
+  probe.onerror = onFail;
+  probe.src = url;
 }
 
 // Apply ordered-list-item marking. Separate from applyBulletProps because only

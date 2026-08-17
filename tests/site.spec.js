@@ -2455,3 +2455,110 @@ test.describe('span toggles', () => {
     expect(await tryNodeContent(page, 'st-alpha')).toBeNull();
   });
 });
+
+// ── Bullet icons: bullet-open and bullet-alt ───────────────────────────────
+//
+// The marker is a masked box, so every assertion here reads the computed
+// mask-image rather than looking for an <img>: the mask IS the icon, and a
+// broken swap shows up as the wrong URL, not a missing element.
+test.describe('bullet-open icon swap', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/#bullet-root');
+    await waitForTree(page);
+    await waitForNode(page, 'bullet-open-node');
+  });
+
+  // Reads ::before, where the mask actually lives — .toggle itself is an
+  // unrotated frame and carries no mask of its own.
+  async function bulletMask(page, id) {
+    const node = await nodeContent(page, id);
+    return node.locator('.toggle').evaluate((el) => {
+      const cs = getComputedStyle(el, '::before');
+      return cs.maskImage || cs.webkitMaskImage || '';
+    });
+  }
+
+  test('collapsed shows the closed icon, expanded shows the open one', async ({ page }) => {
+    const node = await nodeContent(page, 'bullet-open-node');
+    await expect(node).toHaveAttribute('aria-expanded', 'false');
+    expect(await bulletMask(page, 'bullet-open-node')).toContain('compass.svg');
+
+    await node.locator('.toggle').click();
+    await expect(node).toHaveAttribute('aria-expanded', 'true');
+    expect(await bulletMask(page, 'bullet-open-node')).toContain('compass-open.svg');
+
+    await node.locator('.toggle').click();
+    await expect(node).toHaveAttribute('aria-expanded', 'false');
+    expect(await bulletMask(page, 'bullet-open-node')).toContain('compass.svg');
+  });
+
+  // The icon carries the state, so the corner badge would be a second cue for
+  // the same fact.
+  test('bullet-open suppresses the toggle badge', async ({ page }) => {
+    const node = await nodeContent(page, 'bullet-open-node');
+    await expect(node.locator('.toggle-badge')).toHaveCSS('display', 'none');
+  });
+
+  // A plain image bullet has no other way to show state, so it keeps the badge —
+  // this is what stops the suppression rule above from over-reaching.
+  test('a plain image bullet still gets its badge', async ({ page }) => {
+    const node = await nodeContent(page, 'bullet-badge-node');
+    await expect(node.locator('.toggle-badge')).toHaveCSS('display', 'block');
+  });
+
+  // A leaf never expands, so the open icon must never appear on one.
+  test('a bullet-open leaf keeps the closed icon', async ({ page }) => {
+    expect(await bulletMask(page, 'bullet-open-leaf')).toContain('compass.svg');
+  });
+
+  // Falls back to the CLOSED icon, not the default marker: the author's chosen
+  // bullet survives, only the state cue is lost.
+  test('a dead open icon falls back to the closed one and restores the badge', async ({ page }) => {
+    const node = await nodeContent(page, 'bullet-open-dead');
+    await node.locator('.toggle').click();
+    await expect(node).toHaveAttribute('aria-expanded', 'true');
+    expect(await bulletMask(page, 'bullet-open-dead')).toContain('compass.svg');
+    await expect(node.locator('.toggle-badge')).toHaveCSS('display', 'block');
+  });
+
+  // Both attrs set: the drawn open icon wins and the spin is suppressed, or the
+  // marker would rotate an icon that already reads as open.
+  test('bullet-open wins over bullet-spins', async ({ page }) => {
+    const node = await nodeContent(page, 'bullet-open-spins');
+    await node.locator('.toggle').click();
+    await expect(node).toHaveAttribute('aria-expanded', 'true');
+    expect(await bulletMask(page, 'bullet-open-spins')).toContain('compass-open.svg');
+    await expect(node.locator('.toggle')).toHaveCSS('transform', 'none');
+  });
+});
+
+// bullet-alt is the ONLY accessible name a decorated bullet has: the marker is a
+// masked box with no text and no alt, so without it the icon's meaning — often
+// not repeated in the label — reaches nobody who is not looking at it.
+test.describe('bullet-alt', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/#bullet-root');
+    await waitForTree(page);
+    await waitForNode(page, 'bullet-alt-only');
+  });
+
+  test('names the bullet in the accessibility tree', async ({ page }) => {
+    const node = await nodeContent(page, 'bullet-alt-only');
+    await expect(node.locator('.toggle .visually-hidden')).toHaveText('Warning');
+  });
+
+  // Hidden from sight but NOT from screen readers — display:none here would
+  // defeat the whole point, so this pins that it is the clip pattern.
+  test('the name is visually hidden but still rendered', async ({ page }) => {
+    const name = (await nodeContent(page, 'bullet-alt-only')).locator('.toggle .visually-hidden');
+    await expect(name).toHaveCSS('position', 'absolute');
+    await expect(name).not.toHaveCSS('display', 'none');
+    const box = await name.boundingBox();
+    expect(box.width).toBeLessThanOrEqual(1);
+  });
+
+  test('a bullet with no bullet-alt gets no name', async ({ page }) => {
+    const node = await nodeContent(page, 'bullet-badge-node');
+    await expect(node.locator('.toggle .visually-hidden')).toHaveCount(0);
+  });
+});

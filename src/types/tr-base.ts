@@ -6,7 +6,7 @@
  */
 
 import type { RenderNode, SourceNode } from '../render-node.js';
-import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps, wireBulletActions } from '../handler-utils.js';
+import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyBulletAlt, applyListItemProps, wireBulletActions } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
 import { wireSpanToggles } from '../span-toggle.js';
 import { resolveAttrs } from '../source-file.js';
@@ -131,6 +131,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
     tog.className = `${cfg.toggleClass} toggle`;
     tog.classList.add('leaf');
     tog.appendChild(makeToggleBadge());
+    applyBulletAlt(this.content, tog);
     this._li.insertBefore(tog, rn.children);
     this._tog = tog;
   }

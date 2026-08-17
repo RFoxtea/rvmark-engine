@@ -8,7 +8,7 @@
 import type { NodeTypeFactory, SourceNode, ResolvedAttrs } from '../render-node.js';
 import { factoryRegister, RenderNode } from '../render-node.js';
 
-import { buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyOnAction, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyListItemProps, wireBulletActions } from '../handler-utils.js';
+import { buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyOnAction, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyBulletAlt, applyListItemProps, wireBulletActions } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
 import { wireSpanToggles } from '../span-toggle.js';
 import { resolveAttrs } from '../source-file.js';
@@ -160,6 +160,7 @@ class TextTypeHandler extends BaseTypeHandler {
 
     tog.classList.add('leaf');
     tog.appendChild(makeToggleBadge());
+    applyBulletAlt(this.content, tog);
     this.content.appendChild(tog);
   }
 
