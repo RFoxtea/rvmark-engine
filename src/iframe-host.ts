@@ -4,7 +4,6 @@
  * Host-side iframe protocol helpers shared by exhibit.ts and iframe.ts.
  *
  * Handles:
- *   - Posting page context to a guest iframe (rvmark-page-context)
  *   - Broadcasting preroot state to guest iframes (rvmark-preroot-*)
  *   - Sending a preroot snapshot on iframe load
  *   - Broadcasting theme CSS vars to registered iframes
@@ -81,16 +80,6 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export interface RvmarkPageContext {
-  file:   string;
-  base:   string;
-  anchor: string | null;
-  focus:  string | null;
-}
-
-export function postPageContext(win: Window, ctx: RvmarkPageContext): void {
-  win.postMessage({ type: 'rvmark-page-context', context: ctx }, '*');
-}
 
 export function postPrerootSnapshot(win: Window): void {
   win.postMessage({ type: 'rvmark-preroot-snapshot', frame: prerootFrame.flatten() }, '*');

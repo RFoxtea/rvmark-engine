@@ -115,9 +115,24 @@ function stripFragment(address: string): string {
 
 const inheritedHeadCache = new Map<string, Promise<Head>>();
 
+// The head depends only on the index.rvmark chain above a file, not on the file
+// itself — so every file in a directory resolves the identical head. Keying by
+// address made each one walk and retain its own copy. The chain is fixed by the
+// file's directory, plus whether the file IS that directory's index (which is
+// skipped in its own chain), so those two are the key.
+function inheritedHeadKey(address: string): string {
+  const file = addressToFile(address);
+  if (!file) return addressOrigin(address) + '|';
+  const slash = file.lastIndexOf('/');
+  const dir = slash === -1 ? '' : file.slice(0, slash + 1);
+  const isOwnIndex = file === dir + 'index.rvmark';
+  return addressOrigin(address) + '|' + dir + (isOwnIndex ? '|self' : '');
+}
+
 function resolveInheritedHead(address: string): Promise<Head> {
   const key = stripFragment(address);
-  if (inheritedHeadCache.has(key)) return inheritedHeadCache.get(key)!;
+  const cacheKey = inheritedHeadKey(key);
+  if (inheritedHeadCache.has(cacheKey)) return inheritedHeadCache.get(cacheKey)!;
 
   const p = (async (): Promise<Head> => {
     const origin = addressOrigin(key);
@@ -146,7 +161,7 @@ function resolveInheritedHead(address: string): Promise<Head> {
     return { meta: mergedMeta, tagDefs: mergedTagDefs, origins: mergedOrigins };
   })();
 
-  inheritedHeadCache.set(key, p);
+  inheritedHeadCache.set(cacheKey, p);
   return p;
 }
 

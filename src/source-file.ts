@@ -63,7 +63,4 @@ export class SourceFile {
     return resolveMediaAddress(url, this.pageAddress) ?? url;
   }
 
-  withPageAddress(pageAddress: string): SourceFile {
-    return new SourceFile(this.nodeMap, this.roots, this.head, this.address, pageAddress);
-  }
 }

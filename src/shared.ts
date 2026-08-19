@@ -13,6 +13,25 @@ import type { SourceNode } from './parser.js';
 // _vendor/ (third-party libs). See build-rvmark.mjs.
 export const RVMARK_SEGMENT = '/_rvmark/';
 
+/**
+ * The boot context a built page hands the engine, stamped inline as
+ * window.__RVMARK_PAGE__ by the builder (see template.html), read by main.ts
+ * init and shell.ts's mount-path lookup.
+ *
+ *   file - the page's source, relative to the content root ('docs/writing.rvmark')
+ *   base - the prefix from this output page up to the site root ('../../'),
+ *          relative rather than root-absolute so links also work over file://
+ *
+ * anchor and focus are optional: a directly-loaded page reads its fragment from
+ * location instead.
+ */
+export interface RvmarkPageContext {
+  file:    string;
+  base:    string;
+  anchor?: string | null;
+  focus?:  string | null;
+}
+
 // ── Address resolution ─────────────────────────────────────────────────────────
 //
 // Runtime canonical address form: <origin>/_rvmark/<file>#<slug>

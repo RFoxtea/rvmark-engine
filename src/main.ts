@@ -1,12 +1,13 @@
 /**
  * main.ts — entry point.
  *
- * Normal mode: reads window.__RVMARK_PAGE__, loads the page's .rvmark file,
- * and renders the interactive tree. Hash fragments navigate within the page.
+ * Reads window.__RVMARK_PAGE__ (stamped inline by the builder — see
+ * template.html), loads the page's .rvmark file, and renders the interactive
+ * tree. Hash fragments navigate within the page.
  *
- * Guest mode: when running inside an exhibit iframe, waits for a
- * rvmark-page-context postMessage from the host instead of reading
- * window.__RVMARK_PAGE__. This avoids inline scripts in the iframe srcdoc.
+ * A guest iframe boots the same way: it is an ordinary built page that happens
+ * to be framed, so it carries its own inline context. iframe-guest.ts handles
+ * coordination after boot (focus, Escape, preroot relay), not startup.
  */
 
 import { prerootFrame } from './state.js';
@@ -17,7 +18,7 @@ import { loadPageFile, setPageContext } from './loader.js';
 import { setMeta, setFooter, setViewTarget, clearTree, showError } from './shell.js';
 import { initSearch } from './search.js';
 import { keymapInstallShortcut } from './keymap.js';
-import { waitForPageContext, initPrerootListeners } from './iframe-guest.js';
+import { initPrerootListeners } from './iframe-guest.js';
 import { MOUNT_SETTLE_MS } from './constants.js';
 import { scrollBehavior } from './scroll.js';
 // Side-effect imports: register all built-in types via factoryRegister
@@ -32,7 +33,7 @@ import './types/table.js';
 import './types/hr.js';
 import './types/gap.js';
 
-import type { RvmarkPageContext } from './iframe-guest.js';
+import type { RvmarkPageContext } from './shared.js';
 
 declare global {
   interface Window {
@@ -189,9 +190,4 @@ if (typeof window !== 'undefined' && typeof window.document !== 'undefined') {
   if (window.parent !== window) initPrerootListeners(preroot);
   const page = window.__RVMARK_PAGE__;
   if (page) init(page);
-  else waitForPageContext().then(ctx => init(ctx), err => {
-    console.warn(`[rvmark] ${(err as Error).message}`);
-    const staticEl = document.getElementById('static-content');
-    if (staticEl) staticEl.style.display = '';
-  });
 }

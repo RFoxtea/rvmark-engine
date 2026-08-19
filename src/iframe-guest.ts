@@ -11,22 +11,9 @@
  *   - error / unhandledrejection → parent.postMessage({ type: 'exhibit-error' })
  *
  * Also exports:
- *   - waitForPageContext(): used by main.ts in guest mode to get page context
- *     before initializing, replacing window.__RVMARK_PAGE__. Rejects on
- *     PAGE_CONTEXT_DEADLINE_MS so a silent host surfaces as init's failure
- *     path rather than as a frame that hangs forever.
  *   - initPrerootListeners(preroot): wires rvmark-preroot-* messages to the
  *     preroot state API. Called by main.ts after it has set up the preroot frame.
  */
-
-import { PAGE_CONTEXT_DEADLINE_MS } from './constants.js';
-
-export interface RvmarkPageContext {
-  file:   string;
-  base:   string;
-  anchor: string | null;
-  focus:  string | null;
-}
 
 // ── Auto-registered listeners (always active in a guest) ──────────────────────
 
@@ -143,22 +130,3 @@ function _initIframeGuestMode(): void {
   });
 }
 
-// ── Page context ──────────────────────────────────────────────────────────────
-
-export function waitForPageContext(): Promise<RvmarkPageContext> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      window.removeEventListener('message', handler);
-      reject(new Error('timed out waiting for rvmark-page-context from host'));
-    }, PAGE_CONTEXT_DEADLINE_MS);
-    function handler(e: MessageEvent) {
-      if (e.source !== parent) return;
-      if (e.data?.type === 'rvmark-page-context') {
-        clearTimeout(timer);
-        window.removeEventListener('message', handler);
-        resolve(e.data.context as RvmarkPageContext);
-      }
-    }
-    window.addEventListener('message', handler);
-  });
-}
