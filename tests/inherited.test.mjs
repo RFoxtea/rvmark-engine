@@ -19,7 +19,8 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { parse, resolveFile } from '../out/parser.js';
 import { Multimap } from '../out/multimap.js';
-import { seedBag, deriveBag, emptyBag, bagOf, inheritedProps } from '../out/inherited.js';
+import { seedBag, deriveBag, emptyBag, bagOf, bagToWire, bagFromWire, inheritedProps } from '../out/inherited.js';
+import { serializeNode, deserializeNode } from '../out/portable-node.js';
 import { exhibitConfigOf } from '../out/exhibit.js';
 import { StateFrame, buildStatePass } from '../out/state.js';
 
@@ -62,6 +63,44 @@ test('bagOf copies every registered property off a node', () => {
   const bag = bagOf(nodeOf(index, 'exhibit-scope-child'));
   const names = inheritedProps().map(p => p.name).sort();
   assert.deepEqual(Object.keys(bag).sort(), names);
+});
+
+// ── Crossing the wire ─────────────────────────────────────────────────────────
+// structuredClone is what a postMessage does to a bag: plain data survives,
+// prototypes do not. A Multimap that crosses undeclared arrives method-less and
+// throws at the first .get() — which is what toWire/fromWire exist to stop.
+
+test('every registered property declares toWire and fromWire together or not at all', () => {
+  for (const p of inheritedProps()) {
+    assert.equal('toWire' in p, 'fromWire' in p, `${p.name}: half a conversion is worse than none`);
+  }
+});
+
+test('an exhibit scope survives a structured clone with its attrs live', () => {
+  const node = nodeOf(index, 'exhibit-scope-child');
+  assert.ok(node.exhibit, 'fixture node carries no exhibit scope');
+
+  const back = bagFromWire(structuredClone(bagToWire(node)));
+  assert.equal(back.exhibit.rawRef, node.exhibit.rawRef);
+  assert.equal(typeof back.exhibit.attrs.get, 'function');
+  assert.deepEqual(back.exhibit.attrs.allEntries(), node.exhibit.attrs.allEntries());
+});
+
+test('a node round-trips through an envoy-shaped clone with its scope intact', () => {
+  const node = nodeOf(index, 'exhibit-scope-child');
+  const back = deserializeNode(structuredClone(serializeNode(node)), node.sourceFile);
+  assert.equal(typeof back.exhibit.attrs.get, 'function');
+  assert.equal(back.exhibit.attrs.get('exhibit'), node.exhibit.attrs.get('exhibit'));
+});
+
+test('a bag whose wire form is malformed falls back rather than throwing', () => {
+  const bag = bagFromWire({ exhibit: { rawRef: './x#y', attrs: 'not entries' } });
+  assert.equal(bag.exhibit, null);
+});
+
+test('a bag missing from the wire entirely comes back empty, not undefined', () => {
+  assert.deepEqual(bagFromWire(undefined), emptyBag());
+  assert.deepEqual(bagFromWire({}), emptyBag());
 });
 
 test('a bag derived from a bare node with no declarations equals the empty bag', () => {

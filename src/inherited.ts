@@ -28,6 +28,7 @@
 
 import type { Head, NodeAttrs, RawNode, TagDef } from './parser.js';
 import { tagsNodeAttrs, mergeNodeAttrs } from './tags.js';
+import { Multimap } from './multimap.js';
 
 /**
  * One inherited property.
@@ -36,13 +37,27 @@ import { tagsNodeAttrs, mergeNodeAttrs } from './tags.js';
  *   seed   — the file-level starting value, from the resolved Head.
  *   derive — this node's value, given its parent's value and its own raw form.
  *            Called top-down, once per node, at parse time.
+ *   toWire  — the value's postMessage-safe form. Omit for plain data.
+ *   fromWire — the inverse. Omit for plain data.
+ *
+ * A bag value crosses an envoy boundary by structured clone, which keeps plain
+ * data and drops prototypes: a class instance arrives as a lifeless object with
+ * its methods gone. A property whose value is not plain data must therefore say
+ * how it travels, which is what the toWire/fromWire pair is for. Adding a
+ * property stays one registration; it now includes that declaration when the
+ * value needs it.
  */
 export interface InheritedProp<T = unknown> {
-  name:   string;
-  empty:  T;
-  seed:   (head: Head) => T;
-  derive: (parentValue: T, raw: RawNode, tagDefs: Record<string, TagDef>) => T;
+  name:      string;
+  empty:     T;
+  seed:      (head: Head) => T;
+  derive:    (parentValue: T, raw: RawNode, tagDefs: Record<string, TagDef>) => T;
+  toWire?:   (value: T) => unknown;
+  fromWire?: (wire: unknown) => T;
 }
+
+/** A bag in transit: every property in its declared wire form. */
+export type WireBag = Record<string, unknown>;
 
 /** The in-force `{exhibit}` for a node — see the `exhibit` registration below. */
 export interface ExhibitScope {
@@ -117,6 +132,37 @@ export function bagOf(node: { [k: string]: any }): InheritedBag {
   return bag as unknown as InheritedBag;
 }
 
+/** Copy the bag off a node in its wire form — the serialize half. */
+export function bagToWire(node: { [k: string]: any }): WireBag {
+  const bag: WireBag = {};
+  for (const p of _props.values()) {
+    const v = node[p.name];
+    bag[p.name] = p.toWire && v != null ? p.toWire(v) : v;
+  }
+  return bag;
+}
+
+/**
+ * Rebuild a live bag from its wire form — the deserialize half. A property the
+ * wire omits falls back to `empty`, so a node minted from scratch by an author
+ * transform is still well-formed.
+ *
+ * A malformed value also falls back rather than throwing: this runs on data
+ * that has crossed the sandbox boundary, and author code that returns nonsense
+ * for its own node should not take the host's render path down with it.
+ */
+export function bagFromWire(wire: WireBag | undefined): InheritedBag {
+  const bag: Record<string, unknown> = {};
+  for (const p of _props.values()) {
+    const present = !!wire && p.name in wire;
+    const v = present ? wire![p.name] : p.empty;
+    if (!present || !p.fromWire || v == null) { bag[p.name] = v; continue; }
+    try { bag[p.name] = p.fromWire(v); }
+    catch { bag[p.name] = p.empty; }
+  }
+  return bag as unknown as InheritedBag;
+}
+
 // ── Registrations ─────────────────────────────────────────────────────────────
 
 /**
@@ -181,6 +227,19 @@ registerInherited<ExhibitScope | null>({
     const attrs = mergeNodeAttrs(tagsNodeAttrs(raw.tags, tagDefs), raw.attrs);
     const own   = attrs.get('exhibit');
     return own ? { rawRef: own, attrs } : parentScope;
+  },
+  // `attrs` is a Multimap and would arrive method-less; entries are the same
+  // convention node.attrs already crosses by.
+  toWire:   (scope) => ({ rawRef: scope!.rawRef, attrs: scope!.attrs.allEntries() }),
+  fromWire: (wire) => {
+    const w = wire as { rawRef?: unknown; attrs?: unknown };
+    // Checked rather than coerced: Multimap's constructor takes any iterable,
+    // and a bare string is one — it would quietly yield an entry per character
+    // instead of failing. bagFromWire turns a throw here into `empty`.
+    if (typeof w?.rawRef !== 'string' || !Array.isArray(w.attrs)) {
+      throw new Error('malformed exhibit scope on the wire');
+    }
+    return { rawRef: w.rawRef, attrs: new Multimap(w.attrs as Array<[string, string]>) };
   },
 });
 

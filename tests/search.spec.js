@@ -29,9 +29,11 @@
 
 import { test, expect } from '@playwright/test';
 
+// Scoped to #tree-scroll: the build-time static fallback emits li.node[id]
+// markup too, and it never gets a _renderNode.
 async function waitForTree(page) {
   await expect(page.locator('#tree-scroll')).not.toHaveCSS('display', 'none');
-  await page.waitForFunction(() => !!document.querySelector('li.node[id]')?._renderNode);
+  await page.waitForFunction(() => !!document.querySelector('#tree-scroll li.node[id]')?._renderNode);
 }
 
 async function nodeContent(page, id) {

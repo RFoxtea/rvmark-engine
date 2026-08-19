@@ -32,6 +32,15 @@ const ENVOY_PATH = '/envoy.html';
 // How long to wait for a transform reply before failing it (error node).
 const TRANSFORM_TIMEOUT_MS = 10_000;
 
+// Cap on sends queued while the iframe has not yet fired `load`. An origin that
+// is up but ships no envoy is the ordinary failure, not an exotic one — a 404
+// body is still a document, so `load` fires and the queue drains. The queue only
+// grows without bound when `load` never fires at all, and then every queued send
+// is already doomed: each request's own timer fires and rejects it, leaving the
+// closure behind with nothing to do. Dropping past the cap costs those requests
+// nothing they were not already going to lose.
+const MAX_PRELOAD = 64;
+
 interface PendingTransform {
   resolve: (node: PortableNode) => void;
   reject:  (err: Error) => void;
@@ -94,7 +103,7 @@ class OriginEnvoy {
   private post(msg: object): void {
     const send = () => this.iframe.contentWindow?.postMessage(msg, '*');
     if (this.loaded) send();
-    else this.preload.push(send);
+    else if (this.preload.length < MAX_PRELOAD) this.preload.push(send);
   }
 
   /** Round-trip one node through the author's transform for `typeName`.

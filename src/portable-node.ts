@@ -11,6 +11,9 @@
  *
  * PortableNode is the flattened form that CAN leave the host realm: plain
  * strings + arrays, multimaps as `[[k, v], …]` entry lists, no `sourceFile`.
+ * Inherited values flatten the same way, but by their own declaration rather
+ * than here: a bag value may be any type the registry admits, so inherited.ts
+ * carries the toWire/fromWire pair and this module just calls it.
  * Node data — including inherited properties (inherited.ts) — crosses intact;
  * only the host capability bundle is withheld.
  * `serializeNode`/`deserializeNode` are the only conversions; both are pure.
@@ -26,7 +29,7 @@
 import { Multimap } from './multimap.js';
 import type { SourceNode } from './parser.js';
 import type { SourceFile } from './source-file.js';
-import { bagOf, emptyBag, type InheritedBag } from './inherited.js';
+import { bagToWire, bagFromWire, type WireBag } from './inherited.js';
 
 type Entries = Array<[string, string]>;
 
@@ -44,7 +47,7 @@ export interface PortableNode {
   label:       string;
   bodyLines:   string[];
   children:    PortableNode[];
-  inherited:   InheritedBag;
+  inherited:   WireBag;
 }
 
 // ── serialize (host → wire) ───────────────────────────────────────────────────
@@ -60,7 +63,7 @@ export function serializeNode(node: SourceNode): PortableNode {
     label:       node.label,
     bodyLines:   node.bodyLines.slice(),
     children:    node.children.map(serializeNode),
-    inherited:   bagOf(node),
+    inherited:   bagToWire(node),
   };
 }
 
@@ -85,9 +88,8 @@ export function deserializeNode(node: PortableNode, sourceFile: SourceFile): Sou
     bodyLines:   node.bodyLines.slice(),
     children:    node.children.map(c => deserializeNode(c, sourceFile)),
     sourceFile,
-    // A transform may mint a node from scratch and omit these; fall back to the
-    // empty bag so every rebuilt node is well-formed.
-    ...emptyBag(),
-    ...node.inherited,
+    // bagFromWire fills anything the wire omitted — a transform may mint a node
+    // from scratch — so every rebuilt node is well-formed.
+    ...bagFromWire(node.inherited),
   } as SourceNode;
 }
