@@ -201,23 +201,6 @@ export function relativeUrl(fromStem: string, toStem: string): string {
   return rel;
 }
 
-/**
- * Compute a node's within-file positional address.
- * This is the canonical id used on <li> elements and as the base for children.
- * Mirrors the runtime logic in buildRenderNode.
- */
-export function nodeAddress(parentAddress: string | null, numbering: string): string {
-  return parentAddress != null ? `${parentAddress}.${numbering}` : numbering;
-}
-
-/**
- * Return true if the node carries an explicit author-assigned slug
- * ({#slug} or {id: slug}), as opposed to a generated positional slug.
- */
-export function hasExplicitSlug(node: SourceNode): boolean {
-  return node.attrs.has('id');
-}
-
 // ── Transclusion entry prefix: '^' ─────────────────────────────────────────
 // A transclusion entry may carry a leading '^', meaning "the target node
 // itself" rather than the children it would otherwise be unwrapped into.
@@ -334,24 +317,3 @@ export function resolveFocusSlug(
   return (cur.attrs as any).id ? cur.slug : focusBase;
 }
 
-/**
- * Parse a transclusion reference value into a structured ref object.
- *   #slug           → { type: 'local', slug }
- *   ./path#slug     → { type: 'file', path, slug }
- *   https://...     → { type: 'remote', url, slug }
- */
-export function parseTransclusionRef(val: string): { type: 'local', slug: string } | { type: 'file', path: string, slug: string | null } | { type: 'remote', url: string, slug: string | null } | null {
-  if (!val) return null;
-  if (val.startsWith('#')) return { type: 'local', slug: val.slice(1) };
-  if (val.startsWith('https://') || val.startsWith('http://')) {
-    try {
-      const url = new URL(val);
-      return { type: 'remote', url: url.href, slug: url.hash ? url.hash.slice(1) : null };
-    } catch (_) { return null; }
-  }
-  let path = val;
-  if (!path.startsWith('./') && !path.startsWith('../') && !path.startsWith('/')) path = './' + path;
-  const hashIdx = path.indexOf('#');
-  if (hashIdx === -1) return { type: 'file', path, slug: null };
-  return { type: 'file', path: path.slice(0, hashIdx), slug: path.slice(hashIdx + 1) };
-}

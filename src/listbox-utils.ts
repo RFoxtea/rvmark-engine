@@ -225,13 +225,6 @@ export function spanIsSelectionDriven(span: ParsedSpanAttrs, nodeAttrs: Multimap
     (span.has(BARE_MUTATION_KEY) || span.has('on-select') || span.has('on-deselect'));
 }
 
-/** True when the span participates in the node's listbox group. Identical to
- *  being selection-driven now that options and toggles are one mechanism
- *  (§1c); kept as its own name because call sites ask a different question. */
-export function spanIsOption(span: ParsedSpanAttrs, nodeAttrs: Multimap): boolean {
-  return spanIsSelectionDriven(span, nodeAttrs);
-}
-
 export function isListbox(
   attrs: Multimap,
   spanMap: Map<number, ParsedSpanAttrs>,
