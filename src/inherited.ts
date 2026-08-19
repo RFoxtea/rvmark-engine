@@ -150,6 +150,12 @@ registerInherited<Record<string, unknown>>({
     for (const [k, v] of raw.attrs.allEntries()) {
       if (k.startsWith('meta.')) attrMeta[k.slice(5)] = v;
     }
+    // Share the parent's object when this node contributes nothing — a derived
+    // bag value is never mutated after construction, and an unconditional spread
+    // gives every node in a subtree its own identical copy. Same as `exhibit`
+    // below, which returns `parentScope` by reference.
+    const hasOwn = Object.keys(tagMeta).length > 0 || Object.keys(attrMeta).length > 0;
+    if (!hasOwn) return parentMeta;
     return { ...parentMeta, ...tagMeta, ...attrMeta };
   },
 });

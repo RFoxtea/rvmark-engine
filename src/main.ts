@@ -189,5 +189,9 @@ if (typeof window !== 'undefined' && typeof window.document !== 'undefined') {
   if (window.parent !== window) initPrerootListeners(preroot);
   const page = window.__RVMARK_PAGE__;
   if (page) init(page);
-  else waitForPageContext().then(ctx => init(ctx));
+  else waitForPageContext().then(ctx => init(ctx), err => {
+    console.warn(`[rvmark] ${(err as Error).message}`);
+    const staticEl = document.getElementById('static-content');
+    if (staticEl) staticEl.style.display = '';
+  });
 }

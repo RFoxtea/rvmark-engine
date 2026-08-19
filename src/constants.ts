@@ -23,3 +23,9 @@ export const TRANSCLUDE_DEADLINE_MS = 5000;
 // mount until KaTeX settles (so nothing flashes raw source and then upgrades), so
 // this bound is what stops a hung CDN request from hiding that content for good.
 export const KATEX_DEADLINE_MS = 5000;
+
+// How long a guest iframe waits for the host's rvmark-page-context before giving
+// up. A host that never posts one would otherwise leave the guest on a promise
+// that can only resolve — blank frame, no error, no notice, because init's catch
+// never runs. Silence from a counterparty is a failure, not a wait.
+export const PAGE_CONTEXT_DEADLINE_MS = 5000;
