@@ -116,8 +116,9 @@ test.describe('?--static view', () => {
     await page.goto('/?--static');
     await expect(page.locator('#static-content')).toBeVisible();
     await expect(page.locator('#tree-scroll')).toBeHidden();
-    // The static rendering is the build-time one, so its nodes are plain <li>s.
-    await expect(page.locator('#static-content > .static-tree')).toBeVisible();
+    // The static rendering mirrors the live tree's markup, so it is the
+    // container that tells them apart, not the classes inside it.
+    await expect(page.locator('#static-content > ul.tree')).toBeVisible();
   });
 
   test('static nodes carry permalinkId ids, so fragments anchor', async ({ page }) => {

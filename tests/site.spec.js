@@ -67,7 +67,7 @@ async function openViewMenu(page) {
 
 /** The currently-selected row. */
 function selectedRow(page) {
-  return page.locator('.node-content[aria-selected="true"]');
+  return page.locator('#tree-scroll .node-content[aria-selected="true"]');
 }
 
 /** The parent <li class="node"> of a .node-content locator. */
@@ -169,27 +169,27 @@ test.describe('ARIA tree structure', () => {
   });
 
   test('node rows have role="treeitem"', async ({ page }) => {
-    const rows = page.locator('.node-content');
+    const rows = page.locator('#tree-scroll .node-content');
     await expect(rows.first()).toHaveAttribute('role', 'treeitem');
   });
 
   test('li elements have role="none"', async ({ page }) => {
-    await expect(page.locator('.node').first()).toHaveAttribute('role', 'none');
+    await expect(page.locator('#tree-scroll .node').first()).toHaveAttribute('role', 'none');
   });
 
   test('expandable rows have aria-expanded', async ({ page }) => {
-    const rows = page.locator('.node-content[aria-expanded]');
+    const rows = page.locator('#tree-scroll .node-content[aria-expanded]');
     expect(await rows.count()).toBeGreaterThan(0);
   });
 
   test('child lists have role="group"', async ({ page }) => {
     // #root is open by default, so child groups should already be visible
-    await expect(page.locator('.tree[role="group"]').first()).toBeVisible();
+    await expect(page.locator('#tree-scroll .tree[role="group"]').first()).toBeVisible();
   });
 
   test('rows have aria-setsize and aria-posinset', async ({ page }) => {
     // #root is open by default; wait for its children to render
-    await expect(page.locator('.node-content').nth(1)).toBeVisible();
+    await expect(page.locator('#tree-scroll .node-content').nth(1)).toBeVisible();
     const childRow = await nodeContent(page, 'child-a');
     const setSize = await childRow.getAttribute('aria-setsize');
     const posInSet = await childRow.getAttribute('aria-posinset');
@@ -198,7 +198,7 @@ test.describe('ARIA tree structure', () => {
   });
 
   test('roving tabindex: only one row has tabIndex=0', async ({ page }) => {
-    const tabRows = await page.locator('.node-content[tabindex="0"]').count();
+    const tabRows = await page.locator('#tree-scroll .node-content[tabindex="0"]').count();
     expect(tabRows).toBe(1);
   });
 });
@@ -295,7 +295,7 @@ test.describe('keyboard navigation', () => {
   test('End moves to last visible row', async ({ page }) => {
     await (selectedRow(page)).press('End');
     const last = selectedRow(page);
-    const allRows = await page.locator('.node-content').filter({ visible: true }).all();
+    const allRows = await page.locator('#tree-scroll .node-content').filter({ visible: true }).all();
     const lastText = await allRows[allRows.length - 1].innerText();
     expect(await last.innerText()).toBe(lastText);
   });
@@ -545,11 +545,11 @@ test.describe('footer and metadata', () => {
     await exhibitRow.click(); // open exhibit
     const iframeLocator = page.frameLocator('.exhibit-panel .exhibit-iframe');
     // Wait for the iframe tree to hydrate
-    const rootRow = iframeLocator.locator('.node-content').first();
+    const rootRow = iframeLocator.locator('#tree-scroll .node-content').first();
     await expect(rootRow).toBeVisible();
     await rootRow.press('ArrowRight'); // expand other-root to reveal children
     // other-root-ai is a [GlobalAI]-tagged child of other-root
-    const aiRow = iframeLocator.locator('.node-content').filter({ hasText: 'AI-tagged child of other-root' }).first();
+    const aiRow = iframeLocator.locator('#tree-scroll .node-content').filter({ hasText: 'AI-tagged child of other-root' }).first();
     await expect(aiRow).toBeVisible();
     await aiRow.click();
     await expect(page.locator('footer')).toContainText('Global AI Author');
@@ -638,7 +638,7 @@ test.describe('[.hidden] tag', () => {
     await page.goto('/');
     await waitForTree(page);
     // Ensure root is expanded so child-hidden would be reachable if visible
-    await expect(page.locator('.node-content').nth(1)).toBeVisible();
+    await expect(page.locator('#tree-scroll .node-content').nth(1)).toBeVisible();
   });
 
   test('[.hidden] nodes are absent from the DOM by default', async ({ page }) => {
@@ -673,7 +673,7 @@ test.describe('{action: link} modifier', () => {
   test('{action: link} node is a leaf (no aria-expanded)', async ({ page }) => {
     await page.goto('/');
     await waitForTree(page);
-    await expect(page.locator('.node-content').nth(1)).toBeVisible();
+    await expect(page.locator('#tree-scroll .node-content').nth(1)).toBeVisible();
     const linkRow = await nodeContent(page, 'child-link');
     await expect(linkRow).toBeVisible();
     await expect(linkRow).not.toHaveAttribute('aria-expanded');
@@ -715,7 +715,7 @@ test.describe('same-file transclusion', () => {
   test('no node labels show loading placeholder text', async ({ page }) => {
     await page.goto('/');
     await waitForTree(page);
-    const labels = page.locator('.node-label');
+    const labels = page.locator('#tree-scroll .node-label');
     const count = await labels.count();
     for (let i = 0; i < Math.min(count, 20); i++) {
       const text = await labels.nth(i).innerText();
@@ -854,7 +854,7 @@ test.describe('document zone (tab order)', () => {
   test('links in non-selected rows have tabIndex=-1', async ({ page }) => {
     await page.goto('/');
     await waitForTree(page);
-    const nonSelectedLinks = page.locator('.node-content:not([aria-selected="true"]) .node-label a');
+    const nonSelectedLinks = page.locator('#tree-scroll .node-content:not([aria-selected="true"]) .node-label a');
     const count = await nonSelectedLinks.count();
     for (let i = 0; i < Math.min(count, 5); i++) {
       const tabIndex = await nonSelectedLinks.nth(i).getAttribute('tabindex');
@@ -1251,7 +1251,7 @@ test.describe('state pass system', () => {
     await row.click(); // select
     await row.click(); // open exhibit (second click on selected node)
     const frame = page.frameLocator('.exhibit-panel .exhibit-iframe');
-    const root = frame.locator('.node-content').first();
+    const root = frame.locator('#tree-scroll .node-content').first();
     await expect(root).toBeVisible();
     await root.press('ArrowRight'); // expand root to reveal children
     return frame;
@@ -1260,11 +1260,11 @@ test.describe('state pass system', () => {
   test('exhibit-pass: rw — exhibit reads host state and can write back', async ({ page }) => {
     const frame = await openExhibit(page, 'pass-exhibit-host');
     // exvar=0 initially; exhibit indicator hidden
-    const iframeIndicator = frame.locator('.node-content').filter({ hasText: 'pass-exhibit-visible' });
+    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-visible' });
     await expect(iframeIndicator).not.toBeVisible();
     expect(await tryNodeContent(page, 'pass-exhibit-host-indicator')).toBeNull();
     // Writer inside exhibit fires on-action: exvar<<1 — relayed back to host frame
-    await frame.locator('.node-content').filter({ hasText: 'pass-exhibit-writer' }).press('Enter');
+    await frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-writer' }).press('Enter');
     // Host-side indicator appears (write-back succeeded)
     await expect(await waitForNode(page, 'pass-exhibit-host-indicator')).toBeVisible();
     // Exhibit-side indicator also appears (reads exvar via exhibit-pass)
@@ -1275,7 +1275,7 @@ test.describe('state pass system', () => {
     const frame = await openExhibit(page, 'pass-exhibit-blocked-host');
     await page.waitForTimeout(300);
     // Exhibit content has {? exvar==1} indicator — must NOT appear (no exhibit-pass)
-    const blocked = frame.locator('.node-content').filter({ hasText: 'pass-exhibit-blocked-visible' });
+    const blocked = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-blocked-visible' });
     await expect(blocked).not.toBeVisible();
   });
 
@@ -1283,7 +1283,7 @@ test.describe('state pass system', () => {
     // pass-exhibit-ro-host has exhibit-pass: exvar (read-only)
     // The exhibit contains a writer that attempts exvar<<1 — this must NOT propagate to the host.
     const frame = await openExhibit(page, 'pass-exhibit-ro-host');
-    await frame.locator('.node-content').filter({ hasText: 'pass-exhibit-writer' }).press('Enter');
+    await frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-writer' }).press('Enter');
     await page.waitForTimeout(300);
     // pass-scope-exhibit-ro's pass-exhibit-host-indicator {? exvar==1} must NOT appear
     expect(await tryNodeContent(page, 'pass-exhibit-host-indicator')).toBeNull();
@@ -1428,7 +1428,7 @@ test.describe('state pass system', () => {
     // After opening the exhibit, selecting the "one" span sets exvar=1 on host.
     // The iframe must receive rvmark-preroot-set and show pass-exhibit-indicator.
     const frame = await openExhibit(page, 'pass-exhibit-reactive-host');
-    const iframeIndicator = frame.locator('.node-content').filter({ hasText: 'pass-exhibit-visible' });
+    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-visible' });
     await expect(iframeIndicator).not.toBeVisible();
     // Select the "one" span — stays on same node, exhibit stays open
     const host = await nodeContent(page, 'pass-exhibit-reactive-host');
@@ -1440,7 +1440,7 @@ test.describe('state pass system', () => {
     // pass-exhibit-rename-host has exhibit-pass: exvar=exlocal rw
     // exlocal=1 set on host (without changing selection) → iframe receives rvmark-preroot-set key=exvar value=1
     const frame = await openExhibit(page, 'pass-exhibit-rename-host');
-    const iframeIndicator = frame.locator('.node-content').filter({ hasText: 'pass-exhibit-rename-visible' });
+    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-rename-visible' });
     await expect(iframeIndicator).not.toBeVisible();
     // Mutate host state without navigating away (keeps exhibit open)
     await page.evaluate(() => {
@@ -1454,7 +1454,7 @@ test.describe('state pass system', () => {
     // Host sets exvar=1 → iframe should receive the push and show indicator
     // (Write-back direction is separately blocked by existing security test)
     const frame = await openExhibit(page, 'pass-exhibit-ro-host');
-    const iframeIndicator = frame.locator('.node-content').filter({ hasText: 'pass-exhibit-visible' });
+    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-visible' });
     await expect(iframeIndicator).not.toBeVisible();
     await page.evaluate(() => {
       window._rvmarkFindNodes?.('pass-exhibit-ro-host')?.forEach(rn => rn.state?.set('exvar', '1'));
@@ -1471,7 +1471,7 @@ test.describe('state pass system', () => {
     const frame = await openExhibit(page, 'pass-exhibit-rename-host');
     expect(await tryNodeContent(page, 'pass-exhibit-rename-indicator')).toBeNull();
     // Wait for relay listener to be established before firing writer
-    const writer = frame.locator('.node-content').filter({ hasText: 'pass-exhibit-rename-writer' });
+    const writer = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-rename-writer' });
     await expect(writer).toBeVisible();
     await writer.press('Enter');
     // Host indicator {? exlocal==1} must appear (write-back translated exvar→exlocal)
@@ -1484,7 +1484,7 @@ test.describe('state pass system', () => {
     await page.evaluate(() => { window.__rvmarkPreroot?.declare('prerootvar', '1'); });
     const frame = await openExhibit(page, 'pass-exhibit-preroot-host');
     await page.waitForTimeout(300);
-    const iframeIndicator = frame.locator('.node-content').filter({ hasText: 'pass-exhibit-preroot-visible' });
+    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-preroot-visible' });
     await expect(iframeIndicator).not.toBeVisible();
   });
 
@@ -1492,7 +1492,7 @@ test.describe('state pass system', () => {
     // Writing exvar via pass-scope-exhibit's rw exhibit must not bleed into pass-scope-exhibit-ro
     // Both scopes declare exvar=0 independently; rw write updates only its own scope's frame
     const frame = await openExhibit(page, 'pass-exhibit-host');
-    await frame.locator('.node-content').filter({ hasText: 'pass-exhibit-writer' }).press('Enter');
+    await frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-writer' }).press('Enter');
     await expect(await waitForNode(page, 'pass-exhibit-host-indicator')).toBeVisible();
     // Now open the ro scope exhibit — its exvar must still be 0
     // (We can't easily check inside that iframe without reopening, so check host indicator)
@@ -1618,7 +1618,7 @@ test.describe('state pass system', () => {
     // After A→B switch, setting exvar=1 on A's frame must NOT push to the iframe;
     // setting exvar=1 on B's frame must push and reveal the iframe indicator.
     const frame = await openExhibit(page, 'pass-exhibit-rewire-host-a');
-    const iframeIndicator = frame.locator('.node-content').filter({ hasText: 'pass-exhibit-visible' });
+    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-visible' });
     await expect(iframeIndicator).not.toBeVisible();
     // Switch scopes by selecting B's host (same target rawRef triggers rewire)
     await (await nodeContent(page, 'pass-exhibit-rewire-host-b')).click();
@@ -1643,7 +1643,7 @@ test.describe('state pass system', () => {
     await (await nodeContent(page, 'pass-exhibit-rewire-host-b')).click();
     await page.waitForTimeout(100);
     // Re-grab the writer locator (still inside the persisted iframe)
-    const writer = frame.locator('.node-content').filter({ hasText: 'pass-exhibit-writer' });
+    const writer = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-writer' });
     await expect(writer).toBeVisible();
     await writer.press('Enter');
     // B's indicator must appear; A's must not
@@ -1655,7 +1655,7 @@ test.describe('state pass system', () => {
     // Set exvar=1 on B's frame BEFORE switching; after switching, the iframe
     // must immediately reflect B's state (relay snapshot pushed on rewire).
     const frame = await openExhibit(page, 'pass-exhibit-rewire-host-a');
-    const iframeIndicator = frame.locator('.node-content').filter({ hasText: 'pass-exhibit-visible' });
+    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-visible' });
     await expect(iframeIndicator).not.toBeVisible();
     // Prime B's frame while exhibit is wired to A (no effect on iframe yet)
     await page.evaluate(() => {

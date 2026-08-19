@@ -66,7 +66,7 @@ test.describe('search widget presence', () => {
     await page.goto('/other/');
     await waitForTree(page);
     await page.keyboard.press('Control+f');
-    const text = await page.locator('li.node .node-label').first().textContent();
+    const text = await page.locator('#tree-scroll li.node .node-label').first().textContent();
     await page.locator('.search-input').fill(text.trim().slice(0, 12));
     await expect(page.locator('.search-mark').first()).toBeVisible();
   });
@@ -298,7 +298,7 @@ test.describe('matching and stepping to results', () => {
 
     const row = await nodeContent(page, 'search-table-collapsed');
     await expect(row).toHaveAttribute('aria-expanded', 'false');
-    const li = page.locator('li.node', { has: row }).first();
+    const li = page.locator('#tree-scroll li.node', { has: row }).first();
     await expect(li.locator('.search-indicator')).toHaveCount(1);
   });
 
@@ -313,7 +313,7 @@ test.describe('matching and stepping to results', () => {
     await waitForTree(page);
 
     // The {searchable} root is genuinely absent — only its child is rendered.
-    await expect(page.locator('li.node', {
+    await expect(page.locator('#tree-scroll li.node', {
       has: page.locator('.node-label', { hasText: 'SEARCHABLE_TOP_TEXT' }),
     })).toHaveCount(0);
 
@@ -347,7 +347,7 @@ test.describe('matching and stepping to results', () => {
     await page.locator('.search-input').fill('SEARCHABLE_TRANSCLUDED_TEXT');
 
     const row = await nodeContent(page, 'search-transclude-host');
-    const li = page.locator('li.node', { has: row }).first();
+    const li = page.locator('#tree-scroll li.node', { has: row }).first();
     await expect(li.locator('.search-indicator')).toHaveCount(1);
   });
 
