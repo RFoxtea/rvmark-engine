@@ -12,7 +12,7 @@
 
 import { prerootFrame } from './state.js';
 import { buildRenderNode, RenderNode } from './render-node.js';
-import { resolveSlugInFile, parseCompoundSlug, resolveFocusSlug } from './shared.js';
+import { originFor, addressOf } from './origin.js';
 import type { SourceFile } from './source-file.js';
 import { loadPageFile, setPageContext } from './loader.js';
 import { setMeta, setFooter, setViewTarget, clearTree, showError } from './shell.js';
@@ -53,24 +53,28 @@ async function renderRoot(
   requestedSlug: string | null,
   focusSlug:     string | null,
 ): Promise<void> {
-  const { nodeMap, roots } = sourceFile;
-  const resolved = resolveSlugInFile({ nodeMap, roots }, requestedSlug);
-  const node = resolved?.node ?? roots[0] ?? null;
+  // The page's own URL is the one address the client builds. Past this point a
+  // key is opaque: it is only ever handed back to the origin that minted it.
+  const page   = addressOf(sourceFile.pageAddress);
+  const origin = originFor(page.baseUrl);
+  const keyFor = (slug: string) => addressOf(`${sourceFile.pageAddress}#${slug}`).key;
+
+  // A fragment that names nothing falls back to the page's entry point, as it
+  // did when this was a nodeMap miss.
+  const node = (requestedSlug ? await origin.node(keyFor(requestedSlug)) : null)
+            ?? await origin.node(page.key);
 
   if (!node) {
     showError('No content found.');
     return;
   }
 
-  let nodePermalinkBase: string = node.attrs.get('id') || node.slug;
-  if (requestedSlug && !nodeMap[requestedSlug]) {
-    const { anchor, path } = parseCompoundSlug(requestedSlug);
-    if (nodeMap[anchor] && path.length > 0) {
-      nodePermalinkBase = `${anchor}.${path.join('.')}`;
-    }
-  }
-
-  const resolvedFocusSlug = resolveFocusSlug(focusSlug, nodeMap, roots, nodePermalinkBase);
+  // buildRenderNode compares a focus target against permalinkId, and permalinkId
+  // is the origin's to know — a compound slug like `43-proof.11.2` names a node
+  // by a path through ordinals this side can no longer walk. Asking for the node
+  // and reading what it calls itself is the whole of what that walk was for.
+  const focusTarget = focusSlug ? await origin.node(keyFor(focusSlug)) : null;
+  const resolvedFocusSlug = focusSlug ? (focusTarget?.permalinkId || focusSlug) : null;
 
   const root = clearTree();
   const rootRn = buildRenderNode(node, resolvedFocusSlug);

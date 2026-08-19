@@ -55,6 +55,7 @@ import { scrollRowIntoMiddle } from './scroll.js';
 import { mountSearchRoot } from './shell.js';
 import { resolveTagDef } from './tags.js';
 import { resolveSlugInFile } from './shared.js';
+import { nodeTextMatches, tagDisplayText } from './origin.js';
 
 interface SearchMatch {
   node:    SourceNode;
@@ -69,26 +70,6 @@ interface SearchMatch {
 // the tag's name as the visible text. Search matches what the reader can see,
 // so it has to apply the same two rules rather than looking at tag.name —
 // otherwise queries would hit invisible styling tags and miss relabelled ones.
-function tagDisplayText(tag: SourceNode['tags'][number], node: SourceNode): string | null {
-  const def = resolveTagDef(tag.name, tag.props, node.sourceFile?.tagDefs);
-  if (def.has('internal')) return null;
-  return def.get('label') ?? tag.name;
-}
-
-// Tag chip text is matched alongside label/body text: the parser strips tags
-// out of the raw line into node.tags, so a chip's text appears in neither
-// node.label nor node.bodyLines. Without this, tags sitting plainly on screen
-// were unsearchable — confusingly so, since a query could still match the same
-// word in ordinary prose elsewhere, making the gaps look arbitrary.
-// Tag props other than `label` are not searched: they're configuration
-// (styling, links, tooltips), not reader-visible body content.
-function nodeTextMatches(node: SourceNode, needle: string): boolean {
-  if (node.label && node.label.toLowerCase().includes(needle)) return true;
-  if (node.tags.some(tag => tagDisplayText(tag, node)?.toLowerCase().includes(needle)))
-    return true;
-  return node.bodyLines.some(line => line.toLowerCase().includes(needle));
-}
-
 // Map every currently-mounted SourceNode to its <li>, in one DOM pass.
 function mountedNodes(): Map<SourceNode, HTMLElement> {
   const map = new Map<SourceNode, HTMLElement>();
