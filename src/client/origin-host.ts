@@ -434,22 +434,19 @@ export async function resolveMediaAllOn(
  * (`hasChildren`, which is what draws a collapsed row's toggle); what they ARE
  * costs a round trip, paid when something actually expands.
  *
- * The answer is parked on `node.children` — which makes the field a cache
- * rather than the thing a node is made of. It is a second owner of every
- * fetched child, and a deliberate one: it keeps re-expanding a subtree free
- * while the wire is new. Stage 3c is what removes it, at which point
- * `_childSlots` is the only owner left and a collapse is a real release.
+ * Nothing is parked on the node. The answer is handed to the caller and owned
+ * by whatever mounts it — `_childSlots` for a rendered row — so a teardown is
+ * a real release rather than one reference dropped among several. Re-expanding
+ * a subtree therefore costs a round trip again, which is the price of the
+ * client's heap not growing with everything it has ever looked at.
  */
 export async function childrenOf(node: SourceNode): Promise<SourceNode[]> {
   if (!node.hasChildren) return [];
-  if (node.children.length) return node.children;
   // A stand-in has no key, so there is no one to ask. It never has children
   // either, but a caller should not have to know that to be safe here.
   if (!node.address.key) return [];
   try {
-    const kids = await originFor(node.address.baseUrl).childrenOf(node.address.key);
-    node.children = kids;
-    return kids;
+    return await originFor(node.address.baseUrl).childrenOf(node.address.key);
   } catch {
     return [];
   }

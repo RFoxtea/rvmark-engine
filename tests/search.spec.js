@@ -200,9 +200,14 @@ test.describe('matching and stepping to results', () => {
     await waitForTree(page);
     await page.keyboard.press('Control+f');
     await page.locator('.search-input').fill('SEARCHABLE_NEEDLE_TEXT');
-    await page.keyboard.press('Enter');
 
     const collapsedRow = await nodeContent(page, 'search-child-collapsed');
+    // The dot is the ASKED half's answer, one round trip behind the keystroke:
+    // the match is below a collapsed row, so no client-side walk can reach it.
+    // Stepping can only land on a dot that is actually showing.
+    await expect(collapsedRow.locator('.search-indicator')).toHaveCount(1);
+    await page.keyboard.press('Enter');
+
     await expect(collapsedRow).toHaveAttribute('aria-selected', 'true');
     // Selecting it must not force it open.
     await expect(collapsedRow).toHaveAttribute('aria-expanded', 'false');
@@ -219,9 +224,11 @@ test.describe('matching and stepping to results', () => {
     await waitForTree(page);
     await page.keyboard.press('Control+f');
     await page.locator('.search-input').fill('SEARCHABLE_NEEDLE_TEXT');
-    await page.keyboard.press('Enter');
 
     const collapsedRow = await nodeContent(page, 'search-child-collapsed');
+    await expect(collapsedRow.locator('.search-indicator')).toHaveCount(1);
+    await page.keyboard.press('Enter');
+
     await expect(collapsedRow).toHaveAttribute('aria-selected', 'true');
 
     await collapsedRow.locator('.toggle').click();

@@ -48,19 +48,12 @@ test.describe('custom node types via OriginEnvoy', () => {
     const rnInfo = await page.evaluate(() => {
       const rn = window._rvmarkFindNodes('envoy-echo-a')[0];
       const content = rn.li.querySelector(':scope > .node-content');
-      const label = content.querySelector('.node-label')?.textContent ?? '';
-      // The child survives the serialize→transform→deserialize round-trip as
-      // source data. (The replaced text node is collapsed by default, so the
-      // child isn't a live RenderNode until expanded — we assert the rebuilt
-      // SourceNode subtree, which is what the round-trip actually produces.)
-      const child = rn.sourceNode.children?.[0] ?? null;
       return {
         // The replaced handler is the `text` type → has the permalink anchor.
         isTextHandler: !!content.querySelector('a.node-id'),
         isLoading: content.classList.contains('node-content--loading'),
-        label,
-        childLabel: child?.label ?? null,
-        childId: child?.attrs?.get?.('id') ?? null,
+        label: content.querySelector('.node-label')?.textContent ?? '',
+        // A transformed node reports structure the same way any other does.
         isExpandable: content.hasAttribute('aria-expanded'),
       };
     });
@@ -68,12 +61,28 @@ test.describe('custom node types via OriginEnvoy', () => {
     expect(rnInfo.isLoading).toBe(false);
     expect(rnInfo.isTextHandler).toBe(true);
     expect(rnInfo.label).toContain('Echo node A');
-    // Child survived the round-trip in the rebuilt subtree…
-    expect(rnInfo.childLabel).toContain('Echo A child survives the round-trip');
-    expect(rnInfo.childId).toBe('envoy-echo-a-child');
-    // …and the rebuilt node is expandable (has children), confirming the engine
-    // sees the round-tripped subtree.
     expect(rnInfo.isExpandable).toBe(true);
+
+    // The child survives the serialize→transform→deserialize round-trip, but a
+    // node no longer carries its subtree: structure is a query, answered on
+    // expand. So the round-trip is asserted where its result actually appears —
+    // the mounted child — rather than on a source field that is empty by design
+    // while the node is collapsed.
+    await page.evaluate(() => {
+      const rn = window._rvmarkFindNodes('envoy-echo-a')[0];
+      rn.li.querySelector(':scope > .node-content > .toggle')?.click();
+    });
+
+    const childContent = page.locator(
+      `#${await page.evaluate(() => window._rvmarkFindNodes('envoy-echo-a')[0].li.id)}`
+      + ' > .node-children > ul > li.node > .node-content');
+    await expect(childContent.locator('.node-label'))
+      .toContainText('Echo A child survives the round-trip');
+    expect(await page.evaluate(() => {
+      const rn = window._rvmarkFindNodes('envoy-echo-a')[0];
+      const kid = rn.li.querySelector(':scope > .node-children > ul > li.node');
+      return kid?._renderNode?.sourceNode?.attrs?.get?.('id') ?? null;
+    })).toBe('envoy-echo-a-child');
   });
 
   test('a node the client cannot render becomes an error row, page not wedged', async ({ page }) => {
