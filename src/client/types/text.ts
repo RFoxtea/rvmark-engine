@@ -17,10 +17,13 @@ import { wireSpanVisibility } from '../span-visibility.js';
 import type { ListboxNav } from '../listbox.js';
 import { buildTagChips } from '../tag-chips.js';
 import { scrollRowIntoMiddle } from '../scroll.js';
-import { mdInlineWithSpans, staticMdInline, ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../markdown.js';
+import { mdInlineWithSpans, mdInlineWithSpansResolved, staticMdInline, ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
 import { resolveTransclusionConfig } from '../transclusion.js';
 import { wireSelectThenAction } from '../interaction.js';
+import { resolveMediaOn } from '../../envoy/origin.js';
+
+type LabelRender = { html: string; spanMap: Map<number, ParsedSpanAttrs> };
 
 class TextTypeHandler extends BaseTypeHandler {
   private _listboxNav?: ListboxNav;
@@ -35,7 +38,11 @@ class TextTypeHandler extends BaseTypeHandler {
   // Set only when the label contains math and KaTeX is not loaded yet; read by
   // RenderNode.attach, which skips its own ready() call when this is true.
   managesReady?: true;
-  private _reRenderLabel: (() => { html: string; spanMap: Map<number, ParsedSpanAttrs> }) | null = null;
+  // The final render of the label, when the first one was provisional. Async
+  // only in the case that needs the origin.
+  private _reRenderLabel:
+    | (() => LabelRender | Promise<LabelRender>)
+    | null = null;
 
   constructor(rn: RenderNode) {
     // Manual toggle spans are Tab-reachable buttons, so they are gated exactly
@@ -66,15 +73,25 @@ class TextTypeHandler extends BaseTypeHandler {
     const needsKatex = hasMath(rawLabel) && !katexLoaded();
     if (needsKatex) this.managesReady = true;
 
-    // TODO(stage-3): the resolver `mdInlineWithSpans` takes is called mid-render
-    // and cannot await. The design note has labels resolved at serve time for
-    // exactly this reason — but the only ref that reaches here is `img:` on a
-    // span, and spans are parsed client-side at render time, so the origin would
-    // have to learn span syntax to resolve it. Left unresolved pending that call.
-    const renderLabel = () => mdInlineWithSpans(rawLabel);
-    const { html: lblHtml, spanMap } = renderLabel();
-    this._reRenderLabel = needsKatex ? renderLabel : null;
+    const { html: lblHtml, spanMap } = mdInlineWithSpans(rawLabel);
     const hasListbox = isListbox(attrs, spanMap);
+
+    // Two things can make that first render provisional: math needing KaTeX,
+    // and a span's `img:` ref needing the origin. Both are settled by ONE
+    // re-render rather than two racing ones — a KaTeX pass that did not also
+    // resolve images would paint typesetting over resolved URLs, and the
+    // reverse would paint resolved URLs over typesetting.
+    //
+    // Neither flashes. `managesReady` and `holdReady` both keep the node
+    // unmounted until the second render lands, so the first never reaches the
+    // screen. The hold is raced against the shared reveal deadline, so an
+    // origin that never answers costs one deadline and then shows the authored
+    // ref — what it showed before it resolved at all.
+    const needsImg = [...spanMap.values()].some(a => a.get('img'));
+    if (needsKatex || needsImg) {
+      this._reRenderLabel = () => this._renderLabelFinal(rawLabel, needsImg);
+      if (!needsKatex) rn.holdReady(this._settleLabel(sourceNode, attrs, rn));
+    }
 
     this.buildCssProps(attrs, sourceNode);
 
@@ -118,36 +135,76 @@ class TextTypeHandler extends BaseTypeHandler {
 
     this.deactivate();
 
-    // Label had math and KaTeX was missing: fetch it, re-render the label with
-    // real typesetting, then release the node. The first render above never
-    // reaches the screen — the node is unmounted until ready() below.
-    if (this._reRenderLabel) {
-      void ensureKatex().then(() => {
-        const { html, spanMap: freshSpans } = this._reRenderLabel!();
-        this.lbl.innerHTML = html;
-        const chips = buildTagChips(sourceNode.tags);
-        if (chips.childNodes.length > 0) this.lbl.prepend(chips);
-        // innerHTML discarded the wired elements along with the old markup, so
-        // the subscriptions must be dropped and re-taken against the new ones.
-        this._unwireSpans?.();
-        this._unwireSpans = wireSpanVisibility(this.lbl, freshSpans, rn.state);
-        this._unwireSpanToggles?.();
-        this._unwireSpanToggles = wireSpanToggles(
-          this.lbl, freshSpans, attrs, rn, this.toggles,
-        );
-        // Re-wiring hands the fresh toggles tabIndex 0, so re-apply the gate:
-        // focusable only while this node is selected, as at construction.
-        if (RenderNode.currentSelection === this.rn) this.activate();
-        else this.deactivate();
-        this._reRenderLabel = null;
-        rn.ready();
-      });
-    }
+    // Only the KaTeX case releases readiness itself, because it declared
+    // managesReady and so nothing else will. The image-only case took a hold
+    // above instead, and attachHandler's own ready() still applies.
+    if (needsKatex) void this._settleLabel(sourceNode, attrs, rn).then(() => rn.ready());
 
     this.toggles.openIfRequested(paramOpen, false);
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────
+
+  /**
+   * Swap in a freshly-rendered label and re-take everything wired against the
+   * old markup. `innerHTML` discarded the wired elements along with it, so the
+   * subscriptions must be dropped and re-taken against the new ones.
+   *
+   * Shared by the two paths that re-render a label — KaTeX arriving, and image
+   * refs resolving. Both produce the same problem and had the same answer.
+   */
+  private _replaceLabel(
+    html:       string,
+    freshSpans: Map<number, ParsedSpanAttrs>,
+    sourceNode: SourceNode,
+    attrs:      ResolvedAttrs,
+    rn:         RenderNode,
+  ): void {
+    this.lbl.innerHTML = html;
+    const chips = buildTagChips(sourceNode.tags);
+    if (chips.childNodes.length > 0) this.lbl.prepend(chips);
+
+    this._unwireSpans?.();
+    this._unwireSpans = wireSpanVisibility(this.lbl, freshSpans, rn.state);
+    this._unwireSpanToggles?.();
+    this._unwireSpanToggles = wireSpanToggles(this.lbl, freshSpans, attrs, rn, this.toggles);
+
+    // Re-wiring hands the fresh toggles tabIndex 0, so re-apply the gate:
+    // focusable only while this node is selected, as at construction.
+    if (RenderNode.currentSelection === this.rn) this.activate();
+    else this.deactivate();
+  }
+
+  /**
+   * The label as it should finally appear. KaTeX takes no argument — by the
+   * time this runs it is loaded, and both renderers pick it up off the global —
+   * so the only branch is whether the origin has to be asked about an `img:`.
+   */
+  private _renderLabelFinal(rawLabel: string, needsImg: boolean): LabelRender | Promise<LabelRender> {
+    return needsImg
+      ? mdInlineWithSpansResolved(rawLabel, (url) => resolveMediaOn(this.rn.sourceNode, url))
+      : mdInlineWithSpans(rawLabel);
+  }
+
+  /**
+   * Wait for whatever the label was missing, then render it once and re-wire.
+   *
+   * Always settles: this promise gates the node's reveal, so a failed resolve
+   * must leave the first render standing rather than hang. That first render
+   * shows the authored ref, which is what it showed before resolution existed.
+   */
+  private async _settleLabel(
+    sourceNode: SourceNode,
+    attrs:      ResolvedAttrs,
+    rn:         RenderNode,
+  ): Promise<void> {
+    try {
+      if (this.managesReady) await ensureKatex();
+      const { html, spanMap } = await this._reRenderLabel!();
+      this._replaceLabel(html, spanMap, sourceNode, attrs, rn);
+    } catch { /* first render stands */ }
+    this._reRenderLabel = null;
+  }
 
   private buildCssProps(attrs: ResolvedAttrs, sourceNode: SourceNode) {
     applyBulletProps(this.content, attrs, sourceNode);

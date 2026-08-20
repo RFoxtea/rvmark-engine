@@ -380,3 +380,7 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
     1. {#bullet-open-dead-child} dead child
   6. {#bullet-open-spins; bullet: ./icons/compass.svg; bullet-open: ./icons/compass-open.svg; bullet-spins} bullet-open beats bullet-spins
     1. {#bullet-open-spins-child} spins child
+
+45. {#span-img-root; open} Span img fixture root
+  1. {#span-img-relative} relative [a]{img: ./icons/warning.svg} end
+  2. {#span-img-absolute} absolute [b]{img: https://example.com/x.png} end

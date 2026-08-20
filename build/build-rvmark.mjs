@@ -72,7 +72,7 @@ const { SourceFile } = await import('../out/envoy/source-file.js');
 // that draw them (text, and the tr/table family via tr-base), not to this
 // builder, which only asks for them and never knows how they are made.
 const { staticRenderBullet, staticBulletProps } = await import('../out/client/types/text.js');
-const { staticMdInline, staticMdToHtml } = await import('../out/client/markdown.js');
+const { staticMdInline, staticMdInlineResolved, staticMdToHtml } = await import('../out/client/markdown.js');
 await import('../out/client/types/block.js');
 await import('../out/client/types/video.js');
 await import('../out/client/types/iframe.js');
@@ -182,6 +182,12 @@ export async function buildSite(config) {
       return resolveMediaAddress(ref, node.pageAddress) ?? ref;
     },
   };
+
+  // A node's label, with any `img:` on a span resolved against the file that
+  // node came from — the same rule the hydrated path follows, and the reason a
+  // transcluded label is resolved against ITS node rather than the host's.
+  const staticLabel = (node, label) =>
+    staticMdInlineResolved(label ?? node.label ?? '', (url) => buildCtx.resolveMedia(node, url));
   // `templateHtml` (raw contents) wins over `template` (path); both default to
   // the engine's template. Lets callers patch the template in-memory (e.g. the
   // --test build relaxing the CSP for the http peer) without forking the file.
@@ -675,12 +681,12 @@ function renderStaticNode(node, sourceFile, depth = 0) {
         linkLabel = resolved.node.label || linkLabel || transcludeVal;
         const targetSourceFile = sourceFiles.get(resolved.file);
         const targetTags = targetSourceFile ? buildStaticTagChips(resolved.node.tags, targetSourceFile) : '';
-        const lbl = `<span class="node-label">${tags}${targetTags}<a class="${refClass}" href="${escHtml(href)}">${staticMdInline(linkLabel)}</a></span>`;
+        const lbl = `<span class="node-label">${tags}${targetTags}<a class="${refClass}" href="${escHtml(href)}">${staticLabel(resolved.node, linkLabel)}</a></span>`;
         return `<li${liClassAttr}>${row(lbl, false)}</li>\n`;
       }
     }
     if (href) {
-      const lbl = `<span class="node-label">${tags}<a class="${refClass}" href="${escHtml(href)}">${staticMdInline(linkLabel || transcludeVal)}</a></span>`;
+      const lbl = `<span class="node-label">${tags}<a class="${refClass}" href="${escHtml(href)}">${staticLabel(node, linkLabel || transcludeVal)}</a></span>`;
       return `<li${liClassAttr}>${row(lbl, false)}</li>\n`;
     }
   }
@@ -713,7 +719,7 @@ function renderStaticNode(node, sourceFile, depth = 0) {
   }
 
   // Text node: label + children
-  const lbl = `<span class="node-label">${tags}${staticMdInline(node.label || '')}${exhibitLinkHtml}</span>`;
+  const lbl = `<span class="node-label">${tags}${staticLabel(node)}${exhibitLinkHtml}</span>`;
   const rowHtml = row(lbl, isSummary, open);
   // A non-summary row must never go inside <details>: the element requires a
   // <summary> first child and synthesises a "Details" one when it is missing.

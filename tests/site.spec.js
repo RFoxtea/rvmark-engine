@@ -2564,3 +2564,34 @@ test.describe('bullet-alt', () => {
     await expect(node.locator('.toggle .visually-hidden')).toHaveCount(0);
   });
 });
+
+// A span's `img:` ref resolves through the origin, which cannot be awaited
+// mid-render — marked's renderers are synchronous by contract. It is resolved
+// during walkTokens instead, so what these pin is that the resolution happens at
+// all, and that the node does not mount showing the unresolved ref first.
+test.describe('span img refs', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/#span-img-root');
+    await waitForTree(page);
+    await waitForNode(page, 'span-img-relative');
+  });
+
+  test('a relative ref resolves against the file the node came from', async ({ page }) => {
+    const img = (await nodeContent(page, 'span-img-relative')).locator('img');
+    await expect(img).toHaveAttribute('src', /\/_rvmark\/icons\/warning\.svg$/);
+  });
+
+  // The node holds readiness until the resolved render lands, so the authored
+  // ref must never have been painted — not "was replaced quickly".
+  test('the unresolved ref is never painted', async ({ page }) => {
+    const src = await (await nodeContent(page, 'span-img-relative'))
+      .locator('img').getAttribute('src');
+    expect(src).not.toBe('./icons/warning.svg');
+  });
+
+  // An absolute ref names its own location; the origin has nothing to add.
+  test('an absolute ref passes through unchanged', async ({ page }) => {
+    const img = (await nodeContent(page, 'span-img-absolute')).locator('img');
+    await expect(img).toHaveAttribute('src', 'https://example.com/x.png');
+  });
+});
