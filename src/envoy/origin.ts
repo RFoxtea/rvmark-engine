@@ -85,13 +85,12 @@ export interface Origin {
    * wire moves no call site again. The builder keeps a synchronous twin
    * (`StaticBuildContext.resolveMedia`) because the wire is not in its path.
    *
-   * One caller cannot await and so is not served here: `mdInlineWithSpans`
-   * resolves `img:` on a span mid-render. The design note has labels resolved
-   * at serve time for exactly that reason, but spans are parsed client-side, so
-   * the origin would have to learn span syntax to do it. Unsettled — see the
-   * note, *Media refs, and what `Served` may carry*.
+   * Plural for the reason `resolve` is: a caller that holds several refs holds
+   * them at once — a label's spans, a bullet and its open variant — and over a
+   * wire that is one message, not one per ref. Answers positionally, `null`
+   * where this origin will not serve the ref.
    */
-  resolveResource(key: string, ref: string): string | null;
+  resolveResources(key: string, refs: string[]): (string | null)[];
 
   /**
    * Re-resolve attrs and tags that came back CHANGED from a transform, against
@@ -204,14 +203,26 @@ export function resolveRefOn(node: SourceNode, rawRef: string | null | undefined
  * Stage 3 cuts the wire underneath, no call site moves again.
  */
 export async function resolveMediaOn(node: SourceNode, ref: string | null | undefined): Promise<string | null> {
-  if (!ref) return null;
+  return (await resolveMediaAllOn(node, [ref]))[0];
+}
+
+/**
+ * `resolveMediaOn` for a caller holding several refs at once — a label's spans,
+ * a bullet and its open variant. One query, answered positionally, so the wire
+ * carries one message per caller rather than one per ref.
+ */
+export async function resolveMediaAllOn(
+  node: SourceNode,
+  refs: (string | null | undefined)[],
+): Promise<(string | null)[]> {
   // Keyed off pageAddress, not the node's own key: a client-minted stand-in (a
   // loading marker, an error row) has no key — nothing served it — but it does
   // sit in its host's document, and that is what a relative ref resolves against.
   const { baseUrl } = node.address;
   try {
-    return originFor(baseUrl).resolveResource(node.pageAddress.slice(baseUrl.length), ref);
-  } catch { return null; }
+    return originFor(baseUrl)
+      .resolveResources(node.pageAddress.slice(baseUrl.length), refs.map(r => r || ''));
+  } catch { return refs.map(() => null); }
 }
 
 // ── Sigils (origin-side: the client never learns these exist) ─────────────────
@@ -438,8 +449,9 @@ class RvmarkOrigin implements Origin {
    * hole `resolve` closes — a resource is fetched, not parsed, so nothing about
    * a foreign origin's *content model* is being trusted.
    */
-  resolveResource(key: string, ref: string): string | null {
-    return ref ? resolveMediaAddress(ref, this.address(key)) : null;
+  resolveResources(key: string, refs: string[]): (string | null)[] {
+    const address = this.address(key);
+    return refs.map(ref => (ref ? resolveMediaAddress(ref, address) : null));
   }
 
   async reserve(key: string, out: { attrs: NodeAttrs; tags: Tag[]; slug: string }): Promise<Reserved> {

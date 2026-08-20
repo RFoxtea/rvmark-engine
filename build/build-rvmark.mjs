@@ -187,7 +187,7 @@ export async function buildSite(config) {
   // node came from — the same rule the hydrated path follows, and the reason a
   // transcluded label is resolved against ITS node rather than the host's.
   const staticLabel = (node, label) =>
-    staticMdInlineResolved(label ?? node.label ?? '', (url) => buildCtx.resolveMedia(node, url));
+    staticMdInlineResolved(label ?? node.label ?? '', (refs) => refs.map((ref) => buildCtx.resolveMedia(node, ref)));
   // `templateHtml` (raw contents) wins over `template` (path); both default to
   // the engine's template. Lets callers patch the template in-memory (e.g. the
   // --test build relaxing the CSP for the http peer) without forking the file.

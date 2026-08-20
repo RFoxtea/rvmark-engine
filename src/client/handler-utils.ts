@@ -20,7 +20,7 @@ import { bagOf } from '../shared/inherited.js';
 import type { ResolvedAttrs } from '../shared/served.js';
 import { RenderNode } from './render-node.js';
 import { resolveEffectiveChildren, resolveTransclusionConfig } from './transclusion.js';
-import { resolveRefOn, resolveMediaOn } from '../envoy/origin.js';
+import { resolveRefOn, resolveMediaOn, resolveMediaAllOn } from '../envoy/origin.js';
 import { parseTranscludeEntry } from '../shared/shared.js';
 import { TRANSCLUDE_DEADLINE_MS } from './constants.js';
 import type { PassEntry, PassMode, StateNode } from './state.js';
@@ -457,7 +457,11 @@ async function applyBulletImages(content: HTMLElement, attrs: ResolvedAttrs, sou
     // Relative refs resolve against the file the node came FROM — so a
     // transcluded foreign node gets its OWN origin's icons, the same rule
     // markdown media and transclusion refs already follow.
-    const url = await resolveMediaOn(sourceNode, bullet);
+    //
+    // Both icons in one query: they are held together, so they are asked for
+    // together — one message rather than two once the origin is behind a wire.
+    const open = attrs.get('bullet-open');
+    const [url, openUrl] = await resolveMediaAllOn(sourceNode, [bullet, open]);
     if (url) {
       setBulletImage(content, '--node-bullet-image', url, () => {
         content.classList.remove('node-content--bullet-image');
@@ -470,9 +474,7 @@ async function applyBulletImages(content: HTMLElement, attrs: ResolvedAttrs, sou
     // itself carries the open/closed state that the corner badge otherwise
     // would. Only meaningful alongside a `bullet`: the default triangle already
     // shows its own state by rotating.
-    const open = attrs.get('bullet-open');
     if (open !== undefined) {
-      const openUrl = await resolveMediaOn(sourceNode, open);
       if (openUrl) {
         // Falling back to the closed icon (rather than the default marker) on a
         // dead URL keeps the bullet the author chose; only the state cue is lost.

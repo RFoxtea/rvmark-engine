@@ -599,24 +599,28 @@ export function collectSpanResourceRefs(spanMap: Map<number, ParsedSpanAttrs>): 
 /**
  * `mdInlineWithSpans` for a label whose resource refs should resolve.
  *
- * Two synchronous parses with the awaiting in between, rather than one parse
- * that awaits: marked's renderers are synchronous by contract, and the parser's
+ * Two synchronous parses with the asking in between, rather than one parse that
+ * awaits: marked's renderers are synchronous by contract, and the parser's
  * module state cannot survive an await — two labels rendering in the same tick
  * would clobber each other's span map, which is what ordinal 0 on every span
  * meant. The two passes cannot disagree about what to resolve: a ref is an
  * opaque string in a span's attrs, and what comes back only ever lands in an
  * attribute of the emitted element, never in what gets tokenized.
  *
- * A ref the origin will not serve stays as authored and fails like any dead
- * URL in HTML — per ref, so one dead ref does not unresolve its neighbours.
+ * `resolveRefs` takes the label's refs together and answers positionally — one
+ * query for the label, not one per ref. A ref it answers `null` for stays as
+ * authored and fails like any dead URL in HTML, per ref, so one dead ref does
+ * not unresolve its neighbours.
  */
 export async function mdInlineWithSpansResolved(
   text: string,
-  resolveUrl: (url: string) => Promise<string | null>,
+  resolveRefs: (refs: string[]) => Promise<(string | null)[]>,
 ): Promise<{ html: string; spanMap: Map<number, ParsedSpanAttrs> }> {
   const refs = collectSpanResourceRefs(mdInlineWithSpans(text).spanMap);
-  const resolved = await resolveRefs(refs, resolveUrl);
-  return mdInlineWithSpansUsing(text, resolved);
+  let answers: (string | null)[];
+  try { answers = await resolveRefs(refs); }
+  catch { answers = refs.map(() => null); }
+  return mdInlineWithSpansUsing(text, new Map(refs.map((ref, i) => [ref, answers[i] ?? null])));
 }
 
 /** The resolved half of the pair, for a caller that already holds the answers. */
@@ -630,23 +634,6 @@ export function mdInlineWithSpansUsing(
     (url) => resolved.get(url) ?? null,
   );
   return { html: result, spanMap };
-}
-
-/**
- * Ask for every ref at once. Settled rather than all-or-nothing: a rejected
- * resolve is a ref that stays as authored, not a label that loses the rest.
- */
-export async function resolveRefs(
-  refs: string[],
-  resolveUrl: (url: string) => Promise<string | null>,
-): Promise<Map<string, string | null>> {
-  const answers = await Promise.all(
-    refs.map(async (ref) => {
-      try { return [ref, await resolveUrl(ref)] as const; }
-      catch { return [ref, null] as const; }
-    }),
-  );
-  return new Map(answers);
 }
 
 // Like mdInlineWithSpans but continues ordinal numbering from a previous call.
@@ -672,10 +659,11 @@ export function mdInlineWithSpansContinued(
  */
 export function staticMdInlineResolved(
   text: string,
-  resolveUrl: (url: string) => string | null,
+  resolveRefs: (refs: string[]) => (string | null)[],
 ): string {
   const refs = collectSpanResourceRefs(staticMdInlineWithSpans(text).spanMap);
-  const resolved = new Map(refs.map((ref) => [ref, resolveUrl(ref)] as const));
+  const answers = resolveRefs(refs);
+  const resolved = new Map(refs.map((ref, i) => [ref, answers[i] ?? null] as const));
   return withSpanMap(
     () => getStaticMarked().parseInline(text),
     0,

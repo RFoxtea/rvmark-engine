@@ -21,7 +21,7 @@ import { mdInlineWithSpans, mdInlineWithSpansResolved, staticMdInline, ensureKat
 import type { ParsedSpanAttrs } from '../markdown.js';
 import { resolveTransclusionConfig } from '../transclusion.js';
 import { wireSelectThenAction } from '../interaction.js';
-import { resolveMediaOn } from '../../envoy/origin.js';
+import { resolveMediaAllOn } from '../../envoy/origin.js';
 
 type LabelRender = { html: string; spanMap: Map<number, ParsedSpanAttrs> };
 
@@ -214,7 +214,7 @@ class TextTypeHandler extends BaseTypeHandler {
    */
   private _renderLabelFinal(rawLabel: string, needsImg: boolean): LabelRender | Promise<LabelRender> {
     return needsImg
-      ? mdInlineWithSpansResolved(rawLabel, (url) => resolveMediaOn(this.rn.sourceNode, url))
+      ? mdInlineWithSpansResolved(rawLabel, (refs) => resolveMediaAllOn(this.rn.sourceNode, refs))
       : mdInlineWithSpans(rawLabel);
   }
 
