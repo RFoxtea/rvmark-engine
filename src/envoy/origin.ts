@@ -64,17 +64,27 @@ export interface Origin {
    * a markdown file, an HTML page, an image. It comes back as a URL because
    * that is what the caller does with it: hand it to fetch, or to an <img>.
    *
-   * A second query rather than a flag on `resolve`, because the two return
-   * different kinds of thing. `resolve` answers with addresses that only this
-   * origin can interpret; this answers with a URL anyone can dereference, which
-   * is the whole reason a resource is not a node.
+   * A second query rather than a flag on `resolve`, because the two answer in
+   * different currencies. `resolve` yields addresses whose `key` is OPAQUE —
+   * meaningful only to the origin that minted it, and useless to anyone else;
+   * the only thing to do with one is hand it back. This yields a URL, which is
+   * universally dereferenceable. That difference is the whole reason a resource
+   * is not a node, and it runs the other way too: `resolve` must not fetch what
+   * a foreign address names, because producing the node would mean parsing
+   * another origin's content. A resource is fetched, not parsed, so an absolute
+   * http(s) ref passes straight through — nothing about a foreign origin's
+   * content model is being trusted by putting a URL in an <img>.
    *
-   * Null for a ref this origin will not serve. Synchronous — the caller has the
-   * key already and a URL is a naming question, not a fetch. It stays
-   * synchronous over the wire too: `resolveResource` on a node's own media is
-   * answered when the node is served, not asked for afterwards.
+   * Null for a ref this origin will not serve.
+   *
+   * Synchronous while the origin is in-process. It cannot stay that way once
+   * the wire is cut (Stage 3): postMessage is async, so the ~9 client call
+   * sites reading `served.media` today become awaited calls here. Labels are
+   * the exception and are resolved at serve time instead — `mdInlineWithSpans`
+   * calls its resolver mid-render and cannot await. See the design note,
+   * *Media refs, and what `Served` may carry*.
    */
-  resource(key: string, ref: string): string | null;
+  resolveResource(key: string, ref: string): string | null;
 
   /**
    * Drop whatever this origin has cached. Nothing calls it in the browser: a
@@ -381,7 +391,7 @@ class RvmarkOrigin implements Origin {
    * hole `resolve` closes — a resource is fetched, not parsed, so nothing about
    * a foreign origin's *content model* is being trusted.
    */
-  resource(key: string, ref: string): string | null {
+  resolveResource(key: string, ref: string): string | null {
     return ref ? resolveMediaAddress(ref, this.address(key)) : null;
   }
 

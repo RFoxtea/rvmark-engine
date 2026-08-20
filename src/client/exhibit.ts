@@ -404,7 +404,7 @@ class MarkdownExhibitStrategy extends ExhibitStrategy {
   async build(rawRef: string, sourceFileAddress: string): Promise<ExhibitResult | null> {
     const ctx = getPageContext();
     const from = addressOf(sourceFileAddress);
-    const fullPath = originFor(from.baseUrl).resource(from.key, rawRef) ?? rawRef;
+    const fullPath = originFor(from.baseUrl).resolveResource(from.key, rawRef) ?? rawRef;
     const basePath = ctx.basePath;
 
     let text: string;
@@ -459,7 +459,7 @@ exhibitRegister('markdown', new MarkdownExhibitStrategy());
 class HtmlExhibitStrategy extends ExhibitStrategy {
   async build(rawRef: string, sourceFileAddress: string, attrs?: NodeAttrs): Promise<ExhibitResult | null> {
     const from = addressOf(sourceFileAddress);
-    const fullPath = originFor(from.baseUrl).resource(from.key, rawRef) ?? rawRef;
+    const fullPath = originFor(from.baseUrl).resolveResource(from.key, rawRef) ?? rawRef;
     const displayName = fullPath.split('/').pop()!.replace(/\.html$/, '');
 
     // Same-origin (or path-only build-time) HTML: load via iframe.src so the
