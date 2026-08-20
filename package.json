@@ -4,7 +4,7 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
-  "description": "rvmark engine \u2014 interactive tree-based document runtime and static site generator.",
+  "description": "rvmark engine — interactive tree-based document runtime and static site generator.",
   "bin": {
     "rvmark": "./bin/rvmark.mjs"
   },
@@ -13,20 +13,20 @@
       "import": "./build/build-rvmark.mjs"
     },
     "./envoy": {
-      "types": "./out/envoy-guest.d.ts",
-      "import": "./out/envoy-guest.js"
+      "types": "./out/envoy/envoy-guest.d.ts",
+      "import": "./out/envoy/envoy-guest.js"
     },
     "./parser": {
-      "types": "./out/parser.d.ts",
-      "import": "./out/parser.js"
+      "types": "./out/shared/parser.d.ts",
+      "import": "./out/shared/parser.js"
     },
     "./stringify": {
-      "types": "./out/stringify.d.ts",
-      "import": "./out/stringify.js"
+      "types": "./out/build/stringify.d.ts",
+      "import": "./out/build/stringify.js"
     },
     "./builder": {
-      "types": "./out/builder.d.ts",
-      "import": "./out/builder.js"
+      "types": "./out/build/builder.d.ts",
+      "import": "./out/build/builder.js"
     },
     "./package.json": "./package.json"
   },
@@ -43,7 +43,7 @@
     "src/styles.css",
     "src/favicon.svg",
     "src/favicon-expanded.svg",
-    "src/types/*.css"
+    "src/client/types/*.css"
   ],
   "scripts": {
     "build": "node build/build.mjs",

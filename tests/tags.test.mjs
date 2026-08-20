@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { parse } from '../out/parser.js';
-import { resolveTagDef, tagsNodeAttrs, mergeNodeAttrs } from '../out/tags.js';
-import { Multimap } from '../out/multimap.js';
+import { parse } from '../out/shared/parser.js';
+import { resolveTagDef, tagsNodeAttrs, mergeNodeAttrs } from '../out/shared/tags.js';
+import { Multimap } from '../out/shared/multimap.js';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), 'rvmark');
 

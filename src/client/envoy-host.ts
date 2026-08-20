@@ -23,10 +23,10 @@
  *     origin (that would hand author code OUR origin and defeat the boundary).
  */
 
-import type { SourceNode } from './parser.js';
-import type { PortableNode } from './portable-node.js';
-import { serializeNode, deserializeNode } from './portable-node.js';
-import { reserveFrom } from './origin.js';
+import type { SourceNode } from '../shared/parser.js';
+import type { PortableNode } from '../shared/portable-node.js';
+import { serializeNode, deserializeNode } from '../shared/portable-node.js';
+import { reserveFrom } from '../envoy/origin.js';
 
 const ENVOY_PATH = '/envoy.html';
 

@@ -2,9 +2,9 @@
 // ordinal that spells the same string.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parse, resolveFile } from '../out/parser.js';
-import { resolveSlugInFile } from '../out/shared.js';
-import { Multimap } from '../out/multimap.js';
+import { parse, resolveFile } from '../out/shared/parser.js';
+import { resolveSlugInFile } from '../out/shared/shared.js';
+import { Multimap } from '../out/shared/multimap.js';
 
 const get = (m, k) => (m instanceof Map ? m.get(k) : m[k]);
 

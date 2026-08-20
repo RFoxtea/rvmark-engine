@@ -13,13 +13,13 @@
  * SourceNode — the markup-level unit, one per source line. Defined in parser.ts.
  */
 
-import type { SourceNode, NodeAttrs } from './parser.js';
-import { parseShowWhen } from './parser.js';
+import type { SourceNode, NodeAttrs } from '../shared/parser.js';
+import { parseShowWhen } from '../shared/parser.js';
 export type { SourceNode };
 export { parseShowWhen };
 import { StateFrame, buildStatePass, prerootFrame } from './state.js';
 import type { StateNode, PassEntry } from './state.js';
-import type { ResolvedAttrs } from './served.js';
+import type { ResolvedAttrs } from '../shared/served.js';
 import { isOrContainsPermalink } from './transclusion.js';
 import { exhibitNotifySelection } from './exhibit.js';
 import { applyEventAttr } from './handler-utils.js';

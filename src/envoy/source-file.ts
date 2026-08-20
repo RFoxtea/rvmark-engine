@@ -13,11 +13,11 @@
  *   SourceFile
  */
 
-import type { SourceNode, Tag, TagDef, Head, FileMeta, NodeAttrs } from './parser.js';
-import { resolveMediaAddress } from './shared.js';
-import { tagsNodeAttrs, mergeNodeAttrs, resolveTagDef } from './tags.js';
-import type { Served } from './served.js';
-import { addressOrigin } from './shared.js';
+import type { SourceNode, Tag, TagDef, Head, FileMeta, NodeAttrs } from '../shared/parser.js';
+import { resolveMediaAddress } from '../shared/shared.js';
+import { tagsNodeAttrs, mergeNodeAttrs, resolveTagDef } from '../shared/tags.js';
+import type { Served } from '../shared/served.js';
+import { addressOrigin } from '../shared/shared.js';
 
 export type { Head, FileMeta };
 

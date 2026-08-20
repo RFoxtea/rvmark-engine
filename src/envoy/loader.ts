@@ -1,42 +1,22 @@
 /**
  * loader.ts
  *
- * File fetching with a per-session cache, and page context for resolving
- * relative paths in cross-file transclusion refs.
+ * File fetching with a per-session cache.
  *
  * Operates in canonical-address space (full URLs). The canonical address of a
  * .rvmark file is the URL its raw source is fetched from — same-origin local
  * files use location.origin; remote files use their declared origin.
  *
  * Exports:
- *   setPageContext(file, basePath)  — called once by init() when a page loads
- *   getPageContext()                — used by exhibit.ts to resolve relative paths
  *   invalidateLoaderCaches(baseUrl)  — drop everything cached for one origin
  *   loadRvmarkFile(address)         — resolve a canonical address → SourceFile | null
  */
 
-import { parse, resolveFile } from './parser.js';
-import type { RawFile, Head, OriginDef } from './parser.js';
-import { Multimap } from './multimap.js';
+import { parse, resolveFile } from '../shared/parser.js';
+import type { RawFile, Head, OriginDef } from '../shared/parser.js';
+import { Multimap } from '../shared/multimap.js';
 import { SourceFile } from './source-file.js';
-import { addressToFile, addressOrigin, RVMARK_SEGMENT } from './shared.js';
-
-// ── Page context ──────────────────────────────────────────────────────────────
-
-export interface PageContext {
-  file:     string;
-  basePath: string;
-}
-
-let _ctx: PageContext = { file: '', basePath: '' };
-
-export function setPageContext(file: string, basePath: string): void {
-  _ctx = { file, basePath };
-}
-
-export function getPageContext(): PageContext {
-  return _ctx;
-}
+import { addressToFile, addressOrigin, RVMARK_SEGMENT } from '../shared/shared.js';
 
 // ── Source acquisition ────────────────────────────────────────────────────────
 // getRvmarkSource is the abstraction step 7 (adapters) extends: today the only

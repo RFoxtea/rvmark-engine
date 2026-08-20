@@ -2,9 +2,9 @@
 // toggle). See rvmark-site/tools/toggle-spans-design-note.md §1c.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseInlineSpanParams } from '../out/markdown.js';
-import { spanIsSelectionDriven } from '../out/listbox-utils.js';
-import { Multimap } from '../out/multimap.js';
+import { parseInlineSpanParams } from '../out/client/markdown.js';
+import { spanIsSelectionDriven } from '../out/client/listbox-utils.js';
+import { Multimap } from '../out/shared/multimap.js';
 
 const nodeAttrs = (...keys) => {
   const m = new Multimap();

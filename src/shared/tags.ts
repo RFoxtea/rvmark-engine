@@ -1,18 +1,26 @@
 /**
  * tags.ts
  *
- * Tag chip resolution and DOM building.
+ * Tag resolution — a tag's name and inline props to the definition it renders
+ * with, plus the node.* overrides its tags contribute.
+ *
+ * Parse-time machinery, and shared for the same reason parser.ts is: inherited.ts
+ * derives a bag against a document's tagDefs, and source-file.ts serves a node
+ * against them, so both sides of the wire resolve tags by the same rules.
+ *
+ * Resolution only. A tag def is read off the document's head — merged down the
+ * inherited chain — which makes *doing* the reading the origin's job; what
+ * crosses to the client is the resolved ServedTag, and drawing it is
+ * client/tag-chips.ts.
  *
  * Exports:
  *   resolveTagDef   — merge tag definition from file tagDefs + inline props
- *   buildTagChips   — build a DocumentFragment of .node-tag chip elements
  *   tagsNodeAttrs   — collect merged node.* attr overrides from all tags on a node
+ *   mergeNodeAttrs  — tag-derived attrs + a node's own, in precedence order
  */
 
 import type { Tag, TagDef, NodeAttrs } from './parser.js';
 import { Multimap } from './multimap.js';
-import { mdInline } from './markdown.js';
-import type { ServedTag } from './served.js';
 
 export function resolveTagDef(name: string, inlineProps: TagDef, sourceTagDefs?: Record<string, TagDef>): TagDef {
   const def = new Multimap();
@@ -42,30 +50,4 @@ export function mergeNodeAttrs(tagAttrs: NodeAttrs, nodeAttrs: NodeAttrs): NodeA
   for (const [k, v] of tagAttrs.allEntries()) out.append(k, v);
   for (const [k, v] of nodeAttrs.allEntries()) out.append(k, v);
   return out;
-}
-
-export function buildTagChips(tags: ServedTag[]): DocumentFragment {
-  const frag = document.createDocumentFragment();
-  for (const { name, def } of tags) {
-    if (def.has('internal')) continue;
-
-    const href  = def.get('href');
-    const label = def.get('label');
-    const color = def.get('color');
-    const tip   = def.get('tip');
-
-    const chip: HTMLElement = href
-      ? Object.assign(document.createElement('a'), { href, className: 'node-tag node-tag--link' })
-      : Object.assign(document.createElement('span'), { className: 'node-tag' });
-
-    chip.innerHTML = mdInline(label ?? name);
-    if (color) chip.style.setProperty('--tag-color', color);
-    if (tip)   chip.title = tip;
-    frag.appendChild(chip);
-    // A real space, not just the chip's margin: the gap has to survive leaving
-    // the page. Without it a copied label reads '[6]The general form...' —
-    // margin is presentation, and the clipboard takes the text.
-    frag.appendChild(document.createTextNode(' '));
-  }
-  return frag;
 }

@@ -15,7 +15,7 @@
 
 import type { ParsedSpanAttrs } from './markdown.js';
 import { BARE_MUTATION_KEY, INTERACTIVE_SPAN_CLASSES } from './markdown.js';
-import type { Multimap } from './multimap.js';
+import type { Multimap } from '../shared/multimap.js';
 import type { RenderNode } from './render-node.js';
 import type { ToggleSet } from './toggle-set.js';
 import { spanIsSelectionDriven } from './listbox-utils.js';

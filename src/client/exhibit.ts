@@ -28,15 +28,15 @@
  */
 
 import { mdToHtml } from './markdown.js';
-import { getPageContext } from './loader.js';
+import { getPageContext } from './page-context.js';
 
-import { addressToHref } from './shared.js';
-import { originFor, addressOf, resolveRefAt } from './origin.js';
+import { addressToHref } from '../shared/shared.js';
+import { originFor, addressOf, resolveRefAt } from '../envoy/origin.js';
 import { parsePass } from './handler-utils.js';
 import { prerootFrame, StateRelay, buildStatePass } from './state.js';
 import { postGuestMode, broadcastPreroot, prerootDeclareMsg, prerootSetMsg, prerootDeleteMsg, wireRelay, registerThemeIframe, unregisterThemeIframe } from './iframe-host.js';
 import { RenderNode } from './render-node.js';
-import type { NodeAttrs, SourceNode } from './parser.js';
+import type { NodeAttrs, SourceNode } from '../shared/parser.js';
 
 export interface ExhibitConfig {
   rawRef:            string;
@@ -375,7 +375,7 @@ function exhibitHead(basePath: string): string {
   <link rel="stylesheet" href="${basePath}styles.css">
   <!-- No KaTeX here either — exhibits run the engine, so ensureKatex() fetches
        it on demand if the exhibited content actually contains math. -->
-  <script type="module" src="${basePath}_engine/iframe-guest.js"><\/script>`;
+  <script type="module" src="${basePath}_engine/client/iframe-guest.js"><\/script>`;
 }
 
 // ── Strategy: rvmark tree ─────────────────────────────────────────────────────

@@ -236,7 +236,9 @@ export function parseTranscludeEntry(entry: string): { ref: string; wholeNode: b
 
 // ── Slug resolution ────────────────────────────────────────────────────────────
 
-export function parseCompoundSlug(slug: string): { anchor: string; path: number[] } {
+// Internal to resolveSlugInFile. Stage 1 took its client callers away — a
+// compound slug is a key the origin answers now, not a path the client walks.
+function parseCompoundSlug(slug: string): { anchor: string; path: number[] } {
   const parts = slug.split('.');
   let anchorEnd = 0;
   // A path segment is a position only when it is ENTIRELY digits. parseInt

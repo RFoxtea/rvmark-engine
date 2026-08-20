@@ -11,18 +11,18 @@
  *   treeNavKeydown     — handle positional navigation keys in a handler keydown listener
  */
 
-import { addressToHref } from './shared.js';
+import { addressToHref } from '../shared/shared.js';
 import { scrollRowIntoMiddle } from './scroll.js';
-import type { SourceNode } from './parser.js';
-import { parseStateEntries } from './parser.js';
-import { Multimap } from './multimap.js';
-import { bagOf } from './inherited.js';
-import type { ResolvedAttrs } from './served.js';
-import { standIn } from './served.js';
+import type { SourceNode } from '../shared/parser.js';
+import { parseStateEntries } from '../shared/parser.js';
+import { Multimap } from '../shared/multimap.js';
+import { bagOf } from '../shared/inherited.js';
+import type { ResolvedAttrs } from '../shared/served.js';
+import { standIn } from '../shared/served.js';
 import { RenderNode } from './render-node.js';
 import { resolveEffectiveChildren, resolveTransclusionConfig } from './transclusion.js';
-import { resolveRefOn } from './origin.js';
-import { parseTranscludeEntry } from './shared.js';
+import { resolveRefOn } from '../envoy/origin.js';
+import { parseTranscludeEntry } from '../shared/shared.js';
 import { TRANSCLUDE_DEADLINE_MS } from './constants.js';
 import type { PassEntry, PassMode, StateNode } from './state.js';
 import { exhibitOpenFromNode } from './exhibit.js';

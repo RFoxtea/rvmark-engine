@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { parse, resolveFile } from '../out/parser.js';
-import { Multimap } from '../out/multimap.js';
+import { parse, resolveFile } from '../out/shared/parser.js';
+import { Multimap } from '../out/shared/multimap.js';
 
 const TESTS = dirname(fileURLToPath(import.meta.url));
 const SRC = join(TESTS, 'rvmark');

@@ -21,8 +21,8 @@
  *   stringifyNode(node, depth) → a single node's lines (used recursively)
  */
 
-import type { RawFile, RawNode, Head, TagDef } from './parser.js';
-import type { Multimap } from './multimap.js';
+import type { RawFile, RawNode, Head, TagDef } from '../shared/parser.js';
+import type { Multimap } from '../shared/multimap.js';
 
 const INDENT = 2;
 

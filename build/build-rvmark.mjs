@@ -26,7 +26,7 @@ import { readFileSync, writeFileSync, readdirSync, mkdirSync, cpSync, rmSync, ex
 import { join, dirname, posix } from 'path';
 import { createRequire } from 'module';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { fileToUrlStem, relativeUrl, resolveAddress, resolveMediaAddress, addressToFile, addressToSlug, addressToHref, parseTranscludeEntry } from '../out/shared.js';
+import { fileToUrlStem, relativeUrl, resolveAddress, resolveMediaAddress, addressToFile, addressToSlug, addressToHref, parseTranscludeEntry } from '../out/shared/shared.js';
 
 // Engine package root — this file lives at <ENGINE_ROOT>/build/build-rvmark.mjs.
 const ENGINE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -61,29 +61,29 @@ if (typeof globalThis.DOMPurify === 'undefined') {
 // ── Import parser and type modules ────────────────────────────────────────────
 // Dynamic import ensures globalThis stubs are in place before module init runs.
 
-const { parse, resolveFile } = await import('../out/parser.js');
-const { Multimap } = await import('../out/multimap.js');
+const { parse, resolveFile } = await import('../out/shared/parser.js');
+const { Multimap } = await import('../out/shared/multimap.js');
 
-const { factoryGet } = await import('../out/render-node.js');
-const { SourceFile } = await import('../out/source-file.js');
+const { factoryGet } = await import('../out/client/render-node.js');
+const { SourceFile } = await import('../out/envoy/source-file.js');
 
 // Import type files for their side effects (they call RvmarkRegistry.register).
 // text.js also exports the static bullet helpers — bullets belong to the types
 // that draw them (text, and the tr/table family via tr-base), not to this
 // builder, which only asks for them and never knows how they are made.
-const { staticRenderBullet, staticBulletProps } = await import('../out/types/text.js');
-const { staticMdInline, staticMdToHtml } = await import('../out/markdown.js');
-await import('../out/types/block.js');
-await import('../out/types/video.js');
-await import('../out/types/iframe.js');
-await import('../out/types/image.js');
-await import('../out/types/tr.js');
-await import('../out/types/table.js');
+const { staticRenderBullet, staticBulletProps } = await import('../out/client/types/text.js');
+const { staticMdInline, staticMdToHtml } = await import('../out/client/markdown.js');
+await import('../out/client/types/block.js');
+await import('../out/client/types/video.js');
+await import('../out/client/types/iframe.js');
+await import('../out/client/types/image.js');
+await import('../out/client/types/tr.js');
+await import('../out/client/types/table.js');
 // parseCells is the single definition of how a `a | b | c` label splits, shared
 // with the handlers so the static column count can never drift from theirs.
-const { parseCells } = await import('../out/types/tr-base.js');
-await import('../out/types/hr.js');
-await import('../out/types/gap.js');
+const { parseCells } = await import('../out/client/types/tr-base.js');
+await import('../out/client/types/hr.js');
+await import('../out/client/types/gap.js');
 // exhibit.js is not needed at build time (no static rendering) — skip it.
 
 // ── Custom-type / envoy emission ──────────────────────────────────────────────
@@ -129,7 +129,7 @@ async function emitEnvoy(customTypesDir, DIST_DIR) {
 <head><meta charset="utf-8"><title>rvmark envoy</title></head>
 <body>
   <script type="module">
-    import { registerTransform } from './_engine/envoy-guest.js';
+    import { registerTransform } from './_engine/envoy/envoy-guest.js';
     ${imports}
     ${regs}
   </script>
@@ -931,12 +931,16 @@ for (const [relPath, sourceFile] of sourceFiles) {
   mkdirSync(ENGINE_DIR, { recursive: true });
   mkdirSync(VENDOR_DIR, { recursive: true });
 
-  // Engine-authored JS bundles → _engine/
-  const engineJs = readdirSync(enginePath('out')).filter(f => f.endsWith('.js'));
-  for (const f of engineJs) {
-    cpSync(enginePath('out', f), join(ENGINE_DIR, f));
+  // Engine-authored JS bundles → _engine/, mirroring out/'s tier directories
+  // (shared/, envoy/, client/). The tree is copied rather than flattened
+  // because the modules import each other by relative specifier: flattening
+  // would break every '../shared/x.js' the moment a file left its directory.
+  // build/ is deliberately not copied — server-side utilities, never served.
+  for (const tier of ['shared', 'envoy', 'client']) {
+    if (existsSync(enginePath('out', tier))) {
+      cpSync(enginePath('out', tier), join(ENGINE_DIR, tier), { recursive: true });
+    }
   }
-  if (existsSync(enginePath('out/types'))) cpSync(enginePath('out/types'), join(ENGINE_DIR, 'types'), { recursive: true });
 
   // Single stylesheet: engine styles.css (type CSS is merged into it) + user theme
   // (appended so theme wins) → dist root.

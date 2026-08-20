@@ -10,9 +10,9 @@
  *   isOrContainsPermalink      — walk parsed tree to check if targetSlug is node or descendant
  */
 
-import { parseTranscludeEntry } from './shared.js';
-import { resolveRefOn } from './origin.js';
-import type { SourceNode, NodeAttrs } from './parser.js';
+import { parseTranscludeEntry } from '../shared/shared.js';
+import { resolveRefOn } from '../envoy/origin.js';
+import type { SourceNode, NodeAttrs } from '../shared/parser.js';
 
 interface TransclusionConfig {
   embedVal:       string | null;

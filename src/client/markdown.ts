@@ -15,8 +15,8 @@
  *   staticMdInline(text)  — build-time inline markdown → HTML string
  */
 
-import { splitSegments, STATE_EVENT_ATTRS } from './parser.js';
-import { Multimap } from './multimap.js';
+import { splitSegments, STATE_EVENT_ATTRS } from '../shared/parser.js';
+import { Multimap } from '../shared/multimap.js';
 import { KATEX_DEADLINE_MS } from './constants.js';
 
 // marked is loaded as a classic <script> before this module at runtime, and

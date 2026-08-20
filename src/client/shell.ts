@@ -9,8 +9,8 @@ import { mdInline } from './markdown.js';
 import { keymapOpen } from './keymap.js';
 import { prerootSet, prerootDelete } from './exhibit.js';
 import { prerootFrame } from './state.js';
-import { addressToHref, addressOrigin, RVMARK_SEGMENT } from './shared.js';
-import type { Multimap } from './multimap.js';
+import { addressToHref, addressOrigin, RVMARK_SEGMENT } from '../shared/shared.js';
+import type { Multimap } from '../shared/multimap.js';
 import type { RenderNode } from './render-node.js';
 
 let currentPageMeta: Multimap | null = null;

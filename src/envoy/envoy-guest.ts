@@ -32,7 +32,7 @@
  * host's sourceFile.
  */
 
-import type { PortableNode } from './portable-node.js';
+import type { PortableNode } from '../shared/portable-node.js';
 
 export type Transform = (node: PortableNode) => PortableNode | Promise<PortableNode>;
 

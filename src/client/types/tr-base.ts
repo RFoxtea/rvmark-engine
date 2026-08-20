@@ -9,7 +9,7 @@ import type { RenderNode, SourceNode } from '../render-node.js';
 import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyBulletAlt, applyListItemProps, wireBulletActions } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
 import { wireSpanToggles } from '../span-toggle.js';
-import type { ResolvedAttrs } from '../served.js';
+import type { ResolvedAttrs } from '../../shared/served.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { mdInlineWithSpansContinued, clipboardHtml } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';

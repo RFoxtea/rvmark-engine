@@ -13,7 +13,7 @@
  */
 
 import { createListboxNav } from './listbox.js';
-import { Multimap } from './multimap.js';
+import { Multimap } from '../shared/multimap.js';
 import type { ListboxNav } from './listbox.js';
 import type { ParsedSpanAttrs } from './markdown.js';
 import { BARE_MUTATION_KEY } from './markdown.js';

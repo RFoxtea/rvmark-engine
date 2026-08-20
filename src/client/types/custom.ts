@@ -25,10 +25,10 @@
 
 import type { TypeHandler, RenderNode, SourceNode } from '../render-node.js';
 import { factoryGet } from '../render-node.js';
-import { Multimap } from '../multimap.js';
-import { bagOf } from '../inherited.js';
-import { addressOrigin } from '../shared.js';
-import { standIn } from '../served.js';
+import { Multimap } from '../../shared/multimap.js';
+import { bagOf } from '../../shared/inherited.js';
+import { addressOrigin } from '../../shared/shared.js';
+import { standIn } from '../../shared/served.js';
 import { envoyFor } from '../envoy-host.js';
 import { loadingHandler } from './blastocyte.js';
 

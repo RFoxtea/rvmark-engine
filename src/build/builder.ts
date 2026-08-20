@@ -24,9 +24,9 @@
  *   span(text, spec)           → an inline `[text]{…}` span string for a label
  */
 
-import { Multimap } from './multimap.js';
-import { assignOrdinals } from './parser.js';
-import type { RawNode, RawFile, Head, Tag, TagDef, OriginDef } from './parser.js';
+import { Multimap } from '../shared/multimap.js';
+import { assignOrdinals } from '../shared/parser.js';
+import type { RawNode, RawFile, Head, Tag, TagDef, OriginDef } from '../shared/parser.js';
 
 // ── attrs / tags input coercion ─────────────────────────────────────────────
 

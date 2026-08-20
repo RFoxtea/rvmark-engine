@@ -15,7 +15,7 @@ import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import { wireSpanVisibility } from '../span-visibility.js';
 import type { ListboxNav } from '../listbox.js';
-import { buildTagChips } from '../tags.js';
+import { buildTagChips } from '../tag-chips.js';
 import { scrollRowIntoMiddle } from '../scroll.js';
 import { mdInlineWithSpans, staticMdInline, ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';

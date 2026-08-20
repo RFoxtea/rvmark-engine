@@ -3,7 +3,7 @@
 // multiple-transclusion can mix the two.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTranscludeEntry } from '../out/shared.js';
+import { parseTranscludeEntry } from '../out/shared/shared.js';
 
 test('a bare ref is not whole-node', () => {
   assert.deepEqual(parseTranscludeEntry('./book-1#p-3'), {

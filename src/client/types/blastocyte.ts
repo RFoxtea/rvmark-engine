@@ -1,10 +1,10 @@
 import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryGet, factoryRegister } from '../type-registry.js';
 import { resolveTransclusionConfig } from '../transclusion.js';
-import { resolveRefOn } from '../origin.js';
+import { resolveRefOn } from '../../envoy/origin.js';
 import { buildStatePass } from '../state.js';
 import { parsePass, treeNavKeydown, makeErrorNode } from '../handler-utils.js';
-import { Multimap } from '../multimap.js';
+import { Multimap } from '../../shared/multimap.js';
 import { createCustomTypeHandler } from './custom.js';
 
 function differentiate(rn: RenderNode): TypeHandler {

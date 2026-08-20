@@ -58,11 +58,11 @@
  * Clearing the query text is what hides the widget again.
  */
 
-import type { SourceNode } from './parser.js';
+import type { SourceNode } from '../shared/parser.js';
 import { isSearchable, RenderNode } from './render-node.js';
 import { scrollRowIntoMiddle } from './scroll.js';
 import { mountSearchRoot } from './shell.js';
-import { nodeTextMatches, originFor } from './origin.js';
+import { nodeTextMatches, originFor } from '../envoy/origin.js';
 
 interface SearchMatch {
   node:    SourceNode;

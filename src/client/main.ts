@@ -12,10 +12,10 @@
 
 import { prerootFrame } from './state.js';
 import { buildRenderNode, RenderNode, withRevealDeadline } from './render-node.js';
-import { originFor, addressOf } from './origin.js';
-import type { FileMeta } from './parser.js';
-import { RVMARK_SEGMENT } from './shared.js';
-import { setPageContext } from './loader.js';
+import { originFor, addressOf } from '../envoy/origin.js';
+import type { FileMeta } from '../shared/parser.js';
+import { RVMARK_SEGMENT } from '../shared/shared.js';
+import { setPageContext } from './page-context.js';
 import { setMeta, setFooter, setViewTarget, clearTree, showError } from './shell.js';
 import { initSearch } from './search.js';
 import { keymapInstallShortcut } from './keymap.js';
@@ -33,7 +33,7 @@ import './types/table.js';
 import './types/hr.js';
 import './types/gap.js';
 
-import type { RvmarkPageContext } from './shared.js';
+import type { RvmarkPageContext } from '../shared/shared.js';
 
 declare global {
   interface Window {

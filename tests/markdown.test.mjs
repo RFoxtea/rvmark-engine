@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseInlineSpanParams } from '../out/markdown.js';
-import { parseStateEntries } from '../out/parser.js';
+import { parseInlineSpanParams } from '../out/client/markdown.js';
+import { parseStateEntries } from '../out/shared/parser.js';
 
 // A span's attr block parses to a Multimap, like every other rvmark attr
 // collection. State mutations are stored raw under their event key and parsed at

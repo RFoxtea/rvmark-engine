@@ -17,12 +17,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { parse, resolveFile } from '../out/parser.js';
-import { Multimap } from '../out/multimap.js';
-import { seedBag, deriveBag, emptyBag, bagOf, bagToWire, bagFromWire, inheritedProps } from '../out/inherited.js';
-import { serializeNode, deserializeNode } from '../out/portable-node.js';
-import { exhibitConfigOf } from '../out/exhibit.js';
-import { StateFrame, buildStatePass } from '../out/state.js';
+import { parse, resolveFile } from '../out/shared/parser.js';
+import { Multimap } from '../out/shared/multimap.js';
+import { seedBag, deriveBag, emptyBag, bagOf, bagToWire, bagFromWire, inheritedProps } from '../out/shared/inherited.js';
+import { serializeNode, deserializeNode } from '../out/shared/portable-node.js';
+import { exhibitConfigOf } from '../out/client/exhibit.js';
+import { StateFrame, buildStatePass } from '../out/client/state.js';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), 'rvmark');
 const EMPTY_HEAD = { meta: new Multimap(), tagDefs: {}, origins: {} };

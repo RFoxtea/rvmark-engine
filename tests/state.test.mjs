@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { StateFrame, StatePass, buildStatePass } from '../out/state.js';
-import { parsePass } from '../out/handler-utils.js';
-import { parseStateEntries, parseShowWhen, parseAttrBlock } from '../out/parser.js';
+import { StateFrame, StatePass, buildStatePass } from '../out/client/state.js';
+import { parsePass } from '../out/client/handler-utils.js';
+import { parseStateEntries, parseShowWhen, parseAttrBlock } from '../out/shared/parser.js';
 
 // ── StateFrame basics ──────────────────────────────────────────────────────────
 

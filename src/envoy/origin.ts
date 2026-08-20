@@ -29,14 +29,14 @@
  * the wire is cut underneath them.
  */
 
-import type { SourceNode, NodeAttrs, FileMeta, OriginDef } from './parser.js';
+import type { SourceNode, NodeAttrs, FileMeta, OriginDef } from '../shared/parser.js';
 import {
   resolveSlugInFile, resolveAddress, resolveMediaAddress, addressToSlug, addressOrigin,
   parseTranscludeEntry, RVMARK_SEGMENT,
-} from './shared.js';
+} from '../shared/shared.js';
 import { loadRvmarkFile, invalidateLoaderCaches } from './loader.js';
 import type { SourceFile } from './source-file.js';
-import { tagText, type Reserve } from './served.js';
+import { tagText, type Reserve } from '../shared/served.js';
 
 /** Where an origin's content is served from, plus one of its keys. */
 export interface Address {
