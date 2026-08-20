@@ -109,7 +109,12 @@ export function resolveAddress(ref: string, sourceFileAddress: string): string |
   }
 
   let resolved = resolveLocalPath(pathPart, sourceFileAddress);
-  if (!resolved.endsWith('.rvmark')) resolved += '.rvmark';
+  // A trailing slash names a directory, so it takes that directory's index
+  // rather than a file called '.rvmark'. Same rule buildSigilAddress applies
+  // (origin.ts); without it the '.rvmark' request 404s and only the
+  // <file>/index.rvmark fallback in loadRvmarkFile makes the ref work.
+  if (resolved.endsWith('/')) resolved += 'index.rvmark';
+  else if (!resolved.endsWith('.rvmark')) resolved += '.rvmark';
   return resolved + fragment;
 }
 
