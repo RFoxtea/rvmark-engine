@@ -233,6 +233,29 @@ export function buildRenderNode(
   return rn;
 }
 
+// ── The reveal deadline ───────────────────────────────────────────────────────
+// One deadline shared by every readiness hold taken during a single reveal.
+// An {open} root holds until its children mount, and each of those children may
+// itself be {open} and hold in turn — so a per-node timer would let a deep chain
+// stack one grace period per level and hide the page for as long as the tree is
+// deep. Arming once, at the top, bounds the whole subtree by the same clock:
+// whatever has painted by then is shown, and the stragglers keep loading in place.
+let _revealDeadline: Promise<void> | null = null;
+
+/** Arm the shared deadline for one reveal, and disarm it once that reveal ends. */
+export async function withRevealDeadline<T>(fn: () => Promise<T>): Promise<T> {
+  const prev = _revealDeadline;
+  _revealDeadline = new Promise<void>(r => setTimeout(r, MOUNT_SETTLE_MS));
+  try { return await fn(); }
+  finally { _revealDeadline = prev; }
+}
+
+function revealDeadline(): Promise<void> {
+  // Outside a reveal — a click-driven expand, a listbox swap — each hold gets
+  // its own grace period, which is the behaviour those paths already had.
+  return _revealDeadline ?? new Promise<void>(r => setTimeout(r, MOUNT_SETTLE_MS));
+}
+
 // ── RenderNode ────────────────────────────────────────────────────────────────
 let _rnIndex = 0;
 
@@ -308,7 +331,10 @@ export class RenderNode {
   private _attrs:            ResolvedAttrs;
   private _slots:            ChildSlot[] = [];
   private _pendingSlots:     ChildSlot[] | null = null;
-  private _pendingChildren:  Array<[SourceNode[], string | null, PassEntry[] | undefined]> = [];
+  private _pendingChildren:  Array<{
+    args: [SourceNode[], string | null, PassEntry[] | undefined];
+    settle: (p: Promise<void>) => void;
+  }> = [];
 
   get attrs(): ResolvedAttrs {
     return (this._handler?.attrs ?? this._attrs);
@@ -316,8 +342,29 @@ export class RenderNode {
 
   whenReady: Promise<void>;
   private _resolveReady!: () => void;
+  // Promises that must settle before this node counts as ready, on top of the
+  // handler saying its piece. An {open} node registers its expansion here, so
+  // "ready" means the open subtree is painted, not just this one row.
+  private _readyHolds: Promise<unknown>[] = [];
+  private _handlerReady = false;
 
-  ready(): void { this._resolveReady(); }
+  /** Hold readiness until `p` settles. Every hold is registered before ready()
+   *  can run: openIfRequested fires inside the handler constructor, and
+   *  attachHandler calls ready() only after it returns. */
+  holdReady(p: Promise<unknown>): void {
+    if (this._handlerReady) return;
+    this._readyHolds.push(p);
+  }
+
+  ready(): void {
+    if (this._handlerReady) return;
+    this._handlerReady = true;
+    if (!this._readyHolds.length) { this._resolveReady(); return; }
+    // Raced against the shared reveal deadline, not a fresh per-level timer: a
+    // chain of {open} ancestors must not stack one grace period per level.
+    void Promise.race([Promise.all(this._readyHolds), revealDeadline()])
+      .then(() => this._resolveReady());
+  }
 
   constructor(node: SourceNode, parentState: StateNode = prerootFrame) {
     this.index      = _rnIndex++;
@@ -366,9 +413,10 @@ export class RenderNode {
     content.setAttribute('aria-posinset', String(this.posInSet));
     this.li.insertBefore(content, this.children);
     if (this.toggleable && !this.expanded) content.setAttribute('aria-expanded', 'false');
-    if (!handler.managesReady) this.ready();
-    for (const args of this._pendingChildren) this.setChildren(...args as Parameters<RenderNode['setChildren']>);
+    const pending = this._pendingChildren;
     this._pendingChildren = [];
+    for (const { args, settle } of pending) settle(this.setChildren(...args));
+    if (!handler.managesReady) this.ready();
     return this;
   }
 
@@ -485,14 +533,25 @@ export class RenderNode {
     focusSlug:           string | null = null,
     passChildrenEntries: PassEntry[] | undefined = undefined,
     delay = true,
-  ): void {
-    if (!this._handler) { this._pendingChildren.push([nodes, focusSlug, passChildrenEntries]); return; }
+  ): Promise<void> {
+    // Called from inside the handler's constructor, before attachHandler ran —
+    // {open} takes this path. The promise returned here must not resolve until
+    // the replayed call below actually mounts, or a readiness hold taken on it
+    // settles instantly and the subtree pops in after the reveal.
+    if (!this._handler) {
+      return new Promise<void>((resolve, reject) => {
+        this._pendingChildren.push({
+          args: [nodes, focusSlug, passChildrenEntries],
+          settle: p => p.then(resolve, reject),
+        });
+      });
+    }
     if (!nodes.length) {
       this._destroyExistingChildren();
       if (this.toggleable) this.expanded = false;
       else this._handler.content.removeAttribute('aria-expanded');
       this._handler.onChildrenCleared?.();
-      return;
+      return Promise.resolve();
     }
 
     const ul = document.createElement('ul') as HTMLUListElement;
@@ -565,12 +624,11 @@ export class RenderNode {
 
     if (!delay) {
       mount();
-      return;
+      return Promise.resolve();
     }
 
-    const timeout  = new Promise<void>(resolve => setTimeout(resolve, MOUNT_SETTLE_MS));
     const allReady = Promise.all(initialRns.map(rn => rn.whenReady));
-    Promise.race([allReady, timeout]).then(mount);
+    return Promise.race([allReady, revealDeadline()]).then(mount);
   }
 
   hasLiveChildren(): boolean {

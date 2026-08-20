@@ -130,9 +130,9 @@ export async function expandNode(rn: RenderNode, transcludeRef?: string): Promis
         allNodes.push(makeErrorNode(sourceNode, o.rawRef, o.timedOut ? 'timeout' : 'error'));
       }
     }
-    rn.setChildren(allNodes, null, passChildrenEntries);
+    await rn.setChildren(allNodes, null, passChildrenEntries);
   } else if (sourceNode.children.length) {
-    rn.setChildren(sourceNode.children as SourceNode[], null, passChildrenEntries);
+    await rn.setChildren(sourceNode.children as SourceNode[], null, passChildrenEntries);
   }
 }
 

@@ -168,7 +168,7 @@ export class ToggleSet {
    *  on-expand: the attribute is general (parser.ts) and documented as firing
    *  when the node expands, so these types silently dropping it was a bug. */
   mountOnce(): void {
-    void this.open(false);
+    this.rn.holdReady(this.open(false));
   }
 
   close(): void {
@@ -184,9 +184,17 @@ export class ToggleSet {
     else this.close();
   }
 
-  /** Open on build when `{open}` or `{open: always}` asked for it. */
+  /** Open on build when `{open}` or `{open: always}` asked for it.
+   *
+   *  The expansion is registered as a readiness hold, not merely fired off: a
+   *  node asked to be open is not finished painting until its children are
+   *  there, and revealing it before then shows a bare row that pops its
+   *  subtree in a frame later. The hold is bounded by the shared reveal
+   *  deadline, so a slow subtree still shows its parent rather than hanging
+   *  the page, and finishes loading in place. */
   openIfRequested(paramOpen: boolean, scroll = true): void {
-    if (this.expandable && (paramOpen || this.alwaysOpen)) void this.open(scroll);
+    if (!this.expandable || !(paramOpen || this.alwaysOpen)) return;
+    this.rn.holdReady(this.open(scroll));
   }
 
   /** Track whether the node still has children to show, flipping the `leaf`

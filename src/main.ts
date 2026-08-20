@@ -11,7 +11,7 @@
  */
 
 import { prerootFrame } from './state.js';
-import { buildRenderNode, RenderNode } from './render-node.js';
+import { buildRenderNode, RenderNode, withRevealDeadline } from './render-node.js';
 import { originFor, addressOf } from './origin.js';
 import type { FileMeta } from './parser.js';
 import { RVMARK_SEGMENT } from './shared.js';
@@ -20,7 +20,6 @@ import { setMeta, setFooter, setViewTarget, clearTree, showError } from './shell
 import { initSearch } from './search.js';
 import { keymapInstallShortcut } from './keymap.js';
 import { initPrerootListeners } from './iframe-guest.js';
-import { MOUNT_SETTLE_MS } from './constants.js';
 import { scrollBehavior } from './scroll.js';
 // Side-effect imports: register all built-in types via factoryRegister
 import './types/text.js';
@@ -78,10 +77,17 @@ async function renderRoot(
   const resolvedFocusSlug = focusSlug ? (focusTarget?.permalinkId || focusSlug) : null;
 
   const root = clearTree();
-  const rootRn = buildRenderNode(node, resolvedFocusSlug);
-  root.appendChild(rootRn.li);
-  rootRn.fireConnected();
-  await Promise.race([rootRn.whenReady, new Promise<void>(r => setTimeout(r, MOUNT_SETTLE_MS))]);
+  // One deadline for the whole reveal. whenReady now covers the {open}
+  // subtree, not just the root row — a root asked to be open holds until its
+  // children are mounted, and those children hold in turn — so the wait ends
+  // when the open tree is painted or the shared deadline fires, whichever comes
+  // first. Whatever missed the deadline keeps loading in place.
+  await withRevealDeadline(async () => {
+    const rn = buildRenderNode(node, resolvedFocusSlug);
+    root.appendChild(rn.li);
+    rn.fireConnected();
+    await rn.whenReady;
+  });
   const firstContent = root.querySelector('.node-content') as HTMLElement | null;
   if (firstContent && !resolvedFocusSlug) {
     const firstRn: RenderNode | undefined = (firstContent.closest<HTMLElement>('.node') as any)?._renderNode;
