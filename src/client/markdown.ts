@@ -29,10 +29,7 @@ const marked = (globalThis as any).marked as {
   Marked: new () => {
     use(opts: Record<string, unknown>): void;
     parse(src: string): string;
-    // `async: true` means "await walkTokens, then parse" — it does NOT make
-    // renderers awaitable, which is why an `img:` ref resolves during the walk.
     parseInline(src: string): string;
-    parseInline(src: string, options: { async: true }): Promise<string>;
   };
 };
 
@@ -172,23 +169,16 @@ let _spanOrdinalWalk = 0;
 /**
  * How a span's `img:` ref becomes a URL, for the duration of one parse.
  *
- * It is awaited in walkTokens rather than called from the renderer, because
- * marked's renderers are synchronous by contract — `async: true` means "await
- * walkTokens before parsing", and a promise returned from a renderer is
- * concatenated as `[object Promise]`. walkTokens is the one stage that both
- * sees a span's attrs and is allowed to wait, so the resolved URL is written
- * onto the token there and the renderer reads it as a field.
+ * Synchronous, because marked's renderers are synchronous by contract: a
+ * promise returned from a renderer is concatenated as `[object Promise]`.
+ * A caller that must reach the origin resolves its refs BEFORE parsing and
+ * passes the answers in — see `mdInlineWithSpansResolved`. Awaiting inside the
+ * parse instead is what made two labels rendering in the same tick clobber
+ * each other's span map.
  *
- * Null in a sync parse (the static build), where the ref renders as authored.
+ * Null in a parse that does not resolve, where the ref renders as authored.
  */
-let _currentUrlResolver: ((url: string) => Promise<string | null>) | null = null;
-
-/**
- * The builder's synchronous counterpart. It resolves in the renderer rather
- * than the walk, because in Node the origin is in-process and there is nothing
- * to await — see `staticMdInlineResolved`.
- */
-let _syncUrlResolver: ((url: string) => string | null) | null = null;
+let _urlResolver: ((url: string) => string | null) | null = null;
 
 // ── Factory: build a configured Marked instance ────────────────────────────────
 
@@ -216,7 +206,7 @@ function makeMarked(opts: MarkedOpts) {
       }),
       rvmarkSpanExtension,
     ],
-    async walkTokens(token: any) {
+    walkTokens(token: any) {
       if (token.type !== 'rvmarkSpan' || !_currentSpanMap) return;
       const attrs = parseInlineSpanParams(token.rawParams);
       const rawIndex = attrs.get('index');
@@ -230,10 +220,6 @@ function makeMarked(opts: MarkedOpts) {
       }
       token._rvmarkOrdinal = ordinal;
       _currentSpanMap.set(ordinal, attrs);
-
-      // The one await in the whole parse. See `_currentUrlResolver`.
-      const img = attrs.get('img');
-      if (img && _currentUrlResolver) token._rvmarkImgSrc = await _currentUrlResolver(img);
     },
     renderer: {
       link({ href, tokens }: { href: string | null; tokens: unknown[] }) {
@@ -380,11 +366,10 @@ function renderInlineSpan(token: any, label: string): string {
   const dataStr   = dataAttrs.length   ? ' ' + dataAttrs.join(' ')    : '';
 
   const img    = attrs.get('img');
-  // Resolved during the walk, never here — a renderer cannot await. Falls back
-  // to the authored ref when nothing resolved it (a sync parse, or an origin
-  // that will not serve it), which is what it rendered as before it resolved
-  // at all.
-  const imgSrc = img ? (token._rvmarkImgSrc ?? _syncUrlResolver?.(img) ?? img) : null;
+  // Falls back to the authored ref when nothing resolved it (a parse with no
+  // resolver, or an origin that will not serve it), which is what it rendered
+  // as before it resolved at all.
+  const imgSrc = img ? (_urlResolver?.(img) ?? img) : null;
   let content = imgSrc
     ? `<img src="${mdEscHtml(imgSrc)}" alt="${mdEscHtml(label)}" loading="lazy" draggable="false">`
     : label;
@@ -550,41 +535,18 @@ function getRuntimeMarked() {
 function withSpanMap<T>(
   fn: () => T,
   startOrdinal = 0,
+  resolveUrl: ((url: string) => string | null) | null = null,
 ): { result: T; spanMap: Map<number, ParsedSpanAttrs>; endOrdinal: number } {
   const spanMap = new Map<number, ParsedSpanAttrs>();
-  _currentSpanMap     = spanMap;
-  _spanOrdinalWalk    = startOrdinal;
-  _currentUrlResolver = null;
-  const result = fn();
-  const endOrdinal = _spanOrdinalWalk;
-  _currentSpanMap = null;
-  return { result, spanMap, endOrdinal };
-}
-
-/**
- * `withSpanMap` for a parse that resolves refs, and therefore awaits.
- *
- * The module-level state this and `withSpanMap` set is only safe because a
- * parse is never interleaved with another: marked awaits every walkTokens
- * before it renders, and nothing else touches these between the call and its
- * result. An await inside walkTokens does not change that — it suspends the
- * parse, not the caller's hold on the state.
- */
-async function withSpanMapAsync<T>(
-  fn: () => Promise<T>,
-  resolveUrl: (url: string) => Promise<string | null>,
-  startOrdinal = 0,
-): Promise<{ result: T; spanMap: Map<number, ParsedSpanAttrs>; endOrdinal: number }> {
-  const spanMap = new Map<number, ParsedSpanAttrs>();
-  _currentSpanMap     = spanMap;
-  _spanOrdinalWalk    = startOrdinal;
-  _currentUrlResolver = resolveUrl;
+  _currentSpanMap  = spanMap;
+  _spanOrdinalWalk = startOrdinal;
+  _urlResolver     = resolveUrl;
   try {
-    const result = await fn();
+    const result = fn();
     return { result, spanMap, endOrdinal: _spanOrdinalWalk };
   } finally {
-    _currentSpanMap     = null;
-    _currentUrlResolver = null;
+    _currentSpanMap = null;
+    _urlResolver    = null;
   }
 }
 
@@ -616,20 +578,75 @@ export function mdInlineWithSpans(
 }
 
 /**
- * `mdInlineWithSpans` for a label whose `img:` refs should resolve.
+ * The span attrs whose value is a resource ref rather than a literal — the
+ * things an origin resolves. One list, because a parse that resolves refs and
+ * a caller that collects them must agree on what a ref is; adding a kind is
+ * adding a line here.
+ */
+export const SPAN_RESOURCE_KEYS = ['img'] as const;
+
+/** Every resource ref the spans of one parse carry, deduplicated. */
+export function collectSpanResourceRefs(spanMap: Map<number, ParsedSpanAttrs>): string[] {
+  const refs = new Set<string>();
+  for (const attrs of spanMap.values()) {
+    for (const key of SPAN_RESOURCE_KEYS) {
+      for (const v of attrs.getAll(key)) if (v) refs.add(v);
+    }
+  }
+  return [...refs];
+}
+
+/**
+ * `mdInlineWithSpans` for a label whose resource refs should resolve.
  *
- * Async for one reason: `resolveUrl` reaches the origin. The parse itself is
- * unchanged — marked awaits the walk, then renders synchronously as ever.
+ * Two synchronous parses with the awaiting in between, rather than one parse
+ * that awaits: marked's renderers are synchronous by contract, and the parser's
+ * module state cannot survive an await — two labels rendering in the same tick
+ * would clobber each other's span map, which is what ordinal 0 on every span
+ * meant. The two passes cannot disagree about what to resolve: a ref is an
+ * opaque string in a span's attrs, and what comes back only ever lands in an
+ * attribute of the emitted element, never in what gets tokenized.
+ *
+ * A ref the origin will not serve stays as authored and fails like any dead
+ * URL in HTML — per ref, so one dead ref does not unresolve its neighbours.
  */
 export async function mdInlineWithSpansResolved(
   text: string,
   resolveUrl: (url: string) => Promise<string | null>,
 ): Promise<{ html: string; spanMap: Map<number, ParsedSpanAttrs> }> {
-  const { result, spanMap } = await withSpanMapAsync(
-    async () => sanitizeMdInline(await getRuntimeMarked().parseInline(text, { async: true })),
-    resolveUrl,
+  const refs = collectSpanResourceRefs(mdInlineWithSpans(text).spanMap);
+  const resolved = await resolveRefs(refs, resolveUrl);
+  return mdInlineWithSpansUsing(text, resolved);
+}
+
+/** The resolved half of the pair, for a caller that already holds the answers. */
+export function mdInlineWithSpansUsing(
+  text: string,
+  resolved: Map<string, string | null>,
+): { html: string; spanMap: Map<number, ParsedSpanAttrs> } {
+  const { result, spanMap } = withSpanMap(
+    () => sanitizeMdInline(getRuntimeMarked().parseInline(text)),
+    0,
+    (url) => resolved.get(url) ?? null,
   );
   return { html: result, spanMap };
+}
+
+/**
+ * Ask for every ref at once. Settled rather than all-or-nothing: a rejected
+ * resolve is a ref that stays as authored, not a label that loses the rest.
+ */
+export async function resolveRefs(
+  refs: string[],
+  resolveUrl: (url: string) => Promise<string | null>,
+): Promise<Map<string, string | null>> {
+  const answers = await Promise.all(
+    refs.map(async (ref) => {
+      try { return [ref, await resolveUrl(ref)] as const; }
+      catch { return [ref, null] as const; }
+    }),
+  );
+  return new Map(answers);
 }
 
 // Like mdInlineWithSpans but continues ordinal numbering from a previous call.
@@ -649,27 +666,25 @@ export function mdInlineWithSpansContinued(
 }
 
 /**
- * `staticMdInline` for the builder, which CAN resolve synchronously: it is the
+ * `staticMdInline` for the builder, which resolves synchronously: it is the
  * origin's Node-side half, with the store in hand and no wire between them.
- *
- * The hydrated path resolves during the walk because it must await; here the
- * same work happens in the renderer, through the resolver the walk would
- * otherwise have filled in. Same answer, one pass.
+ * Same two-pass shape as the client's, minus the awaiting.
  */
 export function staticMdInlineResolved(
   text: string,
   resolveUrl: (url: string) => string | null,
 ): string {
-  const spanMap = new Map<number, ParsedSpanAttrs>();
-  _currentSpanMap  = spanMap;
-  _spanOrdinalWalk = 0;
-  _syncUrlResolver = resolveUrl;
-  try {
-    return getStaticMarked().parseInline(text);
-  } finally {
-    _currentSpanMap  = null;
-    _syncUrlResolver = null;
-  }
+  const refs = collectSpanResourceRefs(staticMdInlineWithSpans(text).spanMap);
+  const resolved = new Map(refs.map((ref) => [ref, resolveUrl(ref)] as const));
+  return withSpanMap(
+    () => getStaticMarked().parseInline(text),
+    0,
+    (url) => resolved.get(url) ?? null,
+  ).result;
+}
+
+function staticMdInlineWithSpans(text: string): { spanMap: Map<number, ParsedSpanAttrs> } {
+  return withSpanMap(() => getStaticMarked().parseInline(text));
 }
 
 export function staticMdInline(text: string): string {

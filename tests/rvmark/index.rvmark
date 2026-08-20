@@ -384,3 +384,5 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
 45. {#span-img-root; open} Span img fixture root
   1. {#span-img-relative} relative [a]{img: ./icons/warning.svg} end
   2. {#span-img-absolute} absolute [b]{img: https://example.com/x.png} end
+  3. {#span-img-listbox} [warn]{img: ./icons/warning.svg; option; => #span-img-target} [plain]{option}
+  4. {#span-img-target} span img listbox target

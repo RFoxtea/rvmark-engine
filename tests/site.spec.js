@@ -2589,9 +2589,49 @@ test.describe('span img refs', () => {
     expect(src).not.toBe('./icons/warning.svg');
   });
 
+  // Resolution used to await inside the parse, over module state one parse at a
+  // time could hold. Three labels resolving in one tick clobbered each other:
+  // every span came back ordinal 0 with an empty span map, which is the identity
+  // all span wiring is keyed by. The fixture root holds three such labels.
+  test('labels resolving in the same tick keep their own span ordinals', async ({ page }) => {
+    const ordinals = await page.evaluate(() => {
+      const ids = ['span-img-relative', 'span-img-absolute', 'span-img-listbox'];
+      return ids.map(id => {
+        const rn = window._rvmarkFindNodes?.(id)?.[0];
+        return [...rn.li.querySelectorAll('.node-label [data-rvmark-span]')]
+          .map(el => el.getAttribute('data-rvmark-span'));
+      });
+    });
+    expect(ordinals).toEqual([['1'], ['1'], ['1', '2']]);
+  });
+
   // An absolute ref names its own location; the origin has nothing to add.
   test('an absolute ref passes through unchanged', async ({ page }) => {
     const img = (await nodeContent(page, 'span-img-absolute')).locator('img');
     await expect(img).toHaveAttribute('src', 'https://example.com/x.png');
+  });
+
+  // Resolving a ref re-renders the label, which discards every element the
+  // label's wiring hangs off. The listbox is the half that cannot be re-taken
+  // afterwards, so it is wired against the markup that mounts — before this
+  // was so, an option carrying an `img:` came back with no id, no selection
+  // and no click handler, which is every badge on the links page.
+  test('an option carrying an img ref is still a live option', async ({ page }) => {
+    const node = await nodeContent(page, 'span-img-listbox');
+    const opt  = node.locator('[data-rvmark-span="1"]');
+    await expect(opt).toHaveAttribute('role', 'option');
+    await expect(opt).toHaveAttribute('aria-selected', 'false');
+    await opt.click();
+    await expect(opt).toHaveAttribute('aria-selected', 'true');
+    await expect(node.locator('[role="listbox"]')).toHaveAttribute(
+      'aria-activedescendant', await opt.getAttribute('id'),
+    );
+  });
+
+  test('selecting an img option transcludes its target', async ({ page }) => {
+    const node = await nodeContent(page, 'span-img-listbox');
+    await node.locator('[data-rvmark-span="1"]').click();
+    await expect(page.locator('#tree-scroll .node-label', { hasText: 'span img listbox target' }))
+      .toBeVisible();
   });
 });

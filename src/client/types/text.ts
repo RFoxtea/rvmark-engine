@@ -43,6 +43,11 @@ class TextTypeHandler extends BaseTypeHandler {
   private _reRenderLabel:
     | (() => LabelRender | Promise<LabelRender>)
     | null = null;
+  // The spans of the markup currently in the label, and whether those spans are
+  // a listbox. Wiring reads them rather than taking them as arguments, so it
+  // cannot be handed the map of markup that is no longer there.
+  private _spanMap: Map<number, ParsedSpanAttrs> = new Map();
+  private _hasListbox = false;
 
   constructor(rn: RenderNode) {
     // Manual toggle spans are Tab-reachable buttons, so they are gated exactly
@@ -75,6 +80,7 @@ class TextTypeHandler extends BaseTypeHandler {
 
     const { html: lblHtml, spanMap } = mdInlineWithSpans(rawLabel);
     const hasListbox = isListbox(attrs, spanMap);
+    this._hasListbox = hasListbox;
 
     // Two things can make that first render provisional: math needing KaTeX,
     // and a span's `img:` ref needing the origin. Both are settled by ONE
@@ -88,10 +94,8 @@ class TextTypeHandler extends BaseTypeHandler {
     // origin that never answers costs one deadline and then shows the authored
     // ref — what it showed before it resolved at all.
     const needsImg = [...spanMap.values()].some(a => a.get('img'));
-    if (needsKatex || needsImg) {
-      this._reRenderLabel = () => this._renderLabelFinal(rawLabel, needsImg);
-      if (!needsKatex) rn.holdReady(this._settleLabel(sourceNode, attrs, rn));
-    }
+    const provisional = needsKatex || needsImg;
+    if (provisional) this._reRenderLabel = () => this._renderLabelFinal(rawLabel, needsImg);
 
     this.buildCssProps(attrs, sourceNode);
 
@@ -114,7 +118,12 @@ class TextTypeHandler extends BaseTypeHandler {
     this._installWatch();
     this.buildLabel(lblHtml, spanMap, hasListbox, hasLink, sourceNode);
 
-    if (hasListbox) this.buildListbox(spanMap, attrs.has('listbox-volatile'), attrs.has('listbox-nonempty'));
+    // A provisional label is wired when its final markup lands, not twice: the
+    // options, toggles and subscriptions all hang off elements `innerHTML` is
+    // about to discard, and a listbox wired against discarded elements is the
+    // shape of the bug this replaced — dead options carrying no id, no
+    // selection and no click handler.
+    if (!provisional) this._wireLabel(sourceNode, attrs);
 
     if (sourceNode.attrs.get('id')) {
       const anchor = document.createElement('a');
@@ -136,9 +145,12 @@ class TextTypeHandler extends BaseTypeHandler {
     this.deactivate();
 
     // Only the KaTeX case releases readiness itself, because it declared
-    // managesReady and so nothing else will. The image-only case took a hold
-    // above instead, and attachHandler's own ready() still applies.
-    if (needsKatex) void this._settleLabel(sourceNode, attrs, rn).then(() => rn.ready());
+    // managesReady and so nothing else will. The image-only case takes a hold
+    // instead, and attachHandler's own ready() still applies. Either way the
+    // hold is taken here, after the row is built, so the settle finds a label
+    // to wire.
+    if (needsKatex) void this._settleLabel(sourceNode, attrs).then(() => rn.ready());
+    else if (needsImg) rn.holdReady(this._settleLabel(sourceNode, attrs));
 
     this.toggles.openIfRequested(paramOpen, false);
   }
@@ -146,31 +158,51 @@ class TextTypeHandler extends BaseTypeHandler {
   // ── Private helpers ────────────────────────────────────────────────────────
 
   /**
-   * Swap in a freshly-rendered label and re-take everything wired against the
-   * old markup. `innerHTML` discarded the wired elements along with it, so the
-   * subscriptions must be dropped and re-taken against the new ones.
-   *
-   * Shared by the two paths that re-render a label — KaTeX arriving, and image
-   * refs resolving. Both produce the same problem and had the same answer.
+   * Paint markup into the label. Wiring is NOT done here — `innerHTML`
+   * discards the elements everything hangs off, so what is wired is always
+   * whatever markup was painted last, and `_wireLabel` is the one place that
+   * does it.
    */
-  private _replaceLabel(
-    html:       string,
-    freshSpans: Map<number, ParsedSpanAttrs>,
-    sourceNode: SourceNode,
-    attrs:      ResolvedAttrs,
-    rn:         RenderNode,
-  ): void {
+  private _paintLabel(html: string, spanMap: Map<number, ParsedSpanAttrs>, sourceNode: SourceNode): void {
     this.lbl.innerHTML = html;
     const chips = buildTagChips(sourceNode.tags);
     if (chips.childNodes.length > 0) this.lbl.prepend(chips);
+    this._spanMap = spanMap;
+  }
+
+  /**
+   * Wire the markup standing in the label: conditional spans, span toggles,
+   * and — when those spans are a listbox — the options themselves.
+   *
+   * Called once per node, against the markup that mounts. A provisional render
+   * waits for its final one rather than wiring twice: the listbox half cannot
+   * simply be re-taken, because `wireListbox` also registers a listener on the
+   * row, which is not replaced and would accumulate one nav per render.
+   */
+  private _wireLabel(sourceNode: SourceNode, attrs: ResolvedAttrs): void {
+    const { lbl, rn } = this;
+    const spanMap = this._spanMap;
+
+    if (this._hasListbox) {
+      for (const el of lbl.querySelectorAll<HTMLElement>('[data-rvmark-span]')) {
+        const ordinal = parseInt(el.getAttribute('data-rvmark-span')!, 10);
+        const parsed  = spanMap.get(ordinal);
+        if (parsed) (el as any)._rvmarkSpan = parsed;
+      }
+    }
 
     this._unwireSpans?.();
-    this._unwireSpans = wireSpanVisibility(this.lbl, freshSpans, rn.state);
-    this._unwireSpanToggles?.();
-    this._unwireSpanToggles = wireSpanToggles(this.lbl, freshSpans, attrs, rn, this.toggles);
+    this._unwireSpans = wireSpanVisibility(lbl, spanMap, rn.state);
 
-    // Re-wiring hands the fresh toggles tabIndex 0, so re-apply the gate:
-    // focusable only while this node is selected, as at construction.
+    this._unwireSpanToggles?.();
+    this._unwireSpanToggles = wireSpanToggles(lbl, spanMap, attrs, rn, this.toggles);
+
+    if (this._hasListbox) {
+      this.buildListbox(spanMap, attrs.has('listbox-volatile'), attrs.has('listbox-nonempty'));
+    }
+
+    // Wiring hands the fresh toggles tabIndex 0, so apply the gate: focusable
+    // only while this node is selected.
     if (RenderNode.currentSelection === this.rn) this.activate();
     else this.deactivate();
   }
@@ -187,23 +219,20 @@ class TextTypeHandler extends BaseTypeHandler {
   }
 
   /**
-   * Wait for whatever the label was missing, then render it once and re-wire.
+   * Wait for whatever the label was missing, then paint it and wire the label.
    *
-   * Always settles: this promise gates the node's reveal, so a failed resolve
-   * must leave the first render standing rather than hang. That first render
-   * shows the authored ref, which is what it showed before resolution existed.
+   * Always settles, and always wires: this promise gates the node's reveal, so
+   * a failed resolve must leave the first render standing — wired, or the node
+   * mounts with dead spans — rather than hang.
    */
-  private async _settleLabel(
-    sourceNode: SourceNode,
-    attrs:      ResolvedAttrs,
-    rn:         RenderNode,
-  ): Promise<void> {
+  private async _settleLabel(sourceNode: SourceNode, attrs: ResolvedAttrs): Promise<void> {
     try {
       if (this.managesReady) await ensureKatex();
       const { html, spanMap } = await this._reRenderLabel!();
-      this._replaceLabel(html, spanMap, sourceNode, attrs, rn);
-    } catch { /* first render stands */ }
+      this._paintLabel(html, spanMap, sourceNode);
+    } catch { /* the first render stands, and is what gets wired */ }
     this._reRenderLabel = null;
+    this._wireLabel(sourceNode, attrs);
   }
 
   private buildCssProps(attrs: ResolvedAttrs, sourceNode: SourceNode) {
@@ -233,26 +262,10 @@ class TextTypeHandler extends BaseTypeHandler {
     lbl.className = 'node-label';
     this.lbl = lbl;
 
-    lbl.innerHTML = lblHtml;
-    const chips = buildTagChips(sourceNode.tags);
-    if (chips.childNodes.length > 0) lbl.prepend(chips);
+    this._paintLabel(lblHtml, spanMap, sourceNode);
 
-    if (hasListbox) {
-      lbl.setAttribute('role', 'listbox');
-      for (const el of lbl.querySelectorAll<HTMLElement>('[data-rvmark-span]')) {
-        const ordinal = parseInt(el.getAttribute('data-rvmark-span')!, 10);
-        const parsed  = spanMap.get(ordinal);
-        if (parsed) (el as any)._rvmarkSpan = parsed;
-      }
-    }
-
-    this._unwireSpans?.();
-    this._unwireSpans = wireSpanVisibility(lbl, spanMap, this.rn.state);
-
-    this._unwireSpanToggles?.();
-    this._unwireSpanToggles = wireSpanToggles(
-      lbl, spanMap, sourceNode.attrs, this.rn, this.toggles,
-    );
+    // On the label itself, so it survives a re-render's innerHTML.
+    if (hasListbox) lbl.setAttribute('role', 'listbox');
 
     if (hasLink) {
       lbl.addEventListener('keydown', (e: KeyboardEvent) => {
