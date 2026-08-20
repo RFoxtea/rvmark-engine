@@ -6,23 +6,22 @@
  * beyond the RenderNode interface itself.
  *
  * Exports:
- *   resolveAttrs       — merge tag attrs + node attrs (factory should call at construction)
  *   buildPermalinkHref — build relative href for a permalink anchor
  *   copyPermalink      — copy absolute permalink to clipboard
  *   treeNavKeydown     — handle positional navigation keys in a handler keydown listener
  */
 
 import { addressToHref } from './shared.js';
-import { resolveTagDef } from './tags.js';
 import { scrollRowIntoMiddle } from './scroll.js';
 import type { SourceNode } from './parser.js';
 import { parseStateEntries } from './parser.js';
 import { Multimap } from './multimap.js';
 import { bagOf } from './inherited.js';
-import { resolveAttrs } from './source-file.js';
-import type { ResolvedAttrs } from './source-file.js';
+import type { ResolvedAttrs } from './served.js';
+import { standIn } from './served.js';
 import { RenderNode } from './render-node.js';
-import { resolveRef, resolveEffectiveChildren, resolveTransclusionConfig } from './transclusion.js';
+import { resolveEffectiveChildren, resolveTransclusionConfig } from './transclusion.js';
+import { resolveRefOn } from './origin.js';
 import { parseTranscludeEntry } from './shared.js';
 import { TRANSCLUDE_DEADLINE_MS } from './constants.js';
 import type { PassEntry, PassMode, StateNode } from './state.js';
@@ -83,7 +82,7 @@ export function parsePass(raw: string): PassEntry[] {
 
 export async function expandNode(rn: RenderNode, transcludeRef?: string): Promise<void> {
   const sourceNode = rn.sourceNode;
-  const attrs = resolveAttrs(sourceNode);
+  const attrs = sourceNode.served.attrs;
   const { embedVal, childrenList: _childrenList } = resolveTransclusionConfig(sourceNode, attrs);
   // A caller-supplied ref (listbox option) or a link-mode embedVal is just a
   // single-ref children list. Route both through the list path below so the
@@ -95,7 +94,6 @@ export async function expandNode(rn: RenderNode, transcludeRef?: string): Promis
   const passChildrenEntries = passChildrenRaw !== undefined ? parsePass(passChildrenRaw) : undefined;
 
   if (childrenList) {
-    const addr = sourceNode.sourceFile.pageAddress;
     const needsResolve = childrenList.some(r => r !== '*');
 
     // Phase 1: while any ref is in flight, show a single loading marker. It rides
@@ -114,7 +112,7 @@ export async function expandNode(rn: RenderNode, transcludeRef?: string): Promis
     const outcomes = await Promise.all(childrenList.map(async (rawRef) => {
       if (rawRef === '*') return { rawRef, star: true, wholeNode: false, node: null as SourceNode | null, timedOut: false };
       const { wholeNode } = parseTranscludeEntry(rawRef);
-      const node = await Promise.race([resolveRef(rawRef, addr), deadline]);
+      const node = await Promise.race([resolveRefOn(sourceNode, rawRef), deadline]);
       if (node === TIMED_OUT) return { rawRef, star: false, wholeNode, node: null, timedOut: true };
       return { rawRef, star: false, wholeNode, node: node as SourceNode | null, timedOut: false };
     }));
@@ -148,7 +146,7 @@ function syntheticChild(host: SourceNode, attrs: Multimap, label: string): Sourc
   return {
     slug: '', permalinkId: '', numbering: '',
     attrs, tags: [], label, bodyLines: [],
-    children: [], sourceFile: host.sourceFile,
+    children: [], served: standIn(host, attrs),
     // Stands in for the host, so it inherits exactly what the host has.
     ...bagOf(host),
   } as SourceNode;
@@ -224,7 +222,7 @@ export function listboxKeydown(
 //
 // Recognized actions: 'exhibit', 'link', 'none'.
 export function actionKeydown(e: KeyboardEvent, rn: RenderNode): boolean {
-  const actionVal = resolveAttrs(rn.sourceNode).get('action');
+  const actionVal = rn.sourceNode.served.attrs.get('action');
   if (actionVal === undefined) return false;
   const content = rn.content;
 
@@ -312,8 +310,7 @@ export function applyOnAction(rn: RenderNode): void {
 // ── Tag class application ──────────────────────────────────────────────────
 
 export function applyTagClasses(content: HTMLElement, sourceNode: SourceNode, attrs: ResolvedAttrs): void {
-  for (const { name, props } of sourceNode.tags) {
-    const def = resolveTagDef(name, props, sourceNode.sourceFile.tagDefs);
+  for (const { def } of sourceNode.served.tags) {
     for (const cls of def.getAll('class')) {
       content.classList.add(...cls.split(/\s+/).filter(Boolean));
     }
@@ -440,7 +437,7 @@ export function applyBulletProps(content: HTMLElement, attrs: ResolvedAttrs, sou
     // Relative refs resolve against the file the node came FROM (resolveMediaUrl
     // uses pageAddress) — so a transcluded foreign node gets its OWN origin's
     // icons, the same rule markdown media and transclusion refs already follow.
-    const url = sourceNode.sourceFile.resolveMediaUrl(bullet);
+    const url = sourceNode.served.media(bullet);
     if (url) {
       setBulletImage(content, '--node-bullet-image', url, () => {
         content.classList.remove('node-content--bullet-image');
@@ -455,7 +452,7 @@ export function applyBulletProps(content: HTMLElement, attrs: ResolvedAttrs, sou
     // shows its own state by rotating.
     const open = attrs.get('bullet-open');
     if (open !== undefined) {
-      const openUrl = sourceNode.sourceFile.resolveMediaUrl(open);
+      const openUrl = sourceNode.served.media(open);
       if (openUrl) {
         // Falling back to the closed icon (rather than the default marker) on a
         // dead URL keeps the bullet the author chose; only the state cue is lost.
@@ -514,7 +511,7 @@ export function applyListItemProps(content: HTMLElement, attrs: ResolvedAttrs): 
 // Converts to a navigable href via addressToHref.
 export function buildPermalinkHref(rn: RenderNode): string {
   const state    = rn.state.serialize();
-  const basePath = rn.sourceNode ? addressToHref(rn.sourceNode.sourceFile.pageAddress ?? '') : '';
+  const basePath = rn.sourceNode ? addressToHref(rn.sourceNode.served.pageAddress ?? '') : '';
   return basePath + (state ? '?' + state : '') + (rn.permalinkId ? '#' + rn.permalinkId : '');
 }
 

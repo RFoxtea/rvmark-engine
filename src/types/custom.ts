@@ -28,6 +28,7 @@ import { factoryGet } from '../render-node.js';
 import { Multimap } from '../multimap.js';
 import { bagOf } from '../inherited.js';
 import { addressOrigin } from '../shared.js';
+import { standIn } from '../served.js';
 import { envoyFor } from '../envoy-host.js';
 import { loadingHandler } from './blastocyte.js';
 
@@ -80,7 +81,7 @@ function errorNode(original: SourceNode, message: string): SourceNode {
     label:       `⚠ custom type failed: ${message}`,
     bodyLines:   [],
     children:    [],
-    sourceFile:  original.sourceFile,
+    served:      standIn(original, attrs),
     // Stands in for the failed node, so it inherits exactly what it had.
     ...bagOf(original),
   } as SourceNode;
@@ -92,7 +93,7 @@ export function createCustomTypeHandler(rn: RenderNode, typeName: string): TypeH
   const handler = loadingHandler(rn);
   rn.attachHandler(handler);
 
-  const originRoot = addressOrigin(node.sourceFile.pageAddress);
+  const originRoot = addressOrigin(node.served.pageAddress);
 
   envoyFor(originRoot)
     .transform(typeName, node)

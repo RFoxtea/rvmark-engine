@@ -29,8 +29,9 @@
 
 import { mdToHtml } from './markdown.js';
 import { getPageContext } from './loader.js';
-import { resolveRef } from './transclusion.js';
-import { resolveMediaAddress, addressToHref } from './shared.js';
+
+import { addressToHref } from './shared.js';
+import { originFor, addressOf, resolveRefAt } from './origin.js';
 import { parsePass } from './handler-utils.js';
 import { prerootFrame, StateRelay, buildStatePass } from './state.js';
 import { postGuestMode, broadcastPreroot, prerootDeclareMsg, prerootSetMsg, prerootDeleteMsg, wireRelay, registerThemeIframe, unregisterThemeIframe } from './iframe-host.js';
@@ -334,7 +335,7 @@ export function exhibitConfigOf(rn: { sourceNode: SourceNode }): ExhibitConfig |
     rawRef:            scope.rawRef,
     // Inheritance never crosses a file, so this node's file is the one that
     // declared the scope — which is what the ref resolves against.
-    sourceFileAddress: rn.sourceNode.sourceFile.pageAddress,
+    sourceFileAddress: rn.sourceNode.served.pageAddress,
     attrs:             scope.attrs,
   };
 }
@@ -381,13 +382,13 @@ function exhibitHead(basePath: string): string {
 
 class RvmarkExhibitStrategy extends ExhibitStrategy {
   async build(rawRef: string, sourceFileAddress: string): Promise<ExhibitResult | null> {
-    const node = await resolveRef(rawRef, sourceFileAddress);
+    const node = await resolveRefAt(addressOf(sourceFileAddress), rawRef);
     if (!node) return null;
 
     // Build the address from the resolved node's own source file rather than
     // re-resolving rawRef — this is the path that handles sigil refs (which
     // resolveAddress doesn't understand) and cross-origin federation.
-    const fileAddress = node.sourceFile?.pageAddress;
+    const fileAddress = node.served?.pageAddress;
     if (!fileAddress) return null;
     const address = node.permalinkId ? `${fileAddress}#${node.permalinkId}` : fileAddress;
 
@@ -402,7 +403,8 @@ exhibitRegister('rvmark', new RvmarkExhibitStrategy());
 class MarkdownExhibitStrategy extends ExhibitStrategy {
   async build(rawRef: string, sourceFileAddress: string): Promise<ExhibitResult | null> {
     const ctx = getPageContext();
-    const fullPath = resolveMediaAddress(rawRef, sourceFileAddress) ?? rawRef;
+    const from = addressOf(sourceFileAddress);
+    const fullPath = originFor(from.baseUrl).resource(from.key, rawRef) ?? rawRef;
     const basePath = ctx.basePath;
 
     let text: string;
@@ -456,7 +458,8 @@ exhibitRegister('markdown', new MarkdownExhibitStrategy());
 
 class HtmlExhibitStrategy extends ExhibitStrategy {
   async build(rawRef: string, sourceFileAddress: string, attrs?: NodeAttrs): Promise<ExhibitResult | null> {
-    const fullPath = resolveMediaAddress(rawRef, sourceFileAddress) ?? rawRef;
+    const from = addressOf(sourceFileAddress);
+    const fullPath = originFor(from.baseUrl).resource(from.key, rawRef) ?? rawRef;
     const displayName = fullPath.split('/').pop()!.replace(/\.html$/, '');
 
     // Same-origin (or path-only build-time) HTML: load via iframe.src so the

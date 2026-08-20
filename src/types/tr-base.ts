@@ -9,7 +9,7 @@ import type { RenderNode, SourceNode } from '../render-node.js';
 import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyBulletAlt, applyListItemProps, wireBulletActions } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
 import { wireSpanToggles } from '../span-toggle.js';
-import { resolveAttrs } from '../source-file.js';
+import type { ResolvedAttrs } from '../served.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { mdInlineWithSpansContinued, clipboardHtml } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
@@ -33,7 +33,7 @@ export interface TrConfig {
   withExhibit?:      boolean;
   withBullet?:       boolean;
   /** Hook called after li/content setup, before toggle/cells. */
-  onSetup?: (ctx: { content: HTMLElement; li: HTMLElement; attrs: ReturnType<typeof resolveAttrs>; sourceNode: SourceNode }) => void;
+  onSetup?: (ctx: { content: HTMLElement; li: HTMLElement; attrs: ResolvedAttrs; sourceNode: SourceNode }) => void;
 }
 
 export abstract class TrTypeHandlerBase extends BaseTypeHandler {
@@ -52,7 +52,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
     super(rn, cfg.focusableSelector);
     this.cfg = cfg;
     const sourceNode = rn.sourceNode;
-    const attrs = resolveAttrs(sourceNode);
+    const attrs = sourceNode.served.attrs;
     applyOnSpawn(attrs, rn);
 
     const { content } = this;
@@ -137,7 +137,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
   }
 
   /** Returns true if this row turned out to be a listbox. */
-  private buildCells(sourceNode: SourceNode, attrs: ReturnType<typeof resolveAttrs>): boolean {
+  private buildCells(sourceNode: SourceNode, attrs: ResolvedAttrs): boolean {
     const cells = parseCells(sourceNode.label);
     const spanMap = new Map<number, ParsedSpanAttrs>();
     let nextOrdinal = 0;

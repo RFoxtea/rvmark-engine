@@ -5,16 +5,26 @@
  * the first press focuses this widget instead of native find; a second
  * press (while already focused) falls through to the browser's own find.
  *
- * Matching starts from the mounted tree and reads SourceNode structure from
- * there. Driving it from the DOM rather than from the page file's roots is
- * what makes it work on mixed pages: transcluded content belongs to another
- * SourceFile and never appears in the page file's roots, but it is mounted.
+ * Search has two halves, and they run on different clocks.
+ *
+ * The LOCAL half matches over what the client holds — every mounted node, and
+ * the authored children still hanging off it. It starts from the mounted tree
+ * rather than a page file's roots, which is what makes it work on mixed pages:
+ * transcluded content belongs to another origin's document and never appears in
+ * the page's own roots, but it is mounted. This half is synchronous and complete
+ * the moment a key is pressed.
+ *
+ * The ASKED half is `hasMatchBelow`: one batched question per origin about the
+ * collapsed keys on the page, answered over content the client never fetched and
+ * for a corpus-scale origin could never hold. Nothing waits for it. A reply that
+ * does not answer the current query drops itself, and an origin that goes quiet
+ * loses its dots to a deadline rather than holding them forever.
  *
  * {searchable} does not switch search on. Everywhere, search matches and
- * highlights what is rendered — like a browser's own find-in-page. Under
- * {searchable}, matching additionally descends into authored-but-unrendered
- * children, which is what produces the breadcrumb dots below. It never mounts
- * or expands anything on its own.
+ * highlights what is rendered — like a browser's own find-in-page. It licenses
+ * the descent past what is rendered, and it now travels with the half that
+ * descends: the local walk applies it to held children, and an origin applies
+ * its own when answering about content only it can see.
  *
  * Scope is a property of the source tree, not of the DOM: {searchable} is
  * inherited to descendants at parse time (markSearchable in parser.ts, next to
@@ -49,13 +59,10 @@
  */
 
 import type { SourceNode } from './parser.js';
-import { resolveAttrs } from './source-file.js';
 import { isSearchable, RenderNode } from './render-node.js';
 import { scrollRowIntoMiddle } from './scroll.js';
 import { mountSearchRoot } from './shell.js';
-import { resolveTagDef } from './tags.js';
-import { resolveSlugInFile } from './shared.js';
-import { nodeTextMatches, tagDisplayText } from './origin.js';
+import { nodeTextMatches, originFor } from './origin.js';
 
 interface SearchMatch {
   node:    SourceNode;
@@ -64,12 +71,6 @@ interface SearchMatch {
 
 // ── Matching ──────────────────────────────────────────────────────────────────
 
-// The text a tag actually puts on screen, or null if it renders no chip.
-// Mirrors buildTagChips: `internal` tags (including the automatic ones on
-// dot-prefixed names like .minor) render nothing, and a `label` prop replaces
-// the tag's name as the visible text. Search matches what the reader can see,
-// so it has to apply the same two rules rather than looking at tag.name —
-// otherwise queries would hit invisible styling tags and miss relabelled ones.
 // Map every currently-mounted SourceNode to its <li>, in one DOM pass.
 function mountedNodes(): Map<SourceNode, HTMLElement> {
   const map = new Map<SourceNode, HTMLElement>();
@@ -80,42 +81,17 @@ function mountedNodes(): Map<SourceNode, HTMLElement> {
   return map;
 }
 
-// Search always works over what is actually rendered — matching starts from
-// the mounted tree, not from any one file's roots. That is what makes it work
-// on a mixed page like a site index: transcluded content belongs to a
-// different SourceFile entirely and never appears in the page file's roots,
-// but it is mounted, so the DOM sees it.
+// Matches over what the client HOLDS: every mounted node, and the authored
+// children hanging off it that have not been mounted yet. The walk stops where
+// the working set does — a collapsed node whose children were dropped, or a
+// transclusion host whose target was never fetched, contributes nothing here.
+// What lies past that edge is `hasMatchBelow`'s question, and it is asked of
+// the origin rather than answered by walking (see the dot machinery below).
 //
-// {searchable} is not a switch that turns search on. It licenses the *deep*
-// walk: descending past what is mounted into authored-but-unrendered children,
-// which is what produces the "match below — expand to view" breadcrumb dots.
-// Without it, a node contributes only itself, exactly like a browser's own
-// find-in-page. With it, its whole authored subtree becomes reachable.
-//
-// Unresolved transclusion hosts are a hard limit either way: their children do
-// not exist until they resolve, so nothing can see into them. Consistent with
-// search never mounting or expanding anything on its own.
-// A same-file `{=> #id}` target, or null when the ref is cross-file or
-// unresolvable. Transclusion hosts are otherwise opaque to search: their
-// children do not exist until they resolve at expand time, so the deep walk
-// would stop at the host and miss content that is authored, addressable, and
-// — once expanded — visible. Resolving the local case is a synchronous nodeMap
-// lookup (no fetch, nothing mounted), which keeps the "search never mounts or
-// expands anything" contract intact.
-//
-// Deliberately local-only for now: a cross-file ref would need its file loaded,
-// and a miss there is indistinguishable from a broken ref.
-function localTranscludeTarget(node: SourceNode): SourceNode | null {
-  const attrs = resolveAttrs(node);
-  const raw = attrs.get('transclude');
-  // Only a single bare `#id`. A list, a `*`, or any path-bearing ref is
-  // cross-file or children-mode and out of scope here.
-  if (!raw || !raw.startsWith('#') || raw.includes(',')) return null;
-  const sf = node.sourceFile;
-  if (!sf) return null;
-  return resolveSlugInFile({ nodeMap: sf.nodeMap, roots: sf.roots }, raw.slice(1))?.node ?? null;
-}
-
+// This never mounts or expands anything, and never fetches. That is the whole
+// reason the deep walk moved: reaching past the working set used to mean
+// resolving a ref synchronously off a held nodeMap, which only worked while the
+// client held every document it might need.
 function searchTree(query: string): SearchMatch[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return [];
@@ -129,45 +105,111 @@ function searchTree(query: string): SearchMatch[] {
     if (nodeTextMatches(node, needle)) out.push({ node, li: mounted.get(node) ?? null });
   };
 
-  // Descend into authored children — only reached under a {searchable} scope.
-  // `activeRefs` guards the transclusion hops: transclusions may be recursive
-  // (the tree is really a graph), so a ref already being walked on this path is
-  // skipped rather than followed into an infinite regress.
-  const walkDeep = (node: SourceNode, activeRefs: Set<SourceNode>) => {
+  const walkHeld = (node: SourceNode) => {
     record(node);
-    for (const child of node.children) walkDeep(child, activeRefs);
-
-    const target = localTranscludeTarget(node);
-    if (target && !activeRefs.has(target)) {
-      activeRefs.add(target);
-      walkDeep(target, activeRefs);
-      activeRefs.delete(target);
-    }
+    for (const child of node.children) walkHeld(child);
   };
 
   for (const [node] of mounted) {
     record(node);
-    // A mounted node's own children may themselves be mounted (visited by this
-    // same loop) or not (only reachable here, and only when licensed).
     // isSearchable already accounts for ancestry — {searchable} is inherited
     // down the source tree at parse time — so no ancestor walk is needed, and
     // in particular scope does not depend on the node that carries the
     // attribute being rendered. It usually isn't: it is typically a root, and
     // roots are not themselves rows on the page.
-    if (isSearchable(node)) {
-      for (const child of node.children) walkDeep(child, new Set([node]));
-      // The mounted node may itself be an unexpanded transclusion host.
-      const target = localTranscludeTarget(node);
-      if (target) walkDeep(target, new Set([node, target]));
-    }
+    if (isSearchable(node)) for (const child of node.children) walkHeld(child);
   }
   return out;
 }
 
-// Mounted nodes whose subtree contains a hidden (unmounted) match — the ones
-// eligible for a breadcrumb dot once also collapsed. Shared by markIndicators
-// (which draws the dot) and stepTargets (which also treats these as stepping
-// stops, in document order alongside real .search-marks — see stepTargets).
+// ── Breadcrumb dots ───────────────────────────────────────────────────────────
+//
+// A dot marks a collapsed mounted row with a match somewhere below it that the
+// reader cannot see. Two sources feed it, and they are different in kind:
+//
+//   - HELD: a match found by searchTree on a node that is not itself mounted.
+//     Synchronous, exact, available the moment a key is pressed.
+//   - ASKED: `hasMatchBelow`, answered by each origin over content the client
+//     never fetched. It arrives late, or not at all.
+//
+// The two are unioned, never merged: a held answer is not evidence about what
+// an origin holds, and an origin's answer is not evidence about the working
+// set. Either one alone earns a dot.
+//
+// A node's own match never warrants a dot: a collapsed node still shows its
+// own label, so its match already gets a real .search-mark. Only matches
+// strictly below the collapse point are hidden and need announcing — and a
+// node can both match itself and hide a separate match below.
+
+// How long an origin has to answer before its dots are cleared. Silence is a
+// failure, not a wait: nothing keeps a dot alive except a reply, so an origin
+// that hangs or dies loses its dots once and does not get them back. Absence
+// reads as "nothing known below", which is true either way.
+const SEARCH_DEADLINE_MS = 3_000;
+
+// Per origin: the keys it last answered true for, and the timer that will clear
+// them. Keyed by baseUrl — an origin's silence must not cost another its dots.
+interface OriginDots {
+  keys:  Set<string>;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+const _asked = new Map<string, OriginDots>();
+
+// The query the dots on screen currently answer. A reply carrying anything else
+// is stale and discards itself — which is the whole cancellation story: no
+// pending table, no ordering to guarantee.
+let _dotQuery = '';
+
+function dotsFor(baseUrl: string): OriginDots {
+  let d = _asked.get(baseUrl);
+  if (!d) { d = { keys: new Set(), timer: null }; _asked.set(baseUrl, d); }
+  return d;
+}
+
+// Ask every origin with a collapsed row on the page about the keys it owns.
+// Nothing is awaited: local results are already painted, existing dots are held
+// (see the design note on why holding is unconditional), and a reply either
+// replaces this origin's dots or is dropped.
+function askOrigins(query: string): void {
+  _dotQuery = query;
+  if (!query.trim()) {
+    for (const [, d] of _asked) { if (d.timer) clearTimeout(d.timer); d.keys.clear(); d.timer = null; }
+    return;
+  }
+
+  const byOrigin = new Map<string, Set<string>>();
+  for (const [node, li] of mountedNodes()) {
+    const content = li.querySelector<HTMLElement>(':scope > .node-content');
+    if (content?.getAttribute('aria-expanded') !== 'false') continue;
+    const { baseUrl, key } = node.served.address;
+    if (!key) continue; // a client-minted stand-in names nothing an origin knows
+    let keys = byOrigin.get(baseUrl);
+    if (!keys) { keys = new Set(); byOrigin.set(baseUrl, keys); }
+    keys.add(key);
+  }
+
+  for (const [baseUrl, keySet] of byOrigin) {
+    const keys = [...keySet];
+    const d = dotsFor(baseUrl);
+    if (d.timer) clearTimeout(d.timer);
+    d.timer = setTimeout(() => { d.keys.clear(); d.timer = null; redrawIndicators(); }, SEARCH_DEADLINE_MS);
+
+    void originFor(baseUrl).hasMatchBelow(keys, query).then(
+      (answers) => {
+        if (query !== _dotQuery) return;           // stale: drop it
+        if (d.timer) { clearTimeout(d.timer); d.timer = null; }
+        d.keys = new Set(keys.filter((_, i) => answers[i]));
+        redrawIndicators();
+      },
+      () => { /* a rejection is silence; the deadline handles it */ },
+    );
+  }
+}
+
+// Mounted nodes whose subtree holds a match the reader cannot see — the HELD
+// half. Shared by redrawIndicators (which draws the dot) and stepTargets (which
+// also treats these as stepping stops, in document order alongside real
+// .search-marks — see stepTargets).
 function nodesWithHiddenMatch(results: SearchMatch[]): Map<SourceNode, HTMLElement> {
   const mounted = mountedNodes();
   const out = new Map<SourceNode, HTMLElement>();
@@ -175,51 +217,45 @@ function nodesWithHiddenMatch(results: SearchMatch[]): Map<SourceNode, HTMLEleme
   // Matched nodes that are not themselves mounted — the ones a reader cannot
   // see. Anything mounted is already visible (and marked), so it needs no dot.
   const hiddenMatches = new Set(results.filter(r => !r.li).map(r => r.node));
-  if (!hiddenMatches.size) return out;
 
-  // Mirrors searchTree's walk, transclusion hop included: a match reached only
-  // through a `{=> #id}` still needs the host to carry the dot, or it would be
-  // counted as a result with nothing on screen pointing at it.
-  const containsHidden = (node: SourceNode, activeRefs: Set<SourceNode>): boolean => {
-    for (const child of node.children) {
-      if (hiddenMatches.has(child) || containsHidden(child, activeRefs)) return true;
-    }
-    const target = localTranscludeTarget(node);
-    if (target && !activeRefs.has(target)) {
-      activeRefs.add(target);
-      const hit = hiddenMatches.has(target) || containsHidden(target, activeRefs);
-      activeRefs.delete(target);
-      if (hit) return true;
-    }
-    return false;
-  };
+  const containsHidden = (node: SourceNode): boolean =>
+    node.children.some(c => hiddenMatches.has(c) || containsHidden(c));
 
   for (const [node, li] of mounted) {
-    if (containsHidden(node, new Set([node]))) out.set(node, li);
+    const asked = _asked.get(node.served.address.baseUrl);
+    const askedYes = !!node.served.address.key && !!asked?.keys.has(node.served.address.key);
+    if (askedYes || (hiddenMatches.size && containsHidden(node))) out.set(node, li);
   }
   return out;
 }
 
-// Breadcrumb dots are the visible half of {searchable}: they mark a collapsed
-// mounted node whose hidden subtree contains a match. Only mounted nodes can
-// carry one, so this is driven from the mounted set (the same reason
-// searchTree is — a page's own file roots cannot see transcluded content).
+// Draw the dots for whatever is currently known — held matches plus whatever
+// origins have answered so far. Called on every recompute and again on every
+// reply and every deadline, since either can change what is known without the
+// query or the tree having changed at all.
 //
-// A node's own match never warrants a dot: a collapsed node still shows its
-// own label, so its match already gets a real .search-mark. Only matches
-// strictly below the collapse point are hidden and need announcing — and a
-// node can both match itself and hide a separate match below.
-function markIndicators(results: SearchMatch[], query: string): void {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return;
+// A dot has two states, present and absent. There is deliberately no third
+// state for "still asking": a signal the reader has to learn to interpret is
+// worse than one that is briefly wrong.
+function redrawIndicators(): void {
+  if (!_dotQuery.trim()) { clearIndicators(); _anyDot = false; return; }
 
-  const withHidden = nodesWithHiddenMatch(results);
+  const withHidden = nodesWithHiddenMatch(_results);
+  let any = false;
   for (const [node, li] of mountedNodes()) {
     const content = li.querySelector<HTMLElement>(':scope > .node-content');
     const collapsed = content?.getAttribute('aria-expanded') === 'false';
-    setIndicator(li, collapsed && withHidden.has(node));
+    const show = collapsed && withHidden.has(node);
+    setIndicator(li, show);
+    any ||= show;
   }
+  _anyDot = any;
+  updateResultState();
 }
+
+// Whether any dot is currently on screen. Read by updateResultState, which must
+// not report "No matches" over a visible one.
+let _anyDot = false;
 
 // The breadcrumb dot always goes inside .toggle — one placement for every node
 // type, so a single CSS rule positions it (see .toggle > .search-indicator).
@@ -341,6 +377,11 @@ let _preActivationFocus: HTMLElement | null = null;
 // untouched — stepActive derives its position from the live tree selection
 // (RenderNode.currentSelection) rather than any state tracked here, so there
 // is nothing else to reset or preserve across a recompute.
+// Existing dots are HELD across the ask, not cleared: narrowing a query keeps
+// dots that are probably still right, and widening one keeps dots that are
+// necessarily still right, since a match for the longer query implies one for
+// the shorter. Only a wholesale retype makes a held dot wrong, and the deadline
+// bounds how long it can stay wrong.
 function recomputeResults(): void {
   clearIndicators();
   clearMarks();
@@ -348,7 +389,8 @@ function recomputeResults(): void {
   const query = _input?.value ?? '';
   const needle = query.trim().toLowerCase();
   _results = searchTree(query);
-  markIndicators(_results, query);
+  askOrigins(query);
+  redrawIndicators();
   if (needle) applyMarks(_results, needle);
   updateResultState();
 }
@@ -378,9 +420,15 @@ function refreshForTreeChange(): void {
 // be either over mounted matches (which shifts as the reader expands or
 // collapses, for reasons unrelated to the query) or over all matches (a number
 // that can't be reconciled with the marks actually on screen).
+//
+// A dot counts. It is an origin's report of a match below content the client
+// does not hold, and telling the reader "No matches" while one is on screen
+// would be contradicting the page. That also means this has to re-run when an
+// origin answers, not only when the query changes — see redrawIndicators.
 function updateResultState(): void {
   if (!_input) return;
-  const empty = !!_input.value.trim() && !_results.length;
+  const known = _results.length > 0 || _anyDot;
+  const empty = !!_input.value.trim() && !known;
   _input.classList.toggle('search-input--no-matches', empty);
   if (_status) _status.textContent = empty ? 'No matches' : '';
 }

@@ -14,7 +14,6 @@ import type { NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
 import { copyPermalink, treeNavKeydown, actionKeydown } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
-import { resolveAttrs } from '../source-file.js';
 import { BaseTypeHandler } from '../base-handler.js';
 
 const DARK_MODE_CLASSES: Record<string, string> = {
@@ -34,11 +33,11 @@ class ImageTypeHandler extends BaseTypeHandler {
   constructor(renderNode: RenderNode) {
     super(renderNode, 'a[href]');
     const sourceNode = renderNode.sourceNode;
-    const attrs = resolveAttrs(sourceNode);
+    const attrs = sourceNode.served.attrs;
     const rawUrl = attrs.get('src') ?? sourceNode.label ?? null;
     let url: string | null = null;
     if (rawUrl) {
-      const resolved = sourceNode.sourceFile.resolveMediaUrl(rawUrl);
+      const resolved = sourceNode.served.media(rawUrl);
       const proto = (resolved.match(/^([a-zA-Z][a-zA-Z0-9+\-.]*):/) ?? [])[1]?.toLowerCase();
       url = (!proto || ['http', 'https'].includes(proto)) ? resolved : null;
     }
@@ -143,7 +142,7 @@ const imageFactory: NodeTypeFactory = {
   },
   staticRenderBody(node) {
     const rawUrl = node.attrs.get('src') ?? node.label ?? null;
-    const url = rawUrl ? node.sourceFile.resolveMediaUrl(rawUrl) : null;
+    const url = rawUrl ? node.served.media(rawUrl) : null;
     if (!url) return null;
     const alt        = node.attrs.get('alt') ?? '';
     const darkClass  = DARK_MODE_CLASSES[node.attrs.get('dark-mode') ?? ''] ?? '';

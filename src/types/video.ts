@@ -46,7 +46,6 @@ import type { NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
 import { treeNavKeydown, actionKeydown, copyPermalink } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
-import { resolveAttrs } from '../source-file.js';
 import { BaseTypeHandler } from '../base-handler.js';
 
 import { wireSelectThenAction } from '../interaction.js';
@@ -83,7 +82,7 @@ class VideoTypeHandler extends BaseTypeHandler {
   constructor(renderNode: RenderNode) {
     super(renderNode, 'iframe, video');
     const sourceNode = renderNode.sourceNode;
-    const attrs = resolveAttrs(sourceNode);
+    const attrs = sourceNode.served.attrs;
     const rawUrl = attrs.get('src') ?? (sourceNode.label || null);
 
     const content = this.content;
@@ -103,7 +102,7 @@ class VideoTypeHandler extends BaseTypeHandler {
 
     // Decide between a direct video file and a YouTube embed.
     const fileUrl = rawUrl && isFileSource(rawUrl)
-      ? safeMediaUrl(sourceNode.sourceFile.resolveMediaUrl(rawUrl))
+      ? safeMediaUrl(sourceNode.served.media(rawUrl))
       : null;
 
     if (fileUrl) {
@@ -212,7 +211,7 @@ const videoFactory: NodeTypeFactory = {
     if (!rawUrl) return null;
     const clip = resolveClip(node.attrs, null);
     if (isFileSource(rawUrl)) {
-      const url = safeMediaUrl(node.sourceFile.resolveMediaUrl(rawUrl));
+      const url = safeMediaUrl(node.served.media(rawUrl));
       if (!url) return null;
       return `<video src="${esc(withMediaFragment(url, clip))}" controls preload="metadata" playsinline referrerpolicy="no-referrer"></video>`;
     }

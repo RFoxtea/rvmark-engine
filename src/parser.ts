@@ -247,7 +247,10 @@ export interface SourceNode extends RawNode {
   children:   SourceNode[];
   searchable: boolean;
   exhibit:    import('./inherited.js').ExhibitScope | null;
-  sourceFile: import('./source-file.js').SourceFile;  // stamped by SourceFile constructor
+  // What the origin resolved on this node's behalf — its address, its attrs,
+  // its tags, its media. The only provenance a client-side reader gets; the
+  // parsed document it came from is the origin's and does not leave it.
+  served:     import('./served.js').Served;
 }
 
 export interface RawFile {

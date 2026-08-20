@@ -12,6 +12,7 @@
 import type { Tag, TagDef, NodeAttrs } from './parser.js';
 import { Multimap } from './multimap.js';
 import { mdInline } from './markdown.js';
+import type { ServedTag } from './served.js';
 
 export function resolveTagDef(name: string, inlineProps: TagDef, sourceTagDefs?: Record<string, TagDef>): TagDef {
   const def = new Multimap();
@@ -43,11 +44,9 @@ export function mergeNodeAttrs(tagAttrs: NodeAttrs, nodeAttrs: NodeAttrs): NodeA
   return out;
 }
 
-export function buildTagChips(tags: Tag[], sourceTagDefs?: Record<string, TagDef>): DocumentFragment {
+export function buildTagChips(tags: ServedTag[]): DocumentFragment {
   const frag = document.createDocumentFragment();
-  for (const { name, props } of tags) {
-    const def = resolveTagDef(name, props, sourceTagDefs);
-
+  for (const { name, def } of tags) {
     if (def.has('internal')) continue;
 
     const href  = def.get('href');

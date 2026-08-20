@@ -88,7 +88,9 @@ test('an exhibit scope survives a structured clone with its attrs live', () => {
 
 test('a node round-trips through an envoy-shaped clone with its scope intact', () => {
   const node = nodeOf(index, 'exhibit-scope-child');
-  const back = deserializeNode(structuredClone(serializeNode(node)), node.sourceFile);
+  // The origin re-serves what comes back; here that is a stub, since the point
+  // of the test is the inherited bag surviving the clone, not the re-serving.
+  const back = deserializeNode(structuredClone(serializeNode(node)), () => ({}));
   assert.equal(typeof back.exhibit.attrs.get, 'function');
   assert.equal(back.exhibit.attrs.get('exhibit'), node.exhibit.attrs.get('exhibit'));
 });
@@ -189,7 +191,7 @@ test('exhibit resolves for nodes that are never mounted', () => {
 
 function stubRn(file, slug, pageAddress) {
   const node = nodeOf(file, slug);
-  return { sourceNode: { ...node, sourceFile: { pageAddress } } };
+  return { sourceNode: { ...node, served: { pageAddress } } };
 }
 
 test('the reader returns the inherited ref for a node below the declaration', () => {

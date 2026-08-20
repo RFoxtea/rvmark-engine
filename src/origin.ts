@@ -1,7 +1,7 @@
 /**
  * origin.ts
  *
- * The client's view of one origin: five queries, and nothing else.
+ * The client's view of one origin — the only route to content there is.
  *
  * An origin is an attachment point that answers lookups by key. `key` is opaque
  * to the caller — never parsed, never split, never appended to. There is one key
@@ -18,18 +18,25 @@
  *
  * What lives here is everything about where content comes from — the `.rvmark`
  * storage layout (`/_rvmark/`, index.rvmark chains, `.rvmark` suffixing), sigil
- * declarations, fallback chains, and matching over content the caller does not
- * hold. What does NOT live here is anything about rendering.
+ * declarations, fallback chains, media path arithmetic, tag definitions, and
+ * matching over content the caller does not hold. What does NOT live here is
+ * anything about rendering.
+ *
+ * A node leaves here already resolved: it carries a `Served` (served.ts) with
+ * its address, its merged attrs, its resolved tags and a media resolver. That
+ * is the whole of what a client-side reader may know about where a node came
+ * from, and it is a value rather than a handle — so the same reads work when
+ * the wire is cut underneath them.
  */
 
-import type { SourceNode, NodeAttrs, OriginDef } from './parser.js';
+import type { SourceNode, NodeAttrs, FileMeta, OriginDef } from './parser.js';
 import {
-  resolveSlugInFile, resolveAddress, addressToSlug, addressOrigin,
+  resolveSlugInFile, resolveAddress, resolveMediaAddress, addressToSlug, addressOrigin,
   parseTranscludeEntry, RVMARK_SEGMENT,
 } from './shared.js';
-import { loadRvmarkFile } from './loader.js';
-import { resolveAttrs } from './source-file.js';
-import { resolveTagDef } from './tags.js';
+import { loadRvmarkFile, invalidateLoaderCaches } from './loader.js';
+import type { SourceFile } from './source-file.js';
+import { tagText, type Reserve } from './served.js';
 
 /** Where an origin's content is served from, plus one of its keys. */
 export interface Address {
@@ -51,6 +58,42 @@ export interface Origin {
   childrenOf(key: string):                  Promise<SourceNode[]>;
   resolve(key: string, refs: string[]):     Promise<Address[][]>;
   hasMatchBelow(keys: string[], q: string): Promise<boolean[]>;
+
+  /**
+   * A ref to something the client fetches itself rather than renders as nodes —
+   * a markdown file, an HTML page, an image. It comes back as a URL because
+   * that is what the caller does with it: hand it to fetch, or to an <img>.
+   *
+   * A second query rather than a flag on `resolve`, because the two return
+   * different kinds of thing. `resolve` answers with addresses that only this
+   * origin can interpret; this answers with a URL anyone can dereference, which
+   * is the whole reason a resource is not a node.
+   *
+   * Null for a ref this origin will not serve. Synchronous — the caller has the
+   * key already and a URL is a naming question, not a fetch. It stays
+   * synchronous over the wire too: `resolveResource` on a node's own media is
+   * answered when the node is served, not asked for afterwards.
+   */
+  resource(key: string, ref: string): string | null;
+
+  /**
+   * Drop whatever this origin has cached. Nothing calls it in the browser: a
+   * `serve --dev` rebuild reloads the page, which discards the store with the
+   * realm. It exists because the store is the origin's now, so the *ability* to
+   * say "yours is stale" has to be the origin's too — a caller that needed it
+   * would otherwise have to reach past the protocol into the loader.
+   */
+  invalidate(): void;
+
+  /**
+   * The page-level metadata in force at `key` — title, footer, `no-keymap`, the
+   * shell's settings. Not one of the five: it is a `.rvmark` file-head notion
+   * that the shell reads once at boot, and the design note has it retiring
+   * along with heads. It sits here so that until then `main.ts` asks the origin
+   * rather than holding the parsed file, which is the only thing that kept a
+   * `SourceFile` in the client.
+   */
+  meta(key: string): Promise<FileMeta>;
 }
 
 // ── Addresses ─────────────────────────────────────────────────────────────────
@@ -65,12 +108,53 @@ function currentBaseUrl(): string {
   return typeof location !== 'undefined' ? location.origin : '';
 }
 
-/** The address of a node the caller already holds. */
+/** The address of a node the caller already holds — carried, not derived. */
 export function addressOfNode(node: SourceNode): Address {
-  const page = node.sourceFile?.pageAddress ?? '';
-  const base = addressOrigin(page) || currentBaseUrl();
-  const file = page.slice(addressOrigin(page).length).split('#')[0];
-  return { baseUrl: base, key: node.slug ? `${file}#${node.slug}` : file };
+  return node.served.address;
+}
+
+/**
+ * A `Reserve` for the document `node` came from: the hook `deserializeNode`
+ * uses to re-serve a transformed node (served.ts).
+ *
+ * It is `node.served.reserve` and nothing else — the node carries its own
+ * re-serving capability because the alternative is a client-side lookup from a
+ * page address back to a parsed document, which is the origin-side index the
+ * whole model exists to keep out of the client's hands.
+ */
+export function reserveFrom(node: SourceNode): Reserve {
+  return node.served.reserve;
+}
+
+/**
+ * Resolve a raw ref, written on the node at `from`, to the node it names.
+ *
+ * The ref crosses as the author wrote it. Sigils, fallback chains, `.rvmark`
+ * suffixing and path arithmetic are all origin-side and no caller learns that
+ * any of them exist. What comes back is candidate addresses, in order, and the
+ * walk over them happens HERE rather than inside the origin: a fallback chain
+ * falls through only when a load *fails*, and an origin must not fetch what a
+ * foreign address points at — producing the node would mean parsing another
+ * origin's content, which is the thing the boundary exists to stop.
+ *
+ * Accepts an entry with or without its '^' prefix — the prefix selects what the
+ * caller does with the result, and never changes which node is resolved.
+ */
+export async function resolveRefAt(from: Address, rawRef: string | null | undefined): Promise<SourceNode | null> {
+  if (!rawRef) return null;
+  try {
+    const candidates = (await originFor(from.baseUrl).resolve(from.key, [rawRef]))[0] ?? [];
+    for (const { baseUrl, key } of candidates) {
+      const node = await originFor(baseUrl).node(key);
+      if (node) return node;
+    }
+    return null;
+  } catch { return null; }
+}
+
+/** `resolveRefAt` for a ref written on a node the caller holds. */
+export function resolveRefOn(node: SourceNode, rawRef: string | null | undefined): Promise<SourceNode | null> {
+  return resolveRefAt(node.served.address, rawRef);
 }
 
 // ── Sigils (origin-side: the client never learns these exist) ─────────────────
@@ -187,26 +271,19 @@ function sigilCandidates(
 // its own side. search.ts uses the same two functions over what it does hold, so
 // the two halves of a search agree by construction.
 
-export function tagDisplayText(tag: SourceNode['tags'][number], node: SourceNode): string | null {
-  const def = resolveTagDef(tag.name, tag.props, node.sourceFile?.tagDefs);
-  if (def.has('internal')) return null;
-  return def.get('label') ?? tag.name;
-}
-
 export function nodeTextMatches(node: SourceNode, needle: string): boolean {
   if (node.label && node.label.toLowerCase().includes(needle)) return true;
-  if (node.tags.some(tag => tagDisplayText(tag, node)?.toLowerCase().includes(needle))) return true;
+  if (node.served.tags.some(tag => tagText(tag)?.toLowerCase().includes(needle))) return true;
   return node.bodyLines.some(line => line.toLowerCase().includes(needle));
 }
 
-// A same-file `{=> #id}` target, or null. The local hop only: this origin can no
-// more follow a ref into a foreign one here than anywhere else.
-function localTranscludeTarget(node: SourceNode): SourceNode | null {
-  const raw = resolveAttrs(node).get('transclude');
+// A same-file `{=> #id}` target within `file`, or null. The local hop only:
+// this origin can no more follow a ref into a foreign one here than anywhere
+// else.
+function localTranscludeTarget(node: SourceNode, file: SourceFile): SourceNode | null {
+  const raw = node.served.attrs.get('transclude');
   if (!raw || !raw.startsWith('#') || raw.includes(',')) return null;
-  const sf = node.sourceFile;
-  if (!sf) return null;
-  return resolveSlugInFile({ nodeMap: sf.nodeMap, roots: sf.roots }, raw.slice(1))?.node ?? null;
+  return resolveSlugInFile({ nodeMap: file.nodeMap, roots: file.roots }, raw.slice(1))?.node ?? null;
 }
 
 // ── The .rvmark origin ────────────────────────────────────────────────────────
@@ -271,26 +348,53 @@ class RvmarkOrigin implements Origin {
     const needle = query.trim().toLowerCase();
     if (!needle) return keys.map(() => false);
 
-    const below = (node: SourceNode, active: Set<SourceNode>): boolean => {
+    const below = (node: SourceNode, file: SourceFile, active: Set<SourceNode>): boolean => {
       for (const child of node.children ?? []) {
         if (nodeTextMatches(child, needle)) return true;
-        if (below(child, active)) return true;
+        if (below(child, file, active)) return true;
       }
-      const target = localTranscludeTarget(node);
+      const target = localTranscludeTarget(node, file);
       if (target && !active.has(target)) {
         const next = new Set(active);
         next.add(target);
-        if (nodeTextMatches(target, needle) || below(target, next)) return true;
+        if (nodeTextMatches(target, needle) || below(target, file, next)) return true;
       }
       return false;
     };
 
     return Promise.all(keys.map(async (key) => {
-      const node = await this.node(key);
-      if (!node || !(node as any).searchable) return false;
-      return below(node, new Set([node]));
+      const file = await loadRvmarkFile(this.address(key));
+      const node = file ? await this.node(key) : null;
+      if (!file || !node || !node.searchable) return false;
+      return below(node, file, new Set([node]));
     }));
   }
+
+  /**
+   * A media/asset ref → the URL it is served from. Same path arithmetic
+   * `served.media` performs, reached by key rather than by node: the caller
+   * that wants this — exhibit's markdown and html strategies — is holding a ref
+   * off a node's attrs and a key, not a node to read `served` off.
+   *
+   * Absolute http(s) refs pass through: a ref that names its own location is
+   * already a URL and this origin has nothing to add. That is not the federation
+   * hole `resolve` closes — a resource is fetched, not parsed, so nothing about
+   * a foreign origin's *content model* is being trusted.
+   */
+  resource(key: string, ref: string): string | null {
+    return ref ? resolveMediaAddress(ref, this.address(key)) : null;
+  }
+
+  // Throws on a key this origin cannot serve at all. The one query that does:
+  // the shell asks it before there is a tree to show a failure in, so a caller
+  // that gets an empty bag back has no way to tell "no metadata" from "no page".
+  async meta(key: string): Promise<FileMeta> {
+    const file = await loadRvmarkFile(this.address(key));
+    if (!file) throw new Error(`no such page: ${key}`);
+    return file.meta;
+  }
+
+  invalidate(): void { invalidateLoaderCaches(this.baseUrl); }
 }
 
 // ── Lazy per-baseUrl registry ─────────────────────────────────────────────────

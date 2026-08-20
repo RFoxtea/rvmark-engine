@@ -13,8 +13,9 @@
 import { prerootFrame } from './state.js';
 import { buildRenderNode, RenderNode } from './render-node.js';
 import { originFor, addressOf } from './origin.js';
-import type { SourceFile } from './source-file.js';
-import { loadPageFile, setPageContext } from './loader.js';
+import type { FileMeta } from './parser.js';
+import { RVMARK_SEGMENT } from './shared.js';
+import { setPageContext } from './loader.js';
 import { setMeta, setFooter, setViewTarget, clearTree, showError } from './shell.js';
 import { initSearch } from './search.js';
 import { keymapInstallShortcut } from './keymap.js';
@@ -49,15 +50,15 @@ declare global {
 }
 
 async function renderRoot(
-  sourceFile:    SourceFile,
+  pageAddress:   string,
   requestedSlug: string | null,
   focusSlug:     string | null,
 ): Promise<void> {
   // The page's own URL is the one address the client builds. Past this point a
   // key is opaque: it is only ever handed back to the origin that minted it.
-  const page   = addressOf(sourceFile.pageAddress);
+  const page   = addressOf(pageAddress);
   const origin = originFor(page.baseUrl);
-  const keyFor = (slug: string) => addressOf(`${sourceFile.pageAddress}#${slug}`).key;
+  const keyFor = (slug: string) => addressOf(`${pageAddress}#${slug}`).key;
 
   // A fragment that names nothing falls back to the page's entry point, as it
   // did when this was a nodeMap miss.
@@ -108,10 +109,21 @@ async function init(page: RvmarkPageContext): Promise<void> {
     return;
   }
 
-  let sourceFile: SourceFile;
+  // The page's canonical address — the one address this side constructs, from
+  // its own URL and the file the builder stamped in. Everything downstream is a
+  // key handed back to the origin that minted it.
+  const pageAddress = location.origin + RVMARK_SEGMENT + page.file;
+  const pageAddr    = addressOf(pageAddress);
+  const origin      = originFor(pageAddr.baseUrl);
+
+  let meta: FileMeta;
   try {
     setPageContext(page.file, basePath);
-    sourceFile = await loadPageFile(page.file, basePath);
+    // `meta` is what loads the page — the file has to be parsed to answer it,
+    // and the same parse serves the `node()` call renderRoot makes next. A miss
+    // surfaces there, as a missing node, which is where the shell already knows
+    // how to say so; there is nothing this side can add by probing first.
+    meta = await origin.meta(pageAddr.key);
   } catch (err) {
     console.warn(`[rvmark] Failed to load ${page.file}: ${(err as Error).message}`);
     if (staticEl) staticEl.style.display = '';
@@ -128,20 +140,20 @@ async function init(page: RvmarkPageContext): Promise<void> {
   initParams.delete('--static');
   for (const [key, value] of initParams.entries()) prerootFrame.declare(key, value);
 
-  setMeta(sourceFile.meta);
+  setMeta(meta);
   initSearch();
   // Same `no-keymap` opt-out as the footer menu row (see shell.ts): a page that
   // suppresses the row must not still answer the key.
-  if (!sourceFile.meta?.has('no-keymap')) keymapInstallShortcut();
+  if (!meta.has('no-keymap')) keymapInstallShortcut();
 
   const hash  = page.anchor ?? (location.hash ? location.hash.slice(1) : null);
   const focus = page.focus  ?? new URLSearchParams(location.search).get('focus');
-  await renderRoot(sourceFile, hash, focus);
+  await renderRoot(pageAddress, hash, focus);
   if (treeEl) treeEl.style.display = '';
 
   window.addEventListener('hashchange', async () => {
     const focusParam = new URLSearchParams(location.search).get('focus');
-    await renderRoot(sourceFile, location.hash ? location.hash.slice(1) : null, focusParam);
+    await renderRoot(pageAddress, location.hash ? location.hash.slice(1) : null, focusParam);
     document.getElementById('tree-scroll')?.scrollTo({ top: 0, behavior: scrollBehavior() });
   });
 
@@ -174,7 +186,7 @@ export function findNodes(query: string): RenderNode[] {
     if (
       sn.slug === query ||
       sn.attrs?.get('id') === query ||
-      (sn.sourceFile?.pageAddress && sn.slug && sn.sourceFile.pageAddress + '#' + sn.slug === query)
+      (sn.served?.pageAddress && sn.slug && sn.served.pageAddress + '#' + sn.slug === query)
     ) results.push(rn);
   }
   return results;

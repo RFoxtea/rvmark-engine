@@ -2,36 +2,25 @@
  * source-file.ts
  *
  * SourceFile — the parsed representation of a single .rvmark source file.
- * Replaces the loose `fileCtx` plain object ({ nodeMap, meta, address, pageAddress })
- * passed around throughout the renderer and type handlers.
+ *
+ * This is origin-side storage, not a client-side handle. It is the `.rvmark`
+ * origin's answer to "what did I parse", and it exists only inside origin.ts's
+ * implementation: nothing outside reads it. What the client gets instead is a
+ * `Served` (served.ts), stamped on every node here, carrying the resolved
+ * answers rather than the means to compute them.
  *
  * Exports:
  *   SourceFile
  */
 
-import type { SourceNode, TagDef, Head, FileMeta, NodeAttrs } from './parser.js';
+import type { SourceNode, Tag, TagDef, Head, FileMeta, NodeAttrs } from './parser.js';
 import { resolveMediaAddress } from './shared.js';
-import { tagsNodeAttrs, mergeNodeAttrs } from './tags.js';
+import { tagsNodeAttrs, mergeNodeAttrs, resolveTagDef } from './tags.js';
+import type { Served } from './served.js';
+import { addressOrigin } from './shared.js';
 
 export type { Head, FileMeta };
 
-export type ResolvedAttrs = NodeAttrs;
-
-/**
- * A node's attributes with its tags' `node.*` overrides merged in — the answer
- * to "what are this node's attrs", which is a property of the source model
- * rather than of any renderer.
- *
- * Tag entries come first, the node's own after, so `.get()` gives the node the
- * last word and `.getAll()` still sees both (see multimap.ts on which attrs
- * compose and which override).
- *
- * Resolution is not cached here: callers that need it per-node hold the result
- * (handlers store it as a field), keeping SourceNode itself pure data.
- */
-export function resolveAttrs(node: SourceNode): ResolvedAttrs {
-  return mergeNodeAttrs(tagsNodeAttrs(node.tags, node.sourceFile.tagDefs), node.attrs);
-}
 
 export class SourceFile {
   readonly nodeMap:     Record<string, SourceNode>;
@@ -52,7 +41,10 @@ export class SourceFile {
     this.head        = head;
     this.address     = address;
     this.pageAddress = pageAddress;
-    const stamp = (node: SourceNode) => { node.sourceFile = this; node.children.forEach(stamp); };
+    const stamp = (node: SourceNode) => {
+      node.served = this.serve(node);
+      node.children.forEach(stamp);
+    };
     roots.forEach(stamp);
   }
 
@@ -63,4 +55,36 @@ export class SourceFile {
     return resolveMediaAddress(url, this.pageAddress) ?? url;
   }
 
+  /**
+   * The resolved view of one node, computed once when the file is parsed.
+   *
+   * Eager rather than lazy: every field is wanted by the first handler that
+   * touches the node, and computing them together is what makes the wire form
+   * a serialization of this object rather than a second, differently-shaped
+   * answer. `media` stays a closure — see served.ts on why it is not a map.
+   */
+  private serve(node: SourceNode): Served {
+    return this.serveShape(node.attrs, node.tags, node.slug);
+  }
+
+  /**
+   * Serve whatever attrs, tags and slug are handed in, against this file's head.
+   * `serve` calls it for a parsed node; `reserve` calls it again for a node an
+   * envoy transform rewrote, which is why it takes the pieces rather than a node.
+   */
+  private serveShape(attrs: NodeAttrs, tags: Tag[], slug: string): Served {
+    const baseUrl = addressOrigin(this.pageAddress);
+    const local   = this.pageAddress.slice(baseUrl.length).split('#')[0];
+    return {
+      address:     { baseUrl, key: slug ? `${local}#${slug}` : local },
+      attrs:       mergeNodeAttrs(tagsNodeAttrs(tags, this.head.tagDefs), attrs),
+      tags:        tags.map(({ name, props }) => ({
+                     name,
+                     def: resolveTagDef(name, props, this.head.tagDefs),
+                   })),
+      media:       (ref: string) => this.resolveMediaUrl(ref),
+      pageAddress: this.pageAddress,
+      reserve:     (out) => this.serveShape(out.attrs, out.tags, out.slug),
+    };
+  }
 }

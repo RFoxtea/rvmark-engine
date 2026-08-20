@@ -1,7 +1,7 @@
 import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
-import { resolveAttrs } from '../source-file.js';
 import { factoryGet, factoryRegister } from '../type-registry.js';
-import { resolveTransclusionConfig, resolveRef } from '../transclusion.js';
+import { resolveTransclusionConfig } from '../transclusion.js';
+import { resolveRefOn } from '../origin.js';
 import { buildStatePass } from '../state.js';
 import { parsePass, treeNavKeydown, makeErrorNode } from '../handler-utils.js';
 import { Multimap } from '../multimap.js';
@@ -9,7 +9,7 @@ import { createCustomTypeHandler } from './custom.js';
 
 function differentiate(rn: RenderNode): TypeHandler {
   const node     = rn.sourceNode;
-  const attrs    = resolveAttrs(node);
+  const attrs    = node.served.attrs;
   const typeName = attrs.get('type') ?? 'text';
   const factory  = factoryGet(typeName);
 
@@ -65,18 +65,18 @@ factoryRegister('loading', { create: (rn) => loadingHandler(rn) });
 export const blastocyteFactory: NodeTypeFactory = {
   create(rn: RenderNode): TypeHandler {
     const node  = rn.sourceNode;
-    const attrs = resolveAttrs(node);
+    const attrs = node.served.attrs;
     const { embedVal, transcludeMode } = resolveTransclusionConfig(node, attrs);
 
     if (transcludeMode === 'link') {
       const handler = loadingHandler(rn);
       rn.attachHandler(handler);
 
-      resolveRef(embedVal, node.sourceFile.pageAddress).then((tgt: any) => {
+      resolveRefOn(node, embedVal).then((tgt: any) => {
         (handler.content as any)._stopLoading?.();
         if (tgt) {
           const passRaw = node.attrs.get('pass');
-          const isCrossFile = tgt.sourceFile?.pageAddress !== node.sourceFile.pageAddress;
+          const isCrossFile = tgt.served?.pageAddress !== node.served.pageAddress;
           if (passRaw !== undefined || isCrossFile) {
             rn.state.parent = buildStatePass(rn.state.parent, passRaw !== undefined ? parsePass(passRaw) : []);
           }

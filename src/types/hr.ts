@@ -11,7 +11,6 @@
 import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
 import { applyTagClasses } from '../handler-utils.js';
-import { resolveAttrs } from '../source-file.js';
 
 class HrTypeHandler implements TypeHandler {
   readonly content:    HTMLElement;
@@ -19,7 +18,7 @@ class HrTypeHandler implements TypeHandler {
 
   constructor(renderNode: RenderNode) {
     const sourceNode = renderNode.sourceNode;
-    const attrs = resolveAttrs(sourceNode);
+    const attrs = sourceNode.served.attrs;
 
     const content = document.createElement('div');
     this.content = content;

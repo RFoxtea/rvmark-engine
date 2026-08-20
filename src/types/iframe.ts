@@ -37,7 +37,6 @@ import type { NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
 import { treeNavKeydown, actionKeydown, copyPermalink } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
-import { resolveAttrs } from '../source-file.js';
 import { BaseTypeHandler } from '../base-handler.js';
 
 import { wireSelectThenAction } from '../interaction.js';
@@ -172,10 +171,10 @@ class IframeTypeHandler extends BaseTypeHandler {
   constructor(renderNode: RenderNode) {
     super(renderNode, '*');
     const sourceNode = renderNode.sourceNode;
-    const attrs = resolveAttrs(sourceNode);
+    const attrs = sourceNode.served.attrs;
 
     const rawUrl = attrs.get('src') ?? (sourceNode.label?.trim() || null);
-    const url         = rawUrl ? sourceNode.sourceFile.resolveMediaUrl(rawUrl) : null;
+    const url         = rawUrl ? sourceNode.served.media(rawUrl) : null;
     const srcdoc      = (!url && sourceNode.bodyLines?.length)
       ? sourceNode.bodyLines.join('\n') : null;
     const fixedHeight = attrs.get('height') ?? null;
@@ -263,7 +262,7 @@ const iframeFactory: NodeTypeFactory = {
   staticRenderBody(node) {
     const rawUrl = node.attrs.get('src') ?? (node.label?.trim() || null);
     if (rawUrl) {
-      const url = node.sourceFile?.resolveMediaUrl(rawUrl) ?? rawUrl;
+      const url = node.served.media(rawUrl);
       const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       return `<a class="static-iframe-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(rawUrl)}</a>`;
     }

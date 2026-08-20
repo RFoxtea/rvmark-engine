@@ -19,8 +19,7 @@ export type { SourceNode };
 export { parseShowWhen };
 import { StateFrame, buildStatePass, prerootFrame } from './state.js';
 import type { StateNode, PassEntry } from './state.js';
-import { resolveAttrs } from './source-file.js';
-import type { ResolvedAttrs } from './source-file.js';
+import type { ResolvedAttrs } from './served.js';
 import { isOrContainsPermalink } from './transclusion.js';
 import { exhibitNotifySelection } from './exhibit.js';
 import { applyEventAttr } from './handler-utils.js';
@@ -58,9 +57,12 @@ export interface TypeHandler {
  *  sibling files (e.g. inline a referenced .md section) without importing
  *  Node-only APIs that would break browser builds. */
 export interface StaticBuildContext {
-  /** Read a file from the rvmark source tree by its tree-relative path
-   *  (e.g. 'docs/philosophy.md'). Returns null if not found. */
-  readFile(relPath: string): string | null;
+  /** Read a resource by the URL an origin resolved it to (`served.media`).
+   *  Returns null if not found. The builder is the Node-side half of the
+   *  `.rvmark` origin, so mapping that URL back to bytes is its job, not the
+   *  handler's — a handler that did its own path arithmetic would be doing
+   *  origin work with a client's information. */
+  readFile(url: string): string | null;
 }
 
 export interface NodeTypeFactory {
@@ -212,7 +214,7 @@ export function buildRenderNode(
   const isFocusTarget   = !!focusSlug && (node.slug === focusSlug || node.attrs.get('id') === focusSlug || permalinkBase === focusSlug);
   const isFocusAncestor = !!focusSlug && !isFocusTarget && isOrContainsPermalink(node, permalinkBase, focusSlug);
 
-  const attrs = resolveAttrs(node);
+  const attrs = node.served.attrs;
 
   const rn = new RenderNode(node, parentState);
   rn.permalinkId = permalinkBase ?? '';
@@ -320,7 +322,7 @@ export class RenderNode {
   constructor(node: SourceNode, parentState: StateNode = prerootFrame) {
     this.index      = _rnIndex++;
     this.sourceNode = node;
-    this._attrs     = resolveAttrs(node);
+    this._attrs     = node.served.attrs;
     this.li         = document.createElement('li');
     this.children   = document.createElement('div');
 
@@ -372,7 +374,7 @@ export class RenderNode {
 
   watchChildren(nodes: SourceNode[], callback: (anyVisible: boolean) => void): () => void {
     const isVisible = (c: SourceNode) => {
-      const a = resolveAttrs(c);
+      const a = c.served.attrs;
       if (a.has('draft')) return false;
       return !a.getAll('show-when').some(sw => evalShowWhen(sw, this.state));
     };
@@ -381,7 +383,7 @@ export class RenderNode {
 
     const keys = new Set<string>();
     for (const child of nodes) {
-      for (const sw of resolveAttrs(child).getAll('show-when'))
+      for (const sw of child.served.attrs.getAll('show-when'))
         for (const cond of parseShowWhen(sw)) keys.add(cond.key);
     }
     if (!keys.size) return () => {};
@@ -443,7 +445,7 @@ export class RenderNode {
   replaceHandler(sourceNode: SourceNode): void {
     this.sourceNode = sourceNode;
     this.permalinkId = sourceNode.permalinkId ?? '';
-    this._attrs = resolveAttrs(sourceNode);
+    this._attrs = sourceNode.served.attrs;
     blastocyteFactory.create(this);
   }
 
@@ -497,7 +499,7 @@ export class RenderNode {
     ul.className = 'tree';
     ul.setAttribute('role', 'group');
 
-    const hostAddress = this.sourceNode.sourceFile?.pageAddress;
+    const hostAddress = this.sourceNode.served?.pageAddress;
     const explicitPass = passChildrenEntries !== undefined
       ? buildStatePass(this.state, passChildrenEntries)
       : null;
@@ -512,7 +514,7 @@ export class RenderNode {
       let parentState: StateNode;
       if (explicitPass) {
         parentState = explicitPass;
-      } else if (node.sourceFile?.pageAddress !== hostAddress) {
+      } else if (node.served?.pageAddress !== hostAddress) {
         parentState = defaultBarrier!;
       } else {
         parentState = this.state;
@@ -535,7 +537,7 @@ export class RenderNode {
     // Spawn the initial batch (those not deferred by show-when).
     const initialRns: RenderNode[] = [];
     for (const slot of slots) {
-      const showWhenRaws = resolveAttrs(slot.node).getAll('show-when');
+      const showWhenRaws = slot.node.served.attrs.getAll('show-when');
       const rn = initSlot(slot, showWhenRaws, focusSlug);
       if (rn) { ul.appendChild(rn.li); initialRns.push(rn); }
     }

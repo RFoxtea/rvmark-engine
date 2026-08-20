@@ -11,7 +11,7 @@
  * Exports:
  *   setPageContext(file, basePath)  — called once by init() when a page loads
  *   getPageContext()                — used by exhibit.ts to resolve relative paths
- *   loadPageFile(file, basePath)    — load the current page with inherited head
+ *   invalidateLoaderCaches(baseUrl)  — drop everything cached for one origin
  *   loadRvmarkFile(address)         — resolve a canonical address → SourceFile | null
  */
 
@@ -189,14 +189,17 @@ function loadResolvedFile(address: string): Promise<SourceFile> {
   return p;
 }
 
-// ── loadPageFile ──────────────────────────────────────────────────────────────
-// Load the current page's primary file. Called by main.ts on init.
-export function loadPageFile(file: string, basePath: string): Promise<SourceFile> {
-  // basePath is preserved for backward compatibility with main.ts's signature,
-  // but the canonical address is built from location.origin directly.
-  void basePath;
-  const address = location.origin + RVMARK_SEGMENT + file;
-  return loadResolvedFile(address);
+// ── Invalidation ──────────────────────────────────────────────────────────────
+// Drop everything cached for one baseUrl. The store belongs to the origin now,
+// so this is reached only through `Origin.invalidate` (origin.ts) — the loader
+// is not something a caller outside gets to poke.
+export function invalidateLoaderCaches(baseUrl: string): void {
+  for (const cache of [rawCache, sourceFileCache] as Map<string, unknown>[]) {
+    for (const key of [...cache.keys()]) if (key.startsWith(baseUrl)) cache.delete(key);
+  }
+  for (const key of [...inheritedHeadCache.keys()]) {
+    if (key.startsWith(baseUrl + '|')) inheritedHeadCache.delete(key);
+  }
 }
 
 // ── loadRvmarkFile ────────────────────────────────────────────────────────────

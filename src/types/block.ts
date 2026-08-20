@@ -23,7 +23,7 @@ import { factoryRegister } from '../render-node.js';
 import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, exhibitOpenFromNode, wireBulletActions } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
 import { wireSpanToggles } from '../span-toggle.js';
-import { resolveAttrs } from '../source-file.js';
+import type { ResolvedAttrs } from '../served.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import { wireSpanVisibility } from '../span-visibility.js';
@@ -96,7 +96,7 @@ class BlockTypeHandler extends BaseTypeHandler {
   constructor(rn: RenderNode) {
     super(rn, 'a[href], pre, .block-body-scroll, .md-math-block, .katex-display, .katex-html');
     const sourceNode = rn.sourceNode;
-    const attrs = resolveAttrs(sourceNode);
+    const attrs = sourceNode.served.attrs;
     applyOnSpawn(attrs, rn);
 
     const { content } = this;
@@ -129,7 +129,7 @@ class BlockTypeHandler extends BaseTypeHandler {
   // ── Private methods ────────────────────────────────────────────────────────
 
   private resolveSrc(
-    attrs: ReturnType<typeof resolveAttrs>,
+    attrs: ResolvedAttrs,
     sourceNode: SourceNode,
   ): { url: string | null; sectionSlug: string | null; bodyText: string | null } {
     const rawSrc = (attrs.get('src') ?? sourceNode.label ?? '').trim();
@@ -137,7 +137,7 @@ class BlockTypeHandler extends BaseTypeHandler {
       const hashIdx   = rawSrc.indexOf('#');
       const filePart  = hashIdx === -1 ? rawSrc : rawSrc.slice(0, hashIdx);
       const sectionSlug = hashIdx === -1 ? null : rawSrc.slice(hashIdx);
-      return { url: sourceNode.sourceFile.resolveMediaUrl(filePart), sectionSlug, bodyText: null };
+      return { url: sourceNode.served.media(filePart), sectionSlug, bodyText: null };
     }
     return {
       url: null,
@@ -150,7 +150,7 @@ class BlockTypeHandler extends BaseTypeHandler {
     url: string | null,
     sectionSlug: string | null,
     bodyText: string | null,
-    attrs: ReturnType<typeof resolveAttrs>,
+    attrs: ResolvedAttrs,
     sourceNode: SourceNode,
   ): void {
     const { content } = this;
@@ -227,7 +227,7 @@ class BlockTypeHandler extends BaseTypeHandler {
   private wireListboxOptions(
     scroller: HTMLElement,
     spanMap: Map<number, ParsedSpanAttrs>,
-    attrs: ReturnType<typeof resolveAttrs>,
+    attrs: ResolvedAttrs,
     sourceNode: SourceNode,
   ): void {
     if (!isListbox(attrs, spanMap)) return;
@@ -351,10 +351,8 @@ const blockFactory: NodeTypeFactory = {
       const filePart = hashIdx === -1 ? rawSrc : rawSrc.slice(0, hashIdx);
       const sectionSlug = hashIdx === -1 ? null : rawSrc.slice(hashIdx);
 
-      const sourceFile = node.sourceFile;
-      if (!sourceFile) return null;
-      const targetRel = resolveSiblingPath(sourceFile.address, filePart);
-      const text = ctx.readFile(targetRel);
+      if (!node.served) return null;
+      const text = ctx.readFile(node.served.media(filePart));
       if (text === null) return wrap(`[unreadable: ${rawSrc}]`);
 
       let body: string;
@@ -366,17 +364,5 @@ const blockFactory: NodeTypeFactory = {
     return wrap(staticMdToHtml(node.bodyLines.join('\n')));
   },
 };
-
-/** Resolve a relative path against a source file's path. Pure string math —
- *  no Node-only APIs, so this is safe to ship in browser bundles. */
-function resolveSiblingPath(sourceRel: string, ref: string): string {
-  const sourceDir = sourceRel.replace(/[^/]*$/, '');
-  const parts: string[] = [];
-  for (const p of (sourceDir + ref).split('/')) {
-    if (p === '..') parts.pop();
-    else if (p !== '.' && p !== '') parts.push(p);
-  }
-  return parts.join('/');
-}
 
 factoryRegister('block', blockFactory);

@@ -26,6 +26,7 @@
 import type { SourceNode } from './parser.js';
 import type { PortableNode } from './portable-node.js';
 import { serializeNode, deserializeNode } from './portable-node.js';
+import { reserveFrom } from './origin.js';
 
 const ENVOY_PATH = '/envoy.html';
 
@@ -109,7 +110,10 @@ class OriginEnvoy {
   /** Round-trip one node through the author's transform for `typeName`.
    *  Rejects on author error, timeout, or a missing registration. */
   transform(typeName: string, node: SourceNode): Promise<SourceNode> {
-    const sourceFile = node.sourceFile;
+    // The transform's output belongs to the same document its input did, so the
+    // origin re-serves it against that document. Bound before the round trip:
+    // nothing that came back over the wire gets a say in how it is resolved.
+    const reserve = reserveFrom(node);
     const id = this.nextId++;
     const wire = serializeNode(node);
 
@@ -121,7 +125,7 @@ class OriginEnvoy {
       }, TRANSFORM_TIMEOUT_MS);
 
       this.pending.set(id, {
-        resolve: (portable) => resolve(deserializeNode(portable, sourceFile)),
+        resolve: (portable) => resolve(deserializeNode(portable, reserve)),
         reject,
         timer,
       });

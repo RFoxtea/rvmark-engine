@@ -12,8 +12,6 @@
 
 import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { resolveAttrs } from '../source-file.js';
-import { resolveTagDef } from '../tags.js';
 
 class GapTypeHandler implements TypeHandler {
   readonly content:    HTMLElement;
@@ -21,7 +19,7 @@ class GapTypeHandler implements TypeHandler {
 
   constructor(renderNode: RenderNode) {
     const sourceNode = renderNode.sourceNode;
-    const attrs = resolveAttrs(sourceNode);
+    const attrs = sourceNode.served.attrs;
 
     const content = document.createElement('div');
     this.content = content;
@@ -29,8 +27,7 @@ class GapTypeHandler implements TypeHandler {
     // ── Classes ──────────────────────────────────────────────────────────────
     content.classList.add('node-content--gap');
 
-    for (const { name, props } of sourceNode.tags) {
-      const def = resolveTagDef(name, props, sourceNode.sourceFile.tagDefs);
+    for (const { def } of sourceNode.served.tags) {
       for (const cls of def.getAll('class')) content.classList.add(...cls.split(/\s+/).filter(Boolean));
     }
     for (const cls of attrs.getAll('class')) content.classList.add(...cls.split(/\s+/).filter(Boolean));

@@ -65,7 +65,7 @@ const { parse, resolveFile } = await import('../out/parser.js');
 const { Multimap } = await import('../out/multimap.js');
 
 const { factoryGet } = await import('../out/render-node.js');
-const { SourceFile, resolveAttrs } = await import('../out/source-file.js');
+const { SourceFile } = await import('../out/source-file.js');
 
 // Import type files for their side effects (they call RvmarkRegistry.register).
 // text.js also exports the static bullet helpers — bullets belong to the types
@@ -164,8 +164,13 @@ export async function buildSite(config) {
   const INCLUDE_DRAFTS = includeDrafts;
 
   // Build context passed to every staticRenderBody hook (see render-node.ts).
+  // `url` is what the origin resolved a media ref to — path-only at build time,
+  // since a built page has no origin yet. Mapping it back to a file on disk is
+  // the origin's Node-side half doing what its browser half does with fetch.
   const buildCtx = {
-    readFile(relPath) {
+    readFile(url) {
+      if (!url || !url.startsWith(mountPath)) return null;
+      const relPath = url.slice(mountPath.length).split('#')[0];
       try { return readFileSync(join(RVMARK_DIR, relPath), 'utf8'); }
       catch { return null; }
     },
@@ -560,7 +565,7 @@ function renderStaticNode(node, sourceFile, depth = 0) {
   // node.bullet) plus the node's own. The hydrated page reads exactly this via
   // resolveAttrs, so reading raw node.attrs here would silently drop every
   // tag-driven bullet, {li} and {class} from the fallback.
-  const attrs = resolveAttrs(node);
+  const attrs = node.served.attrs;
   const isHidden = attrs.has('hidden');
 
   const transcludeRaw = attrs.get('transclude') ?? null;
@@ -728,7 +733,7 @@ function renderStaticNode(node, sourceFile, depth = 0) {
 // what the hydrated page builds, and :checked ~ .node-children drives the same
 // collapse aria-expanded drives there.
 function renderStaticTableNode(node, sourceFile, depth, typeName) {
-  const attrs  = resolveAttrs(node);
+  const attrs  = node.served.attrs;
   const isTable = typeName === 'table';
   const factory = factoryGet(typeName);
 
