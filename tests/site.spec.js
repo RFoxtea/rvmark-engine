@@ -76,21 +76,24 @@ function liOf(contentLocator) {
 }
 
 /** Find a hydrated .node-content by its {#id} using findNodes. */
+// Waits rather than demanding. A row's children arrive over the wire a round
+// trip after its own row does, so "the tree is up" no longer means every
+// descendant is hydrated in the same turn.
 async function nodeContent(page, id) {
-  const liId = await page.evaluate((id) => {
+  const liId = await page.waitForFunction((id) => {
     const rns = window._rvmarkFindNodes?.(id);
     return rns?.[0]?.li?.id ?? null;
-  }, id);
+  }, id).then(h => h.jsonValue());
   if (!liId) throw new Error(`No hydrated node with id="${id}" found`);
   return page.locator(`#${liId} > .node-content`);
 }
 
 /** Find a hydrated <li> by its {#id} using findNodes. */
 async function nodeLi(page, id) {
-  const liId = await page.evaluate((id) => {
+  const liId = await page.waitForFunction((id) => {
     const rns = window._rvmarkFindNodes?.(id);
     return rns?.[0]?.li?.id ?? null;
-  }, id);
+  }, id).then(h => h.jsonValue());
   if (!liId) throw new Error(`No hydrated node with id="${id}" found`);
   return page.locator(`#${liId}`);
 }

@@ -275,6 +275,21 @@ export interface SourceNode {
    * the node's own.
    */
   pageAddress: string;
+
+  /**
+   * Opaque scope token, minted by the origin. Equal means "same authoring
+   * scope"; the client raises a state barrier when a child's differs from its
+   * host's. Origin-side nodes carry their document's address, which reproduces
+   * what comparing `pageAddress` did before the client stopped modelling files.
+   */
+  stateScope: string;
+
+  /**
+   * Whether this node has children to fetch. Known without fetching them, so a
+   * collapsed row can draw its toggle without a round trip. `children` is what
+   * arrived; this is what exists.
+   */
+  hasChildren: boolean;
 }
 
 /** One tag as it renders: props merged, dot-rule applied, definition resolved. */
@@ -285,24 +300,17 @@ export interface ResolvedTag {
 
 /**
  * The resolved half of a node — what an origin works out that a reader cannot.
- * A parsed node gets it stamped on at serve time; a node whose authored half
- * came from elsewhere (an envoy transform's output) gets it from
- * `Origin.reserve`.
+ * Stamped on at serve time, origin-side and nowhere else. There is no client
+ * counterpart: a node is transformed and served in one step, with the document
+ * in hand, so nothing on the far side of the wire ever has to be re-resolved.
  */
 export interface Reserved {
   attrs:       NodeAttrs;
   tags:        ResolvedTag[];
   address:     { baseUrl: string; key: string };
   pageAddress: string;
+  stateScope:  string;
 }
-
-/**
- * Re-serving bound to one document — `Origin.reserve` with its key already
- * supplied. Declared here rather than with the origin because both sides of the
- * wire hold one: the host binds it before a round trip, so nothing that came
- * back gets a say in which document's rules interpret it.
- */
-export type Reserve = (out: { attrs: NodeAttrs; tags: Tag[]; slug: string }) => Promise<Reserved>;
 
 export interface RawFile {
   head:    Head;
@@ -639,6 +647,9 @@ export function resolveFile(rawFile: RawFile, inheritedHead: Head): {
     const node = { ...raw, ...bag, children: [] } as unknown as SourceNode;
     if (claimsNodeMapName(node)) nodeMap[node.slug] = node;
     node.children = raw.children.map(c => resolveNode(c, bag));
+    // Derived, not authored: origin-side the subtree is right there, and
+    // `hasChildren` is the one part of it that crosses to a client.
+    node.hasChildren = node.children.length > 0;
     return node;
   }
 

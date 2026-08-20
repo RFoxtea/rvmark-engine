@@ -21,7 +21,7 @@ import { mdInlineWithSpans, mdInlineWithSpansResolved, staticMdInline, ensureKat
 import type { ParsedSpanAttrs } from '../markdown.js';
 import { resolveTransclusionConfig } from '../transclusion.js';
 import { wireSelectThenAction } from '../interaction.js';
-import { resolveMediaAllOn } from '../../envoy/origin.js';
+import { resolveMediaAllOn } from '../origin-host.js';
 
 type LabelRender = { html: string; spanMap: Map<number, ParsedSpanAttrs> };
 

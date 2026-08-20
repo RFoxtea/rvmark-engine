@@ -76,7 +76,7 @@ test.describe('custom node types via OriginEnvoy', () => {
     expect(rnInfo.isExpandable).toBe(true);
   });
 
-  test('missing transform renders an error node, page not wedged', async ({ page }) => {
+  test('a node the client cannot render becomes an error row, page not wedged', async ({ page }) => {
     await page.goto('/#envoy-root');
     await waitForTree(page);
 
@@ -87,12 +87,15 @@ test.describe('custom node types via OriginEnvoy', () => {
       const content = rn.li.querySelector(':scope > .node-content');
       return {
         label: content.querySelector('.node-label')?.textContent ?? '',
-        hasErrorClass: content.classList.contains('node--custom-error'),
+        hasErrorClass: content.classList.contains('node--wire-error'),
       };
     });
 
-    expect(info.label).toContain('⚠ custom type failed');
-    // The error references the missing registration.
+    // The client no longer has a concept of a custom type that "failed": an
+    // origin's nodetypes are its own business and have already run. What this
+    // side gets to insist on is that it can draw what it was handed, and this
+    // node's type is not something it can draw.
+    expect(info.label).toContain('unrenderable type');
     expect(info.label).toContain('nonexistent');
   });
 

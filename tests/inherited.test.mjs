@@ -86,13 +86,34 @@ test('an exhibit scope survives a structured clone with its attrs live', () => {
   assert.deepEqual(back.exhibit.attrs.allEntries(), node.exhibit.attrs.allEntries());
 });
 
-test('a node round-trips through an envoy-shaped clone with its scope intact', async () => {
+test('a node round-trips through an envoy-shaped clone with its scope intact', () => {
   const node = nodeOf(index, 'exhibit-scope-child');
-  // The origin re-serves what comes back; here that is a stub, since the point
-  // of the test is the inherited bag surviving the clone, not the re-serving.
-  const back = await deserializeNode(structuredClone(serializeNode(node)), async () => ({}));
+  // Serialization reads the node's own address for its key. A node straight out
+  // of the parser has not been through a SourceFile, so it has none — the point
+  // of the test is the inherited bag surviving the clone, not the addressing.
+  node.address = { baseUrl: 'https://example.test', key: '/_rvmark/index.rvmark#exhibit-scope-child' };
+  node.pageAddress = 'https://example.test/_rvmark/index.rvmark';
+
+  const back = deserializeNode(structuredClone(serializeNode(node)), 'https://example.test');
   assert.equal(typeof back.exhibit.attrs.get, 'function');
   assert.equal(back.exhibit.attrs.get('exhibit'), node.exhibit.attrs.get('exhibit'));
+});
+
+test('a node crossing the wire arrives without its subtree, but knowing it has one', () => {
+  const node = nodeOf(index, 'exhibit-scope-root');
+  node.address = { baseUrl: 'https://example.test', key: '/_rvmark/index.rvmark#exhibit-scope-root' };
+  node.pageAddress = 'https://example.test/_rvmark/index.rvmark';
+  assert.ok(node.children.length, 'fixture node has no children to drop');
+
+  const wire = structuredClone(serializeNode(node));
+  assert.equal(wire.children, undefined, 'children must not cross the wire');
+  assert.equal(wire.hasChildren, true);
+
+  const back = deserializeNode(wire, 'https://example.test');
+  assert.deepEqual(back.children, [], 'a node arrives with no children in hand');
+  assert.equal(back.hasChildren, true, 'but knowing childrenOf would answer');
+  assert.equal(back.address.baseUrl, 'https://example.test');
+  assert.equal(back.address.key, '/_rvmark/index.rvmark#exhibit-scope-root');
 });
 
 test('a bag whose wire form is malformed falls back rather than throwing', () => {

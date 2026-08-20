@@ -11,7 +11,7 @@
  */
 
 import { parseTranscludeEntry } from '../shared/shared.js';
-import { resolveRefOn } from '../envoy/origin.js';
+import { resolveRefOn, childrenOf } from './origin-host.js';
 import type { SourceNode, NodeAttrs } from '../shared/parser.js';
 
 interface TransclusionConfig {
@@ -62,12 +62,12 @@ export async function resolveEffectiveChildren(
     return (tHasLabel || list.length > 1 || list.includes('*')) ? tEmbedRaw : null;
   })();
   if (!tTranscludeRaw) {
-    return targetNode.children;
+    return childrenOf(targetNode);
   }
   const result: SourceNode[] = [];
   for (const entry of tTranscludeRaw.split(',').map((s: string) => s.trim()).filter(Boolean)) {
     if (entry === '*') {
-      result.push(...targetNode.children);
+      result.push(...await childrenOf(targetNode));
     } else {
       if (visited.has(entry)) continue;
       const node = await resolveRefOn(targetNode, entry);
@@ -85,13 +85,23 @@ export async function resolveEffectiveChildren(
 }
 
 // ── isOrContainsPermalink ──────────────────────────────────────────────────
-export function isOrContainsPermalink(node: SourceNode, permalinkBase: string | null, targetSlug: string): boolean {
+//
+// Async because it is a question about content the client has not fetched: "is
+// the focus target somewhere under this row". A prefix test on permalinkId would
+// answer it without asking, and would be wrong — an `id` attr restarts the
+// chain, so a target under one has no prefix relationship to its ancestors.
+//
+// It descends by `childrenOf`, so the subtree it walks is fetched as it goes.
+// That is the cost of the question, and it is paid only on a `?focus=` load.
+export async function isOrContainsPermalink(
+  node: SourceNode, permalinkBase: string | null, targetSlug: string,
+): Promise<boolean> {
   if (permalinkBase === targetSlug) return true;
   if (node.slug === targetSlug || node.attrs.get('id') === targetSlug) return true;
   const baseForChildren = permalinkBase ?? node.slug;
-  for (const child of node.children) {
+  for (const child of await childrenOf(node)) {
     const childBase = baseForChildren != null ? `${baseForChildren}.${child.numbering}` : null;
-    if (isOrContainsPermalink(child, childBase, targetSlug)) return true;
+    if (await isOrContainsPermalink(child, childBase, targetSlug)) return true;
   }
   return false;
 }

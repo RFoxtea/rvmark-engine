@@ -25,7 +25,7 @@ import { ToggleSet } from '../toggle-set.js';
 import { wireSpanToggles } from '../span-toggle.js';
 import type { ResolvedAttrs } from '../../shared/served.js';
 import { BaseTypeHandler } from '../base-handler.js';
-import { resolveMediaOn } from '../../envoy/origin.js';
+import { resolveMediaOn } from '../origin-host.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import { wireSpanVisibility } from '../span-visibility.js';
 import type { ListboxNav } from '../listbox.js';

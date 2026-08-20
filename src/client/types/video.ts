@@ -47,7 +47,7 @@ import { factoryRegister } from '../render-node.js';
 import { treeNavKeydown, actionKeydown, copyPermalink } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
 import { BaseTypeHandler } from '../base-handler.js';
-import { resolveMediaOn } from '../../envoy/origin.js';
+import { resolveMediaOn } from '../origin-host.js';
 
 import { wireSelectThenAction } from '../interaction.js';
 

@@ -26,6 +26,7 @@ import { applyEventAttr } from './handler-utils.js';
 import { scrollRowIntoMiddle } from './scroll.js';
 import { blastocyteFactory } from './types/blastocyte.js';
 import { MOUNT_SETTLE_MS } from './constants.js';
+import { childrenOf } from './origin-host.js';
 export type { StateFrame as StateView };
 
 // ── ResolvedAttrs ─────────────────────────────────────────────────────────────
@@ -217,8 +218,7 @@ export function buildRenderNode(
 ): RenderNode {
   const permalinkBase = node.permalinkId;
 
-  const isFocusTarget   = !!focusSlug && (node.slug === focusSlug || node.attrs.get('id') === focusSlug || permalinkBase === focusSlug);
-  const isFocusAncestor = !!focusSlug && !isFocusTarget && isOrContainsPermalink(node, permalinkBase, focusSlug);
+  const isFocusTarget = !!focusSlug && (node.slug === focusSlug || node.attrs.get('id') === focusSlug || permalinkBase === focusSlug);
 
   const attrs = node.attrs;
 
@@ -228,8 +228,16 @@ export function buildRenderNode(
 
   blastocyteFactory.create(rn);
 
-  if ((isFocusAncestor || isFocusTarget) && rn.contentEl.hasAttribute('aria-expanded')) {
-    rn.setChildren(node.children, focusSlug, undefined, false);
+  // Expand toward the focus target. Whether this row is on the way to it is a
+  // question about unfetched content, so it is asked rather than computed; the
+  // row itself is already built and mounts either way. The reveal deadline in
+  // main.ts is what waits for the answer.
+  if (focusSlug && rn.contentEl.hasAttribute('aria-expanded')) {
+    rn.holdReady((async () => {
+      if (!isFocusTarget && !await isOrContainsPermalink(node, permalinkBase, focusSlug)) return;
+      const kids = await childrenOf(node);
+      if (kids.length) await rn.setChildren(kids, focusSlug, undefined, false);
+    })());
   }
 
   if (isFocusTarget) {
@@ -564,7 +572,21 @@ export class RenderNode {
     ul.className = 'tree';
     ul.setAttribute('role', 'group');
 
-    const hostAddress = this.sourceNode.pageAddress;
+    // Where the authoring scope changes, state stops passing. Two tiers, and
+    // they are not equally trustworthy on purpose:
+    //
+    //   - which ORIGIN answered. Unforgeable: it comes from the message source,
+    //     not from anything on the wire.
+    //   - stateScope, which the origin declares. Discretionary.
+    //
+    // So an origin that mints one token for everything weakens isolation only
+    // inside itself. It cannot leak state across an origin boundary and it
+    // cannot claim another origin's content, because the outer tier is not its
+    // to declare.
+    const host = this.sourceNode;
+    const barrierBetween = (child: SourceNode) =>
+      child.address.baseUrl !== host.address.baseUrl || child.stateScope !== host.stateScope;
+
     const explicitPass = passChildrenEntries !== undefined
       ? buildStatePass(this.state, passChildrenEntries)
       : null;
@@ -579,7 +601,7 @@ export class RenderNode {
       let parentState: StateNode;
       if (explicitPass) {
         parentState = explicitPass;
-      } else if (node.pageAddress !== hostAddress) {
+      } else if (barrierBetween(node)) {
         parentState = defaultBarrier!;
       } else {
         parentState = this.state;

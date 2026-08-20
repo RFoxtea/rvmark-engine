@@ -1,7 +1,7 @@
 /**
  * origin.ts
  *
- * The client's view of one origin — the only route to content there is.
+ * The `.rvmark` origin — what a client is asking when it asks an envoy anything.
  *
  * An origin is an attachment point that answers lookups by key. `key` is opaque
  * to the caller — never parsed, never split, never appended to. There is one key
@@ -9,36 +9,47 @@
  * derived: nothing in a key says where its origin lives, so keys can look like
  * anything the origin wants and no path is reserved on anyone's server.
  *
- * This is the protocol from the origin-model design note, implemented in-process
- * against today's loader, parser and SourceFile. No postMessage yet: the point of
- * landing it here first is that every caller can migrate onto the protocol while
- * the tree keeps running, and the wire is cut underneath them later. The Node
- * builder reaches the same implementation by import that the browser will reach
- * through an iframe.
+ * This runs inside the envoy: envoy-guest.ts serves these queries over
+ * postMessage, and nothing on the client's side of that wire can reach in here.
+ * The one exception is not an exception at all — the builder imports this tier
+ * directly in Node, because the builder IS origin-side code with the whole store
+ * in hand, on the same side of the boundary as the loader and the parser.
+ * Nothing in this tier may name `window` or mount an iframe, or that property is
+ * lost.
  *
  * What lives here is everything about where content comes from — the `.rvmark`
  * storage layout (`/_rvmark/`, index.rvmark chains, `.rvmark` suffixing), sigil
  * declarations, fallback chains, media path arithmetic, tag definitions, and
  * matching over content the caller does not hold. What does NOT live here is
- * anything about rendering.
+ * anything about rendering, and anything about nodetypes: a nodetype is
+ * behaviour an envoy provides for its own nodes, applied by envoy-guest.ts on
+ * the way out, and this file does not know that the concept exists.
  *
  * A node leaves here already resolved, and flat: its `attrs` have their tags'
  * `node.*` overrides merged in, its `tags` carry their looked-up definitions,
  * and it knows its own address. Those are ordinary fields rather than a
  * compartment, because a reader has no use for the authored form and no way to
  * resolve it — there is nothing for a second view to be a view of. Every field
- * is data: what a reader cannot compute it asks for (`resolveResource`,
- * `reserve`), so nothing on a node can hold this module's store open.
+ * is data: what a reader cannot compute it asks for, so nothing that crosses
+ * the wire can hold this module's store open.
  */
 
-import type { SourceNode, NodeAttrs, FileMeta, OriginDef, Tag, Reserved, Reserve } from '../shared/parser.js';
+import type { SourceNode, NodeAttrs, FileMeta, OriginDef, Tag, Reserved } from '../shared/parser.js';
 import {
   resolveSlugInFile, resolveAddress, resolveMediaAddress, addressToSlug, addressOrigin,
   parseTranscludeEntry, RVMARK_SEGMENT,
 } from '../shared/shared.js';
 import { loadRvmarkFile, invalidateLoaderCaches } from './loader.js';
 import type { SourceFile } from './source-file.js';
-import { tagText } from '../shared/served.js';
+import { nodeTextMatches } from '../shared/served.js';
+import { Multimap } from '../shared/multimap.js';
+
+/** The resolved half of a transformed node, in the form the wire carries. */
+export interface WireReserved {
+  attrs:      Array<[string, string]>;
+  tags:       Array<{ name: string; props: Array<[string, string]> }>;
+  stateScope: string;
+}
 
 /** Where an origin's content is served from, plus one of its keys. */
 export interface Address {
@@ -80,9 +91,9 @@ export interface Origin {
    *
    * Null for a ref this origin will not serve.
    *
-   * Declared synchronous only because the origin is still in-process. Callers
-   * reach it through `resolveMediaOn`, which is already async, so cutting the
-   * wire moves no call site again. The builder keeps a synchronous twin
+   * Synchronous here because inside the envoy it is path arithmetic and nothing
+   * more; the wire is what makes it async for a client, which is where the
+   * awaits are. The builder keeps its own synchronous twin
    * (`StaticBuildContext.resolveMedia`) because the wire is not in its path.
    *
    * Plural for the reason `resolve` is: a caller that holds several refs holds
@@ -93,24 +104,24 @@ export interface Origin {
   resolveResources(key: string, refs: string[]): (string | null)[];
 
   /**
-   * Re-resolve attrs and tags that came back CHANGED from a transform, against
-   * the document `key` names. The answer is the resolved half of a node —
-   * exactly what `node()` would have stamped, for fields the origin did not
-   * itself produce.
+   * Re-resolve attrs and tags that came back CHANGED from a nodetype transform,
+   * against the document `key` names. The answer is the resolved half of a node,
+   * in wire form — exactly what `node()` would have stamped, for fields the
+   * origin did not itself produce.
    *
-   * It is a query and not a closure on the node for the reason the whole model
-   * runs on: resolving a tag means reading the document's declarations, which is
-   * the origin's reading. A closure that could do it had the document captured
-   * inside, so holding a node meant holding the store.
+   * Not reachable from a client, and never was a capability a node carried.
+   * Both callers are origin-side: it is a step inside serving a transformed
+   * node, with the store already in hand.
    */
-  reserve(key: string, out: { attrs: NodeAttrs; tags: Tag[]; slug: string }): Promise<Reserved>;
+  reserveWire(key: string, out: { attrs: Array<[string, string]>; tags: Array<{ name: string; props: Array<[string, string]> }>; permalinkId: string }): Promise<WireReserved>;
 
   /**
-   * Drop whatever this origin has cached. Nothing calls it in the browser: a
-   * `serve --dev` rebuild reloads the page, which discards the store with the
-   * realm. It exists because the store is the origin's now, so the *ability* to
-   * say "yours is stale" has to be the origin's too — a caller that needed it
-   * would otherwise have to reach past the protocol into the loader.
+   * Drop whatever this origin has cached. Not on the wire, and nothing calls it:
+   * a `serve --dev` rebuild reloads the page, which discards the envoy's realm
+   * and its store with it. It exists because the store is the origin's, so the
+   * *ability* to say "yours is stale" has to be the origin's too — whoever needs
+   * it later reaches it from inside the envoy rather than past the protocol into
+   * the loader.
    */
   invalidate(): void;
 
@@ -127,102 +138,14 @@ export interface Origin {
 
 // ── Addresses ─────────────────────────────────────────────────────────────────
 
-/** Split a canonical address into the pair. Local addresses take this origin. */
-export function addressOf(canonical: string): Address {
+/** Split a canonical address into the pair this origin's own answers use. */
+function addressOf(canonical: string): Address {
   const baseUrl = addressOrigin(canonical) || currentBaseUrl();
   return { baseUrl, key: canonical.slice(addressOrigin(canonical).length) };
 }
 
 function currentBaseUrl(): string {
   return typeof location !== 'undefined' ? location.origin : '';
-}
-
-/** The address of a node the caller already holds — carried, not derived. */
-export function addressOfNode(node: SourceNode): Address {
-  return node.address;
-}
-
-/**
- * Re-serve a node whose attrs and tags came back CHANGED — the output of an
- * envoy transform, whose fields are not the ones that went in.
- *
- * A query rather than a closure the node carries. Resolving a tag means reading
- * the document's declarations, and that reading is the origin's; what the client
- * holds is the node's address, which is enough to ask with. The closure it
- * replaces captured the parsed document, so holding a node meant holding the
- * store — the thing the boundary exists to prevent.
- *
- * The address is bound BEFORE the round trip by the caller, so nothing that came
- * back over the wire gets a say in which document's rules interpret it.
- */
-export function reserveAt(from: Address): Reserve {
-  return (out) => originFor(from.baseUrl).reserve(from.key, out);
-}
-
-/**
- * Resolve a raw ref, written on the node at `from`, to the node it names.
- *
- * The ref crosses as the author wrote it. Sigils, fallback chains, `.rvmark`
- * suffixing and path arithmetic are all origin-side and no caller learns that
- * any of them exist. What comes back is candidate addresses, in order, and the
- * walk over them happens HERE rather than inside the origin: a fallback chain
- * falls through only when a load *fails*, and an origin must not fetch what a
- * foreign address points at — producing the node would mean parsing another
- * origin's content, which is the thing the boundary exists to stop.
- *
- * Accepts an entry with or without its '^' prefix — the prefix selects what the
- * caller does with the result, and never changes which node is resolved.
- */
-export async function resolveRefAt(from: Address, rawRef: string | null | undefined): Promise<SourceNode | null> {
-  if (!rawRef) return null;
-  try {
-    const candidates = (await originFor(from.baseUrl).resolve(from.key, [rawRef]))[0] ?? [];
-    for (const { baseUrl, key } of candidates) {
-      const node = await originFor(baseUrl).node(key);
-      if (node) return node;
-    }
-    return null;
-  } catch { return null; }
-}
-
-/** `resolveRefAt` for a ref written on a node the caller holds. */
-export function resolveRefOn(node: SourceNode, rawRef: string | null | undefined): Promise<SourceNode | null> {
-  return resolveRefAt(node.address, rawRef);
-}
-
-/**
- * A media/asset ref written on a node the caller holds → the URL it is served
- * from, or null.
- *
- * Relative refs resolve against the document the node came FROM, so a
- * transcluded foreign node gets its own origin's assets — the same rule
- * markdown media and transclusion refs already follow.
- *
- * Async because the origin is on the far side of a wire. It is not today, and
- * every one of these resolves in a microtask; the await is here so that when
- * Stage 3 cuts the wire underneath, no call site moves again.
- */
-export async function resolveMediaOn(node: SourceNode, ref: string | null | undefined): Promise<string | null> {
-  return (await resolveMediaAllOn(node, [ref]))[0];
-}
-
-/**
- * `resolveMediaOn` for a caller holding several refs at once — a label's spans,
- * a bullet and its open variant. One query, answered positionally, so the wire
- * carries one message per caller rather than one per ref.
- */
-export async function resolveMediaAllOn(
-  node: SourceNode,
-  refs: (string | null | undefined)[],
-): Promise<(string | null)[]> {
-  // Keyed off pageAddress, not the node's own key: a client-minted stand-in (a
-  // loading marker, an error row) has no key — nothing served it — but it does
-  // sit in its host's document, and that is what a relative ref resolves against.
-  const { baseUrl } = node.address;
-  try {
-    return originFor(baseUrl)
-      .resolveResources(node.pageAddress.slice(baseUrl.length), refs.map(r => r || ''));
-  } catch { return refs.map(() => null); }
 }
 
 // ── Sigils (origin-side: the client never learns these exist) ─────────────────
@@ -334,16 +257,11 @@ function sigilCandidates(
 }
 
 // ── Matching ──────────────────────────────────────────────────────────────────
-// Lives here because the deep walk does: an origin answers questions about
-// content the caller has never fetched, and it can only do that by matching on
-// its own side. search.ts uses the same two functions over what it does hold, so
-// the two halves of a search agree by construction.
-
-export function nodeTextMatches(node: SourceNode, needle: string): boolean {
-  if (node.label && node.label.toLowerCase().includes(needle)) return true;
-  if (node.tags.some(tag => tagText(tag)?.toLowerCase().includes(needle))) return true;
-  return node.bodyLines.some(line => line.toLowerCase().includes(needle));
-}
+// The deep walk lives here: an origin answers questions about content the caller
+// has never fetched, and it can only do that by matching on its own side. The
+// per-node test itself is shared (served.ts), so the two halves of a search —
+// this walk, and search.ts's walk over what the client holds — agree by
+// construction.
 
 // A same-file `{=> #id}` target within `file`, or null. The local hop only:
 // this origin can no more follow a ref into a foreign one here than anywhere
@@ -454,10 +372,22 @@ class RvmarkOrigin implements Origin {
     return refs.map(ref => (ref ? resolveMediaAddress(ref, address) : null));
   }
 
-  async reserve(key: string, out: { attrs: NodeAttrs; tags: Tag[]; slug: string }): Promise<Reserved> {
+  async reserveWire(
+    key: string,
+    out: { attrs: Array<[string, string]>; tags: Array<{ name: string; props: Array<[string, string]> }>; permalinkId: string },
+  ): Promise<WireReserved> {
     const file = await loadRvmarkFile(this.address(key));
     if (!file) throw new Error(`cannot re-serve against an unknown key: ${key}`);
-    return file.resolveShape(out.attrs, out.tags, out.slug);
+    const tags: Tag[] = out.tags.map(t => ({ name: t.name, props: new Multimap(t.props) }));
+    // Only attrs, tags and stateScope are read back; the address this computes
+    // is discarded, because a transform rewrites what a node IS, never which
+    // node it is, and the caller re-stamps the input's key.
+    const r = file.resolveShape(new Multimap(out.attrs), tags, out.permalinkId);
+    return {
+      attrs:      r.attrs.allEntries(),
+      tags:       r.tags.map(t => ({ name: t.name, props: t.def.allEntries() })),
+      stateScope: r.stateScope,
+    };
   }
 
   // Throws on a key this origin cannot serve at all. The one query that does:

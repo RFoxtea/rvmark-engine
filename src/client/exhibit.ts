@@ -31,7 +31,7 @@ import { mdToHtml } from './markdown.js';
 import { getPageContext } from './page-context.js';
 
 import { addressToHref } from '../shared/shared.js';
-import { originFor, addressOf, resolveRefAt } from '../envoy/origin.js';
+import { originFor, addressOf, resolveRefAt } from './origin-host.js';
 import { parsePass } from './handler-utils.js';
 import { prerootFrame, StateRelay, buildStatePass } from './state.js';
 import { postGuestMode, broadcastPreroot, prerootDeclareMsg, prerootSetMsg, prerootDeleteMsg, wireRelay, registerThemeIframe, unregisterThemeIframe } from './iframe-host.js';
@@ -404,7 +404,7 @@ class MarkdownExhibitStrategy extends ExhibitStrategy {
   async build(rawRef: string, sourceFileAddress: string): Promise<ExhibitResult | null> {
     const ctx = getPageContext();
     const from = addressOf(sourceFileAddress);
-    const fullPath = originFor(from.baseUrl).resolveResources(from.key, [rawRef])[0] ?? rawRef;
+    const fullPath = (await originFor(from.baseUrl).resolveResources(from.key, [rawRef]))[0] ?? rawRef;
     const basePath = ctx.basePath;
 
     let text: string;
@@ -459,7 +459,7 @@ exhibitRegister('markdown', new MarkdownExhibitStrategy());
 class HtmlExhibitStrategy extends ExhibitStrategy {
   async build(rawRef: string, sourceFileAddress: string, attrs?: NodeAttrs): Promise<ExhibitResult | null> {
     const from = addressOf(sourceFileAddress);
-    const fullPath = originFor(from.baseUrl).resolveResources(from.key, [rawRef])[0] ?? rawRef;
+    const fullPath = (await originFor(from.baseUrl).resolveResources(from.key, [rawRef]))[0] ?? rawRef;
     const displayName = fullPath.split('/').pop()!.replace(/\.html$/, '');
 
     // Same-origin (or path-only build-time) HTML: load via iframe.src so the

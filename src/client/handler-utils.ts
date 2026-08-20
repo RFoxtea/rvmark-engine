@@ -20,7 +20,7 @@ import { bagOf } from '../shared/inherited.js';
 import type { ResolvedAttrs } from '../shared/served.js';
 import { RenderNode } from './render-node.js';
 import { resolveEffectiveChildren, resolveTransclusionConfig } from './transclusion.js';
-import { resolveRefOn, resolveMediaOn, resolveMediaAllOn } from '../envoy/origin.js';
+import { resolveRefOn, resolveMediaOn, resolveMediaAllOn, childrenOf } from './origin-host.js';
 import { parseTranscludeEntry } from '../shared/shared.js';
 import { TRANSCLUDE_DEADLINE_MS } from './constants.js';
 import type { PassEntry, PassMode, StateNode } from './state.js';
@@ -119,7 +119,7 @@ export async function expandNode(rn: RenderNode, transcludeRef?: string): Promis
     const allNodes: SourceNode[] = [];
     for (const o of outcomes) {
       if (o.star) {
-        if (sourceNode.children.length) allNodes.push(...sourceNode.children as SourceNode[]);
+        allNodes.push(...await childrenOf(sourceNode));
       } else if (o.node) {
         // '^' asks for the target as a row rather than for what is under it —
         // so it is pushed whole, subtree and all, and the unwrap is skipped.
@@ -130,8 +130,8 @@ export async function expandNode(rn: RenderNode, transcludeRef?: string): Promis
       }
     }
     await rn.setChildren(allNodes, null, passChildrenEntries);
-  } else if (sourceNode.children.length) {
-    await rn.setChildren(sourceNode.children as SourceNode[], null, passChildrenEntries);
+  } else if (sourceNode.hasChildren) {
+    await rn.setChildren(await childrenOf(sourceNode), null, passChildrenEntries);
   }
 }
 
@@ -141,15 +141,17 @@ export async function expandNode(rn: RenderNode, transcludeRef?: string): Promis
 // — so they resolve media the way it does and sit at its page address. What they
 // do not have is an identity: nothing served them, so their key is empty and
 // asking an origin about it would be asking about a node that does not exist.
-// Mirrors the errorNode pattern in types/custom.ts.
 
 function syntheticChild(host: SourceNode, attrs: Multimap, label: string): SourceNode {
   return {
     slug: '', permalinkId: '', numbering: '',
     attrs, tags: [], label, bodyLines: [],
-    children: [],
+    children: [], hasChildren: false,
     address:     { baseUrl: host.address.baseUrl, key: '' },
     pageAddress: host.pageAddress,
+    // Rendered in the host's place, so it takes the host's scope: a marker must
+    // never raise a barrier the node it stands in for would not have raised.
+    stateScope:  host.stateScope,
     // Stands in for the host, so it inherits exactly what the host has.
     ...bagOf(host),
   } as SourceNode;

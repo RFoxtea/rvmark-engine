@@ -12,7 +12,7 @@
 
 import { prerootFrame } from './state.js';
 import { buildRenderNode, RenderNode, withRevealDeadline } from './render-node.js';
-import { originFor, addressOf } from '../envoy/origin.js';
+import { originFor, addressOf } from './origin-host.js';
 import type { FileMeta } from '../shared/parser.js';
 import { RVMARK_SEGMENT } from '../shared/shared.js';
 import { setPageContext } from './page-context.js';

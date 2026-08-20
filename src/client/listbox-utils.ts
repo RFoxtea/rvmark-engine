@@ -20,6 +20,7 @@ import { BARE_MUTATION_KEY } from './markdown.js';
 import type { RenderNode, SourceNode } from './render-node.js';
 import type { ToggleSet } from './toggle-set.js';
 import { expandNode, applyEventAttr } from './handler-utils.js';
+import { childrenOf } from './origin-host.js';
 
 // Shared empty attr set for elements with no parsed span (e.g. an author-written
 // [role=option] that never went through the span extension).
@@ -151,7 +152,7 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
         // about selection, not about the children area, and Euclid relies on it
         // to clear the diagram highlight.
         if (heldHill || !toggles || toggles.hillIsFree()) {
-          rn.setChildren(sourceNode.children as SourceNode[], null);
+          void childrenOf(sourceNode).then(kids => rn.setChildren(kids, null));
         }
         for (const v of rn.attrs.getAll('on-no-option-select')) applyEventAttr(v, rn);
       },

@@ -19,7 +19,7 @@
  * they are the same question asked twice: does this tag render, and as what.
  */
 
-import type { TagDef, NodeAttrs, ResolvedTag } from './parser.js';
+import type { TagDef, NodeAttrs, ResolvedTag, SourceNode } from './parser.js';
 
 /** A node's attrs with its tags' `node.*` overrides already merged in. */
 export type ResolvedAttrs = NodeAttrs;
@@ -33,6 +33,18 @@ export function visibleTags(tags: ResolvedTag[]): ResolvedTag[] {
 export function tagText(tag: ResolvedTag): string | null {
   if (tag.def.has('internal')) return null;
   return tag.def.get('label') ?? tag.name;
+}
+
+/**
+ * Does this node's own text match? Shared because both halves of a search ask
+ * it: the origin, walking content the client has never fetched, and the client,
+ * walking what it holds. Two implementations of one question would let the two
+ * halves of a result disagree; one keeps them agreeing by construction.
+ */
+export function nodeTextMatches(node: SourceNode, needle: string): boolean {
+  if (node.label && node.label.toLowerCase().includes(needle)) return true;
+  if (node.tags.some(tag => tagText(tag)?.toLowerCase().includes(needle))) return true;
+  return node.bodyLines.some(line => line.toLowerCase().includes(needle));
 }
 
 export type { TagDef, ResolvedTag };

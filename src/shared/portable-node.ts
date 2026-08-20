@@ -1,13 +1,14 @@
 /**
  * portable-node.ts
  *
- * PortableNode — the postMessage-safe projection of a SourceNode.
+ * PortableNode — the postMessage-safe projection of a SourceNode, and the only
+ * shape a node has while it is crossing between an origin and a client.
  *
  * A SourceNode cannot cross a postMessage boundary as-is: its `attrs` and its
  * tags' defs are `Multimap` instances, and methods do not survive structured
  * clone (multimap.ts).
  *
- * PortableNode is the flattened form that CAN leave the host realm: plain
+ * PortableNode is the flattened form that CAN leave the origin's realm: plain
  * strings + arrays, multimaps as `[[k, v], …]` entry lists. Inherited values
  * flatten the same way, but by their own declaration rather than here: a bag
  * value may be any type the registry admits, so inherited.ts carries the
@@ -15,19 +16,21 @@
  *
  * What a node no longer has to be stripped OF is capabilities. It carries none:
  * a served node is data throughout, and the two closures that used to ride on
- * it became queries (`Origin.resolveResource`, `Origin.reserve`). So this is a
+ * it became queries (`Origin.resolveResources`, `Origin.reserve`). So this is a
  * shape conversion and nothing else.
  *
- * The asymmetry that remains is about authority rather than access. What goes
- * out is resolved — the answers the origin worked out. What comes back has been
- * rewritten by author code, so its attrs and tags are claims, and `reserve`
- * re-resolves them against the document rather than trusting them. Deserialize
- * is async for that reason: asking is a round trip.
+ * `children` is not here. Structure is a query — `childrenOf` — and a node that
+ * carried its subtree would answer it eagerly at every serve, materialising a
+ * whole file to render one row. What crosses instead is `hasChildren`: enough to
+ * draw a collapsed node's toggle without a round trip per node, and nothing more.
+ *
+ * `key` is what makes the node re-askable. It is the origin's own name for the
+ * node, opaque to the client, and every later query about this node — its
+ * children, a ref written on it, a resource it names — is that key handed back.
  */
 
 import { Multimap } from './multimap.js';
 import type { SourceNode } from './parser.js';
-import type { Reserve } from './parser.js';
 import { bagToWire, bagFromWire, type WireBag } from './inherited.js';
 
 type Entries = Array<[string, string]>;
@@ -38,6 +41,8 @@ export interface PortableTag {
 }
 
 export interface PortableNode {
+  /** The origin's name for this node. Opaque: handed back, never parsed. */
+  key:         string;
   slug:        string;
   permalinkId: string;
   numbering:   string;
@@ -45,15 +50,27 @@ export interface PortableNode {
   tags:        PortableTag[];
   label:       string;
   bodyLines:   string[];
-  children:    PortableNode[];
   inherited:   WireBag;
+  /** Whether `childrenOf(key)` would answer with anything. */
+  hasChildren: boolean;
+  /**
+   * Opaque token; equal means "same authoring scope". The client compares it
+   * against the host's when splicing children in, and raises a state barrier
+   * when they differ. The origin says where its boundaries are; it cannot say
+   * what the client does about them, because it does not know where its nodes
+   * will land.
+   */
+  stateScope:  string;
+  /** The document this node came from, for the permalink and static-view link. */
+  pageAddress: string;
 }
 
-// ── serialize (host → wire) ───────────────────────────────────────────────────
-// Flatten a SourceNode (subtree included) to a PortableNode. A pure shape
-// change: nothing is withheld, because nothing on a node is a capability.
+// ── serialize (origin → wire) ─────────────────────────────────────────────────
+// Flatten one SourceNode. Its subtree is NOT included: what a caller can ask for
+// separately, it asks for separately.
 export function serializeNode(node: SourceNode): PortableNode {
   return {
+    key:         node.address.key,
     slug:        node.slug,
     permalinkId: node.permalinkId,
     numbering:   node.numbering,
@@ -65,37 +82,34 @@ export function serializeNode(node: SourceNode): PortableNode {
     tags:        node.tags.map(t => ({ name: t.name, props: t.def.allEntries() })),
     label:       node.label,
     bodyLines:   node.bodyLines.slice(),
-    children:    node.children.map(serializeNode),
     inherited:   bagToWire(node),
+    hasChildren: node.children.length > 0,
+    stateScope:  node.pageAddress,
+    pageAddress: node.pageAddress,
   };
 }
 
-// ── deserialize (wire → host) ─────────────────────────────────────────────────
-// Rebuild a SourceNode from a PortableNode, re-resolving every node in the
-// subtree against the document it belongs to.
+// ── deserialize (wire → client) ───────────────────────────────────────────────
+// Rebuild a live SourceNode from what arrived. `address` is stamped from the
+// baseUrl the reply came through and the key the node carries — the client's own
+// record of who answered, never anything read out of the payload.
 //
-// Inherited properties (inherited.ts) cross the wire like any other node data.
-// An envoy always serves the origin of the document it transforms, so the code
-// on the far side is that document's own author deciding how their own nodes
-// should be interpreted — which is exactly whose call it is. The sandbox exists
-// to keep author code off the host's origin, not to second-guess the values it
-// reports about its own content.
-export async function deserializeNode(node: PortableNode, reserve: Reserve): Promise<SourceNode> {
-  const attrs = new Multimap(node.attrs);
-  const tags  = node.tags.map(t => ({ name: t.name, props: new Multimap(t.props) }));
+// `children` starts empty and stays empty until `childrenOf` is asked. A node's
+// subtree is not part of it.
+export function deserializeNode(node: PortableNode, baseUrl: string): SourceNode {
   return {
     slug:        node.slug,
     permalinkId: node.permalinkId,
     numbering:   node.numbering,
     label:       node.label,
     bodyLines:   node.bodyLines.slice(),
-    children:    await Promise.all(node.children.map(c => deserializeNode(c, reserve))),
-    // Re-resolved, not copied: a transform may have rewritten attrs and tags,
-    // and what those mean is the origin's to say. This overwrites the authored
-    // attrs and tags built above with their resolved forms.
-    ...await reserve({ attrs, tags, slug: node.slug }),
-    // bagFromWire fills anything the wire omitted — a transform may mint a node
-    // from scratch — so every rebuilt node is well-formed.
+    attrs:       new Multimap(node.attrs),
+    tags:        node.tags.map(t => ({ name: t.name, def: new Multimap(t.props) })),
+    children:    [],
+    address:     { baseUrl, key: node.key },
+    pageAddress: node.pageAddress,
+    stateScope:  node.stateScope,
+    hasChildren: node.hasChildren,
     ...bagFromWire(node.inherited),
   } as SourceNode;
 }

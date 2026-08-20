@@ -15,7 +15,7 @@ import { factoryRegister } from '../render-node.js';
 import { copyPermalink, treeNavKeydown, actionKeydown } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
 import { BaseTypeHandler } from '../base-handler.js';
-import { resolveMediaOn } from '../../envoy/origin.js';
+import { resolveMediaOn } from '../origin-host.js';
 
 const DARK_MODE_CLASSES: Record<string, string> = {
   invert:     'img-body--dark-invert',

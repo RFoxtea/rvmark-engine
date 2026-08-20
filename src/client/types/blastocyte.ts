@@ -1,11 +1,10 @@
 import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryGet, factoryRegister } from '../type-registry.js';
 import { resolveTransclusionConfig } from '../transclusion.js';
-import { resolveRefOn } from '../../envoy/origin.js';
+import { resolveRefOn } from '../origin-host.js';
 import { buildStatePass } from '../state.js';
 import { parsePass, treeNavKeydown, makeErrorNode } from '../handler-utils.js';
 import { Multimap } from '../../shared/multimap.js';
-import { createCustomTypeHandler } from './custom.js';
 
 function differentiate(rn: RenderNode): TypeHandler {
   const node     = rn.sourceNode;
@@ -13,13 +12,10 @@ function differentiate(rn: RenderNode): TypeHandler {
   const typeName = attrs.get('type') ?? 'text';
   const factory  = factoryGet(typeName);
 
-  // Unknown type with an explicit `type` attr → site-defined custom type. Route
-  // it through its origin's envoy (sandboxed author code). A bare node with no
-  // type, or an unresolvable empty type, still falls back to `text`.
-  if (!factory && typeName !== 'text') {
-    return createCustomTypeHandler(rn, typeName);
-  }
-
+  // An unrenderable type is not reached here: the wire boundary rejects a node
+  // whose type this side cannot draw, and an origin's nodetypes are its own
+  // business — whatever it serves has already been through them. What is left
+  // is the ordinary fallback for a node with no type at all.
   const handler = (factory ?? factoryGet('text')!).create(rn);
   rn.attachHandler(handler);
   return handler;
@@ -76,8 +72,12 @@ export const blastocyteFactory: NodeTypeFactory = {
         (handler.content as any)._stopLoading?.();
         if (tgt) {
           const passRaw = node.attrs.get('pass');
-          const isCrossFile = tgt.pageAddress !== node.pageAddress;
-          if (passRaw !== undefined || isCrossFile) {
+          // The same two tiers setChildren uses: the origin that answered, then
+          // the scope that origin declared. A link-mode transclusion splices one
+          // node in rather than a list, but the boundary question is identical.
+          const crossesScope = tgt.address.baseUrl !== node.address.baseUrl
+                            || tgt.stateScope !== node.stateScope;
+          if (passRaw !== undefined || crossesScope) {
             rn.state.parent = buildStatePass(rn.state.parent, passRaw !== undefined ? parsePass(passRaw) : []);
           }
           const mergedAttrs = new Multimap();

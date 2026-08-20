@@ -17,6 +17,7 @@ import type { RenderNode, SourceNode } from './render-node.js';
 import type { ResolvedAttrs } from '../shared/served.js';
 import { expandNode, applyEventAttr } from './handler-utils.js';
 import { resolveTransclusionConfig } from './transclusion.js';
+import { childrenOf } from './origin-host.js';
 
 export interface ToggleSetOpts {
   /** `{open: always}`, plus whatever else forces a node permanently open. */
@@ -60,7 +61,7 @@ export class ToggleSet {
     const neverOpen  = attrs.get('open') === 'never';
     const { embedVal, childrenList } = resolveTransclusionConfig(sourceNode, attrs);
     this.expandable = !neverOpen
-      && (sourceNode.children.length > 0 || !!embedVal || !!childrenList);
+      && (sourceNode.hasChildren || !!embedVal || !!childrenList);
   }
 
   /** True when the bullet may be operated: expandable, not pinned open, and
@@ -197,18 +198,33 @@ export class ToggleSet {
     this.rn.holdReady(this.open(scroll));
   }
 
-  /** Track whether the node still has children to show, flipping the `leaf`
-   *  class and aria-expanded as that changes. */
+  /** Track whether the node still has children to SHOW — `draft` and a live
+   *  `show-when` can empty a node that has children, flipping it to a leaf.
+   *
+   *  This is the one question a collapsed row cannot answer from `hasChildren`:
+   *  it is about the children's own attrs, so they have to be fetched. The fetch
+   *  is unawaited — the toggle draws expandable first (which is what
+   *  `hasChildren` says) and corrects itself if the answer is no. A row that is
+   *  torn down before the reply lands has had `destroy` run, and drops it. */
   installWatch(setExpandable: (nowExpandable: boolean) => void): void {
     if (this.alwaysOpen) return;
-    if (!this.rn.sourceNode.children.length) {
+    if (!this.rn.sourceNode.hasChildren) {
       if (this.expandable) setExpandable(true);
       return;
     }
-    this._unwatchChildren = this.rn.watchChildren(
-      this.rn.sourceNode.children as SourceNode[],
-      (nowExpandable) => setExpandable(nowExpandable),
-    );
+    // Synchronously first, because `hasChildren` already answers the common
+    // case and everything downstream — `{open}`, the toggle's wiring — runs in
+    // this turn and would otherwise see a leaf.
+    setExpandable(true);
+
+    let dead = false;
+    this._unwatchChildren = () => { dead = true; };
+    void childrenOf(this.rn.sourceNode).then((kids) => {
+      if (dead || !kids.length) return;
+      const unwatch = this.rn.watchChildren(kids, (now) => setExpandable(now));
+      if (dead) unwatch();
+      else this._unwatchChildren = unwatch;
+    });
   }
 
   destroy(): void {

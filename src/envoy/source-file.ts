@@ -71,26 +71,44 @@ export class SourceFile {
     // in place. `resolveFile` hands over a tree that is structurally a RawNode
     // one; this is the step that makes the SourceNode type true of it.
     const authoredTags = node.tags as unknown as Tag[];
-    Object.assign(node, this.resolveShape(node.attrs, authoredTags, node.slug));
+    Object.assign(node, this.resolveShape(node.attrs, authoredTags, node.permalinkId));
   }
 
   /**
-   * Resolve whatever attrs, tags and slug are handed in, against this file's
-   * head. `serve` calls it for a parsed node; `Origin.reserve` calls it again
-   * for a node an envoy transform rewrote — which is why it takes the pieces
-   * rather than a node, since a transform's output has no resolved half yet.
+   * Resolve whatever attrs, tags and identity are handed in, against this file's
+   * head. `serve` calls it for a parsed node; the origin calls it again for a
+   * node a nodetype transform rewrote — which is why it takes the pieces rather
+   * than a node, since a transform's output has no resolved half yet.
+   *
+   * The key is built from `permalinkId`, NOT from `slug`. A slug is only unique
+   * among siblings — an id-less node's slug is its bare ordinal, so the first
+   * child of every node in a file is `1` — and a key is asked file-globally, by
+   * whoever holds it, with no context to disambiguate with. `permalinkId` is the
+   * ordinal path (`.1.2`, or `anchor.1.2` from the nearest id'd ancestor), which
+   * is what `resolveSlugInFile` walks and what the permalink already promises to
+   * be stable.
+   *
+   * Keying on the slug is how a fetched child could come back as its own
+   * ancestor: `childrenOf` re-resolves the key, `1` matched the first ROOT
+   * rather than the intended node, and the subtree served itself forever.
+   *
+   * `stateScope` is the file's address: one token per file, which reproduces
+   * what comparing `pageAddress` did when the client still modelled documents.
+   * An origin is free to mint one token for everything and switch its own
+   * barriers off; this one does not.
    */
-  resolveShape(attrs: NodeAttrs, tags: Tag[], slug: string): Reserved {
+  resolveShape(attrs: NodeAttrs, tags: Tag[], permalinkId: string): Reserved {
     const baseUrl = addressOrigin(this.pageAddress);
     const local   = this.pageAddress.slice(baseUrl.length).split('#')[0];
     return {
-      address:     { baseUrl, key: slug ? `${local}#${slug}` : local },
+      address:     { baseUrl, key: permalinkId ? `${local}#${permalinkId}` : local },
       attrs:       mergeNodeAttrs(tagsNodeAttrs(tags, this.head.tagDefs), attrs),
       tags:        tags.map(({ name, props }) => ({
                      name,
                      def: resolveTagDef(name, props, this.head.tagDefs),
                    })),
       pageAddress: this.pageAddress,
+      stateScope:  this.pageAddress,
     };
   }
 }
