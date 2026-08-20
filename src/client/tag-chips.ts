@@ -5,7 +5,7 @@
  *
  * The resolution half lives in envoy/tags.ts, on the other side of the
  * boundary — a tag's definition is read off its document's head, which is the
- * origin's to know. By the time a tag reaches here it is a `ServedTag`: the def
+ * origin's to know. By the time a tag reaches here it is a `ResolvedTag`: the def
  * merged, the dot-rule applied, nothing left to look up. This side only draws.
  *
  * Exports:
@@ -13,9 +13,9 @@
  */
 
 import { mdInline } from './markdown.js';
-import type { ServedTag } from '../shared/served.js';
+import type { ResolvedTag } from '../shared/served.js';
 
-export function buildTagChips(tags: ServedTag[]): DocumentFragment {
+export function buildTagChips(tags: ResolvedTag[]): DocumentFragment {
   const frag = document.createDocumentFragment();
   for (const { name, def } of tags) {
     if (def.has('internal')) continue;

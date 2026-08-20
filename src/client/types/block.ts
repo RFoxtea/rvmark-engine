@@ -25,6 +25,7 @@ import { ToggleSet } from '../toggle-set.js';
 import { wireSpanToggles } from '../span-toggle.js';
 import type { ResolvedAttrs } from '../../shared/served.js';
 import { BaseTypeHandler } from '../base-handler.js';
+import { resolveMediaOn } from '../../envoy/origin.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import { wireSpanVisibility } from '../span-visibility.js';
 import type { ListboxNav } from '../listbox.js';
@@ -96,7 +97,7 @@ class BlockTypeHandler extends BaseTypeHandler {
   constructor(rn: RenderNode) {
     super(rn, 'a[href], pre, .block-body-scroll, .md-math-block, .katex-display, .katex-html');
     const sourceNode = rn.sourceNode;
-    const attrs = sourceNode.served.attrs;
+    const attrs = sourceNode.attrs;
     applyOnSpawn(attrs, rn);
 
     const { content } = this;
@@ -117,9 +118,11 @@ class BlockTypeHandler extends BaseTypeHandler {
     // body may render synchronously.
     this._toggles = new ToggleSet(rn, attrs, { alwaysOpen: true });
 
-    const { url, sectionSlug, bodyText } = this.resolveSrc(attrs, sourceNode);
-    if (url || bodyText) this.buildBody(url, sectionSlug, bodyText, attrs, sourceNode);
-    else rn.ready();
+    void (async () => {
+      const { url, sectionSlug, bodyText } = await this.resolveSrc(attrs, sourceNode);
+      if (url || bodyText) this.buildBody(url, sectionSlug, bodyText, attrs, sourceNode);
+      else rn.ready();
+    })();
 
     this.buildKeyboardHandler(rn.li);
 
@@ -128,16 +131,16 @@ class BlockTypeHandler extends BaseTypeHandler {
 
   // ── Private methods ────────────────────────────────────────────────────────
 
-  private resolveSrc(
+  private async resolveSrc(
     attrs: ResolvedAttrs,
     sourceNode: SourceNode,
-  ): { url: string | null; sectionSlug: string | null; bodyText: string | null } {
+  ): Promise<{ url: string | null; sectionSlug: string | null; bodyText: string | null }> {
     const rawSrc = (attrs.get('src') ?? sourceNode.label ?? '').trim();
     if (rawSrc) {
       const hashIdx   = rawSrc.indexOf('#');
       const filePart  = hashIdx === -1 ? rawSrc : rawSrc.slice(0, hashIdx);
       const sectionSlug = hashIdx === -1 ? null : rawSrc.slice(hashIdx);
-      return { url: sourceNode.served.media(filePart), sectionSlug, bodyText: null };
+      return { url: await resolveMediaOn(sourceNode, filePart), sectionSlug, bodyText: null };
     }
     return {
       url: null,
@@ -351,8 +354,7 @@ const blockFactory: NodeTypeFactory = {
       const filePart = hashIdx === -1 ? rawSrc : rawSrc.slice(0, hashIdx);
       const sectionSlug = hashIdx === -1 ? null : rawSrc.slice(hashIdx);
 
-      if (!node.served) return null;
-      const text = ctx.readFile(node.served.media(filePart));
+      const text = ctx.readFile(ctx.resolveMedia(node, filePart));
       if (text === null) return wrap(`[unreadable: ${rawSrc}]`);
 
       let body: string;

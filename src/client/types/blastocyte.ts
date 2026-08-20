@@ -9,7 +9,7 @@ import { createCustomTypeHandler } from './custom.js';
 
 function differentiate(rn: RenderNode): TypeHandler {
   const node     = rn.sourceNode;
-  const attrs    = node.served.attrs;
+  const attrs    = node.attrs;
   const typeName = attrs.get('type') ?? 'text';
   const factory  = factoryGet(typeName);
 
@@ -65,7 +65,7 @@ factoryRegister('loading', { create: (rn) => loadingHandler(rn) });
 export const blastocyteFactory: NodeTypeFactory = {
   create(rn: RenderNode): TypeHandler {
     const node  = rn.sourceNode;
-    const attrs = node.served.attrs;
+    const attrs = node.attrs;
     const { embedVal, transcludeMode } = resolveTransclusionConfig(node, attrs);
 
     if (transcludeMode === 'link') {
@@ -76,7 +76,7 @@ export const blastocyteFactory: NodeTypeFactory = {
         (handler.content as any)._stopLoading?.();
         if (tgt) {
           const passRaw = node.attrs.get('pass');
-          const isCrossFile = tgt.served?.pageAddress !== node.served.pageAddress;
+          const isCrossFile = tgt.pageAddress !== node.pageAddress;
           if (passRaw !== undefined || isCrossFile) {
             rn.state.parent = buildStatePass(rn.state.parent, passRaw !== undefined ? parsePass(passRaw) : []);
           }

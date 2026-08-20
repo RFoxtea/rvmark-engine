@@ -19,7 +19,7 @@ class GapTypeHandler implements TypeHandler {
 
   constructor(renderNode: RenderNode) {
     const sourceNode = renderNode.sourceNode;
-    const attrs = sourceNode.served.attrs;
+    const attrs = sourceNode.attrs;
 
     const content = document.createElement('div');
     this.content = content;
@@ -27,7 +27,7 @@ class GapTypeHandler implements TypeHandler {
     // ── Classes ──────────────────────────────────────────────────────────────
     content.classList.add('node-content--gap');
 
-    for (const { def } of sourceNode.served.tags) {
+    for (const { def } of sourceNode.tags) {
       for (const cls of def.getAll('class')) content.classList.add(...cls.split(/\s+/).filter(Boolean));
     }
     for (const cls of attrs.getAll('class')) content.classList.add(...cls.split(/\s+/).filter(Boolean));

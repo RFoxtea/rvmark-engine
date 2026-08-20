@@ -52,7 +52,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
     super(rn, cfg.focusableSelector);
     this.cfg = cfg;
     const sourceNode = rn.sourceNode;
-    const attrs = sourceNode.served.attrs;
+    const attrs = sourceNode.attrs;
     applyOnSpawn(attrs, rn);
 
     const { content } = this;

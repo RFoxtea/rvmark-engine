@@ -18,7 +18,7 @@ class HrTypeHandler implements TypeHandler {
 
   constructor(renderNode: RenderNode) {
     const sourceNode = renderNode.sourceNode;
-    const attrs = sourceNode.served.attrs;
+    const attrs = sourceNode.attrs;
 
     const content = document.createElement('div');
     this.content = content;

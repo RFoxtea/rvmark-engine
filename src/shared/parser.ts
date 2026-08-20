@@ -242,16 +242,67 @@ export interface RawNode {
 // source tree, at parse time. They are registered in inherited.ts and threaded
 // by resolveFile; see that file for why inheritance lives there and not in a
 // walk over rendered ancestors.
-export interface SourceNode extends RawNode {
+// Deliberately NOT `extends RawNode`. A served node's `attrs` and `tags` are
+// RESOLVED, not authored — `attrs` has its tags' `node.*` overrides merged in,
+// and `tags` carry their looked-up definitions rather than their inline props.
+// They occupy the authored fields' names rather than sitting beside them: a
+// reader has no use for the authored form and no way to resolve it, so there is
+// nothing for a second view to be a view OF. `tags` is the field that cannot be
+// narrowed under an extends, and the incompatibility is the type system stating
+// the same thing.
+export interface SourceNode {
+  slug:        string;
+  permalinkId: string;
+  numbering:   string;
+  auto?:       boolean;
+  label:       string;
+  bodyLines:   string[];
+
   meta:       Record<string, unknown>;
   children:   SourceNode[];
   searchable: boolean;
   exhibit:    import('./inherited.js').ExhibitScope | null;
-  // What the origin resolved on this node's behalf — its address, its attrs,
-  // its tags, its media. The only provenance a client-side reader gets; the
-  // parsed document it came from is the origin's and does not leave it.
-  served:     import('./served.js').Served;
+
+  attrs:      NodeAttrs;
+  tags:       ResolvedTag[];
+
+  /** This node's own address. `key` is opaque — hand it back, never read it. */
+  address:    { baseUrl: string; key: string };
+
+  /**
+   * The address of the document this node came from, for the permalink and the
+   * static-view link. An origin with no document-shaped storage answers with
+   * the node's own.
+   */
+  pageAddress: string;
 }
+
+/** One tag as it renders: props merged, dot-rule applied, definition resolved. */
+export interface ResolvedTag {
+  name: string;
+  def:  TagDef;
+}
+
+/**
+ * The resolved half of a node — what an origin works out that a reader cannot.
+ * A parsed node gets it stamped on at serve time; a node whose authored half
+ * came from elsewhere (an envoy transform's output) gets it from
+ * `Origin.reserve`.
+ */
+export interface Reserved {
+  attrs:       NodeAttrs;
+  tags:        ResolvedTag[];
+  address:     { baseUrl: string; key: string };
+  pageAddress: string;
+}
+
+/**
+ * Re-serving bound to one document — `Origin.reserve` with its key already
+ * supplied. Declared here rather than with the origin because both sides of the
+ * wire hold one: the host binds it before a round trip, so nothing that came
+ * back gets a say in which document's rules interpret it.
+ */
+export type Reserve = (out: { attrs: NodeAttrs; tags: Tag[]; slug: string }) => Promise<Reserved>;
 
 export interface RawFile {
   head:    Head;

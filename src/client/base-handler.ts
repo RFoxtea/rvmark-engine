@@ -6,7 +6,7 @@
  * → wire focus gating.
  *
  * Subclasses call super(rn, focusableSelector) then re-derive attrs via
- * rn.sourceNode.served.attrs for their own setup — resolveAttrs is a cheap
+ * rn.sourceNode.attrs for their own setup — resolveAttrs is a cheap
  * object merge so re-deriving is fine.
  */
 
@@ -23,7 +23,7 @@ export abstract class BaseTypeHandler implements TypeHandler {
   constructor(rn: RenderNode, focusableSelector: string) {
     this.rn = rn;
     const sourceNode = rn.sourceNode;
-    const attrs = sourceNode.served.attrs;
+    const attrs = sourceNode.attrs;
 
     const content = document.createElement('div');
     this.content = content;

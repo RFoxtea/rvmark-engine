@@ -15,6 +15,7 @@ import { factoryRegister } from '../render-node.js';
 import { copyPermalink, treeNavKeydown, actionKeydown } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
 import { BaseTypeHandler } from '../base-handler.js';
+import { resolveMediaOn } from '../../envoy/origin.js';
 
 const DARK_MODE_CLASSES: Record<string, string> = {
   invert:     'img-body--dark-invert',
@@ -30,17 +31,16 @@ const ALIGN_CLASSES: Record<string, string> = {
 const WIDTH_RE = /^[0-9]+(\.[0-9]+)?(px|em|rem|%|vw|vh|ch|ex|cm|mm|in|pt|pc)$/;
 
 class ImageTypeHandler extends BaseTypeHandler {
+  // Filled once the origin answers. The keydown handler below closes over the
+  // handler rather than a local, so a copy issued before the URL lands is a
+  // no-op rather than a copy of the wrong thing.
+  private url: string | null = null;
+
   constructor(renderNode: RenderNode) {
     super(renderNode, 'a[href]');
     const sourceNode = renderNode.sourceNode;
-    const attrs = sourceNode.served.attrs;
+    const attrs = sourceNode.attrs;
     const rawUrl = attrs.get('src') ?? sourceNode.label ?? null;
-    let url: string | null = null;
-    if (rawUrl) {
-      const resolved = sourceNode.served.media(rawUrl);
-      const proto = (resolved.match(/^([a-zA-Z][a-zA-Z0-9+\-.]*):/) ?? [])[1]?.toLowerCase();
-      url = (!proto || ['http', 'https'].includes(proto)) ? resolved : null;
-    }
     const alt        = attrs.get('alt') ?? '';
     const darkClass  = DARK_MODE_CLASSES[attrs.get('dark-mode') ?? ''] ?? '';
     const alignClass = ALIGN_CLASSES[attrs.get('align') ?? ''] ?? '';
@@ -50,12 +50,18 @@ class ImageTypeHandler extends BaseTypeHandler {
     const content = this.content;
     const li = renderNode.li;
 
-    if (url) {
+    void (async () => {
+      const resolved = await resolveMediaOn(sourceNode, rawUrl);
+      if (!resolved) return;
+      const proto = (resolved.match(/^([a-zA-Z][a-zA-Z0-9+\-.]*):/) ?? [])[1]?.toLowerCase();
+      if (proto && !['http', 'https'].includes(proto)) return;
+      this.url = resolved;
+
       const figure = document.createElement('figure');
       figure.className = ['img-body', darkClass, alignClass].filter(Boolean).join(' ');
 
       const img = document.createElement('img');
-      img.src     = url;
+      img.src     = resolved;
       img.alt     = alt;
       img.loading = 'lazy';
       if (width) img.style.width = width;
@@ -68,7 +74,7 @@ class ImageTypeHandler extends BaseTypeHandler {
       }
 
       content.appendChild(figure);
-    }
+    })();
 
     content.addEventListener('keydown', (e) => {
       if (e.target !== content) return;
@@ -76,8 +82,8 @@ class ImageTypeHandler extends BaseTypeHandler {
       if (e.key === 'c') {
         if (e.ctrlKey || e.metaKey) {
           // Defer to the browser whenever there is a selection to copy.
-          if (url && !window.getSelection()?.toString()) {
-            copyImage(url, alt);
+          if (this.url && !window.getSelection()?.toString()) {
+            copyImage(this.url, alt);
             e.preventDefault();
           }
         } else {
@@ -140,9 +146,9 @@ const imageFactory: NodeTypeFactory = {
   create(renderNode) {
     return new ImageTypeHandler(renderNode);
   },
-  staticRenderBody(node) {
+  staticRenderBody(node, ctx) {
     const rawUrl = node.attrs.get('src') ?? node.label ?? null;
-    const url = rawUrl ? node.served.media(rawUrl) : null;
+    const url = rawUrl ? ctx.resolveMedia(node, rawUrl) : null;
     if (!url) return null;
     const alt        = node.attrs.get('alt') ?? '';
     const darkClass  = DARK_MODE_CLASSES[node.attrs.get('dark-mode') ?? ''] ?? '';

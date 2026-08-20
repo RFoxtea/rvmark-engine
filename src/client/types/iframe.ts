@@ -38,6 +38,7 @@ import { factoryRegister } from '../render-node.js';
 import { treeNavKeydown, actionKeydown, copyPermalink } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
 import { BaseTypeHandler } from '../base-handler.js';
+import { resolveMediaOn } from '../../envoy/origin.js';
 
 import { wireSelectThenAction } from '../interaction.js';
 import { StateRelay, buildStatePass } from '../state.js';
@@ -171,12 +172,9 @@ class IframeTypeHandler extends BaseTypeHandler {
   constructor(renderNode: RenderNode) {
     super(renderNode, '*');
     const sourceNode = renderNode.sourceNode;
-    const attrs = sourceNode.served.attrs;
+    const attrs = sourceNode.attrs;
 
     const rawUrl = attrs.get('src') ?? (sourceNode.label?.trim() || null);
-    const url         = rawUrl ? sourceNode.served.media(rawUrl) : null;
-    const srcdoc      = (!url && sourceNode.bodyLines?.length)
-      ? sourceNode.bodyLines.join('\n') : null;
     const fixedHeight = attrs.get('height') ?? null;
 
     const content = this.content;
@@ -189,47 +187,56 @@ class IframeTypeHandler extends BaseTypeHandler {
 
     const li = renderNode.li;
 
-    if (url || srcdoc) {
-      const iframe = document.createElement('iframe');
-      iframe.className = 'html-body html-body-iframe';
+    // The whole frame waits on the URL: `srcdoc` is the fallback for a node with
+    // no resolvable src, so which of the two is used cannot be decided until the
+    // origin has answered.
+    void (async () => {
+      const url    = await resolveMediaOn(sourceNode, rawUrl);
+      const srcdoc = (!url && sourceNode.bodyLines?.length)
+        ? sourceNode.bodyLines.join('\n') : null;
 
-      const isSameOrigin = url && (() => {
-        try { return new URL(url, window.location.href).origin === window.location.origin; }
-        catch { return false; }
-      })();
-      if (!isSameOrigin) iframe.setAttribute('sandbox', 'allow-scripts');
-      if (fixedHeight) iframe.style.height = fixedHeight;
+      if (url || srcdoc) {
+        const iframe = document.createElement('iframe');
+        iframe.className = 'html-body html-body-iframe';
 
-      const iframePassRaw = attrs.get('iframe-pass') ?? null;
-      const iframePassEntries = iframePassRaw ? parsePass(iframePassRaw) : [];
-      const relay = (iframePassRaw && isSameOrigin)
-        ? new StateRelay(buildStatePass(renderNode.state, iframePassEntries))
-        : null;
+        const isSameOrigin = url && (() => {
+          try { return new URL(url, window.location.href).origin === window.location.origin; }
+          catch { return false; }
+        })();
+        if (!isSameOrigin) iframe.setAttribute('sandbox', 'allow-scripts');
+        if (fixedHeight) iframe.style.height = fixedHeight;
 
-      const { activateRelay } = setupIframe(iframe, content);
-      this._activateRelay = activateRelay;
+        const iframePassRaw = attrs.get('iframe-pass') ?? null;
+        const iframePassEntries = iframePassRaw ? parsePass(iframePassRaw) : [];
+        const relay = (iframePassRaw && isSameOrigin)
+          ? new StateRelay(buildStatePass(renderNode.state, iframePassEntries))
+          : null;
 
-      if (relay) {
-        let relayCleanup: (() => void) | null = null;
-        iframe.addEventListener('load', () => {
-          if (iframe.contentWindow) {
-            relayCleanup?.();
-            relayCleanup = wireRelay(relay, iframePassEntries, iframe.contentWindow);
-          }
-        });
-        new MutationObserver((_, obs) => {
-          if (!iframe.isConnected) { relayCleanup?.(); obs.disconnect(); }
-        }).observe(document.body, { childList: true, subtree: true });
+        const { activateRelay } = setupIframe(iframe, content);
+        this._activateRelay = activateRelay;
+
+        if (relay) {
+          let relayCleanup: (() => void) | null = null;
+          iframe.addEventListener('load', () => {
+            if (iframe.contentWindow) {
+              relayCleanup?.();
+              relayCleanup = wireRelay(relay, iframePassEntries, iframe.contentWindow);
+            }
+          });
+          new MutationObserver((_, obs) => {
+            if (!iframe.isConnected) { relayCleanup?.(); obs.disconnect(); }
+          }).observe(document.body, { childList: true, subtree: true });
+        }
+
+        if (url) {
+          iframe.src = url;
+        } else {
+          iframe.srcdoc = srcdoc!;
+        }
+
+        content.appendChild(iframe);
       }
-
-      if (url) {
-        iframe.src = url;
-      } else {
-        iframe.srcdoc = srcdoc!;
-      }
-
-      content.appendChild(iframe);
-    }
+    })();
 
     content.addEventListener('keydown', (e) => {
       if (e.target !== content) return;
@@ -259,10 +266,10 @@ const iframeFactory: NodeTypeFactory = {
   create(renderNode) {
     return new IframeTypeHandler(renderNode);
   },
-  staticRenderBody(node) {
+  staticRenderBody(node, ctx) {
     const rawUrl = node.attrs.get('src') ?? (node.label?.trim() || null);
     if (rawUrl) {
-      const url = node.served.media(rawUrl);
+      const url = ctx.resolveMedia(node, rawUrl);
       const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       return `<a class="static-iframe-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(rawUrl)}</a>`;
     }

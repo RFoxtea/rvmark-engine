@@ -5,7 +5,7 @@
  * Also serves as the fallback when an unrecognised type is encountered.
  */
 
-import type { NodeTypeFactory, SourceNode, ResolvedAttrs } from '../render-node.js';
+import type { NodeTypeFactory, SourceNode, ResolvedAttrs, StaticBuildContext } from '../render-node.js';
 import { factoryRegister, RenderNode } from '../render-node.js';
 
 import { buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyOnAction, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyBulletAlt, applyListItemProps, wireBulletActions } from '../handler-utils.js';
@@ -50,7 +50,7 @@ class TextTypeHandler extends BaseTypeHandler {
     // are different questions with different answers.
     super(rn, '.node-label a[href], .node-label .inline-toggle');
     const sourceNode = rn.sourceNode;
-    const attrs = sourceNode.served.attrs;
+    const attrs = sourceNode.attrs;
     applyOnSpawn(attrs, rn);
 
     const hasLink   = attrs.get('action') === 'link';
@@ -66,10 +66,12 @@ class TextTypeHandler extends BaseTypeHandler {
     const needsKatex = hasMath(rawLabel) && !katexLoaded();
     if (needsKatex) this.managesReady = true;
 
-    const renderLabel = () => mdInlineWithSpans(
-      rawLabel,
-      (url) => sourceNode.served.media(url),
-    );
+    // TODO(stage-3): the resolver `mdInlineWithSpans` takes is called mid-render
+    // and cannot await. The design note has labels resolved at serve time for
+    // exactly this reason — but the only ref that reaches here is `img:` on a
+    // span, and spans are parsed client-side at render time, so the origin would
+    // have to learn span syntax to resolve it. Left unresolved pending that call.
+    const renderLabel = () => mdInlineWithSpans(rawLabel);
     const { html: lblHtml, spanMap } = renderLabel();
     this._reRenderLabel = needsKatex ? renderLabel : null;
     const hasListbox = isListbox(attrs, spanMap);
@@ -123,7 +125,7 @@ class TextTypeHandler extends BaseTypeHandler {
       void ensureKatex().then(() => {
         const { html, spanMap: freshSpans } = this._reRenderLabel!();
         this.lbl.innerHTML = html;
-        const chips = buildTagChips(sourceNode.served.tags);
+        const chips = buildTagChips(sourceNode.tags);
         if (chips.childNodes.length > 0) this.lbl.prepend(chips);
         // innerHTML discarded the wired elements along with the old markup, so
         // the subscriptions must be dropped and re-taken against the new ones.
@@ -175,7 +177,7 @@ class TextTypeHandler extends BaseTypeHandler {
     this.lbl = lbl;
 
     lbl.innerHTML = lblHtml;
-    const chips = buildTagChips(sourceNode.served.tags);
+    const chips = buildTagChips(sourceNode.tags);
     if (chips.childNodes.length > 0) lbl.prepend(chips);
 
     if (hasListbox) {
@@ -192,7 +194,7 @@ class TextTypeHandler extends BaseTypeHandler {
 
     this._unwireSpanToggles?.();
     this._unwireSpanToggles = wireSpanToggles(
-      lbl, spanMap, sourceNode.served.attrs, this.rn, this.toggles,
+      lbl, spanMap, sourceNode.attrs, this.rn, this.toggles,
     );
 
     if (hasLink) {
@@ -433,19 +435,20 @@ export function staticRenderBullet(
 export function staticBulletProps(
   node:  SourceNode,
   attrs: ResolvedAttrs,
+  ctx:   StaticBuildContext,
 ): { classes: string[]; styles: string[]; bulletAlt: string | null } {
   const classes: string[] = [];
   const styles:  string[] = [];
 
   const bullet = attrs.get('bullet');
   if (bullet !== undefined) {
-    const url = node.served.media(bullet);
+    const url = ctx.resolveMedia(node, bullet);
     if (url) {
       classes.push('node-content--bullet-image');
       styles.push(`--node-bullet-image:url("${url.replace(/[\\"]/g, '\\$&')}")`);
       const open = attrs.get('bullet-open');
       if (open !== undefined) {
-        const openUrl = node.served.media(open);
+        const openUrl = ctx.resolveMedia(node, open);
         if (openUrl) {
           classes.push('node-content--bullet-open');
           styles.push(`--node-bullet-image-open:url("${openUrl.replace(/[\\"]/g, '\\$&')}")`);

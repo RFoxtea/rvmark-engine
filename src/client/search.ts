@@ -181,7 +181,7 @@ function askOrigins(query: string): void {
   for (const [node, li] of mountedNodes()) {
     const content = li.querySelector<HTMLElement>(':scope > .node-content');
     if (content?.getAttribute('aria-expanded') !== 'false') continue;
-    const { baseUrl, key } = node.served.address;
+    const { baseUrl, key } = node.address;
     if (!key) continue; // a client-minted stand-in names nothing an origin knows
     let keys = byOrigin.get(baseUrl);
     if (!keys) { keys = new Set(); byOrigin.set(baseUrl, keys); }
@@ -222,8 +222,8 @@ function nodesWithHiddenMatch(results: SearchMatch[]): Map<SourceNode, HTMLEleme
     node.children.some(c => hiddenMatches.has(c) || containsHidden(c));
 
   for (const [node, li] of mounted) {
-    const asked = _asked.get(node.served.address.baseUrl);
-    const askedYes = !!node.served.address.key && !!asked?.keys.has(node.served.address.key);
+    const asked = _asked.get(node.address.baseUrl);
+    const askedYes = !!node.address.key && !!asked?.keys.has(node.address.key);
     if (askedYes || (hiddenMatches.size && containsHidden(node))) out.set(node, li);
   }
   return out;

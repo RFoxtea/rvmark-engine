@@ -174,6 +174,13 @@ export async function buildSite(config) {
       try { return readFileSync(join(RVMARK_DIR, relPath), 'utf8'); }
       catch { return null; }
     },
+    // The build-time twin of Origin.resolveResource, and synchronous because the
+    // builder IS the origin's Node-side half: the store is in hand and there is
+    // no wire between them. A node carries the document it came from, so a
+    // transcluded foreign node still resolves against its own file.
+    resolveMedia(node, ref) {
+      return resolveMediaAddress(ref, node.pageAddress) ?? ref;
+    },
   };
   // `templateHtml` (raw contents) wins over `template` (path); both default to
   // the engine's template. Lets callers patch the template in-memory (e.g. the
@@ -565,7 +572,7 @@ function renderStaticNode(node, sourceFile, depth = 0) {
   // node.bullet) plus the node's own. The hydrated page reads exactly this via
   // resolveAttrs, so reading raw node.attrs here would silently drop every
   // tag-driven bullet, {li} and {class} from the fallback.
-  const attrs = node.served.attrs;
+  const attrs = node.attrs;
   const isHidden = attrs.has('hidden');
 
   const transcludeRaw = attrs.get('transclude') ?? null;
@@ -632,7 +639,7 @@ function renderStaticNode(node, sourceFile, depth = 0) {
   // Bullet props only mean anything to a type that draws a bullet; asking for
   // them elsewhere would put .li or a bullet image on a row with no gutter.
   const { classes: bulletClasses, styles: rawBulletStyles, bulletAlt } = hasBullet
-    ? staticBulletProps(node, attrs)
+    ? staticBulletProps(node, attrs, buildCtx)
     : { classes: [], styles: [], bulletAlt: null };
   const bulletStyles = inlineBulletUrls(rawBulletStyles, RVMARK_DIR);
   const styleAttr = bulletStyles.length ? ` style="${escHtml(bulletStyles.join(';'))}"` : '';
@@ -733,7 +740,7 @@ function renderStaticNode(node, sourceFile, depth = 0) {
 // what the hydrated page builds, and :checked ~ .node-children drives the same
 // collapse aria-expanded drives there.
 function renderStaticTableNode(node, sourceFile, depth, typeName) {
-  const attrs  = node.served.attrs;
+  const attrs  = node.attrs;
   const isTable = typeName === 'table';
   const factory = factoryGet(typeName);
 
@@ -761,7 +768,7 @@ function renderStaticTableNode(node, sourceFile, depth, typeName) {
     ? `<div class="node-children">${renderStaticNodes(node.children, sourceFile, depth + 1)}</div>`
     : '';
 
-  const { bulletAlt } = staticBulletProps(node, attrs);
+  const { bulletAlt } = staticBulletProps(node, attrs, buildCtx);
   const togClass = isTable ? 'table-toggle toggle' : 'tr-toggle toggle';
 
   let toggleHtml;

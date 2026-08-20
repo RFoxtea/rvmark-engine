@@ -335,7 +335,7 @@ export function exhibitConfigOf(rn: { sourceNode: SourceNode }): ExhibitConfig |
     rawRef:            scope.rawRef,
     // Inheritance never crosses a file, so this node's file is the one that
     // declared the scope — which is what the ref resolves against.
-    sourceFileAddress: rn.sourceNode.served.pageAddress,
+    sourceFileAddress: rn.sourceNode.pageAddress,
     attrs:             scope.attrs,
   };
 }
@@ -388,7 +388,7 @@ class RvmarkExhibitStrategy extends ExhibitStrategy {
     // Build the address from the resolved node's own source file rather than
     // re-resolving rawRef — this is the path that handles sigil refs (which
     // resolveAddress doesn't understand) and cross-origin federation.
-    const fileAddress = node.served?.pageAddress;
+    const fileAddress = node.pageAddress;
     if (!fileAddress) return null;
     const address = node.permalinkId ? `${fileAddress}#${node.permalinkId}` : fileAddress;
 

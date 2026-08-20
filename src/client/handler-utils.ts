@@ -18,10 +18,9 @@ import { parseStateEntries } from '../shared/parser.js';
 import { Multimap } from '../shared/multimap.js';
 import { bagOf } from '../shared/inherited.js';
 import type { ResolvedAttrs } from '../shared/served.js';
-import { standIn } from '../shared/served.js';
 import { RenderNode } from './render-node.js';
 import { resolveEffectiveChildren, resolveTransclusionConfig } from './transclusion.js';
-import { resolveRefOn } from '../envoy/origin.js';
+import { resolveRefOn, resolveMediaOn } from '../envoy/origin.js';
 import { parseTranscludeEntry } from '../shared/shared.js';
 import { TRANSCLUDE_DEADLINE_MS } from './constants.js';
 import type { PassEntry, PassMode, StateNode } from './state.js';
@@ -82,7 +81,7 @@ export function parsePass(raw: string): PassEntry[] {
 
 export async function expandNode(rn: RenderNode, transcludeRef?: string): Promise<void> {
   const sourceNode = rn.sourceNode;
-  const attrs = sourceNode.served.attrs;
+  const attrs = sourceNode.attrs;
   const { embedVal, childrenList: _childrenList } = resolveTransclusionConfig(sourceNode, attrs);
   // A caller-supplied ref (listbox option) or a link-mode embedVal is just a
   // single-ref children list. Route both through the list path below so the
@@ -138,15 +137,19 @@ export async function expandNode(rn: RenderNode, transcludeRef?: string): Promis
 
 // ── Synthetic transclusion markers ─────────────────────────────────────────
 // Programmatically-minted child nodes shown while a children-mode transclusion
-// resolves. They borrow the host's sourceFile (for tag/media/address resolution)
-// and carry no identity fields — they are never in the nodeMap and never a focus
-// target. Mirrors the errorNode pattern in types/custom.ts.
+// resolves. They stand in for the host — rendered in its place, in its document
+// — so they resolve media the way it does and sit at its page address. What they
+// do not have is an identity: nothing served them, so their key is empty and
+// asking an origin about it would be asking about a node that does not exist.
+// Mirrors the errorNode pattern in types/custom.ts.
 
 function syntheticChild(host: SourceNode, attrs: Multimap, label: string): SourceNode {
   return {
     slug: '', permalinkId: '', numbering: '',
     attrs, tags: [], label, bodyLines: [],
-    children: [], served: standIn(host, attrs),
+    children: [],
+    address:     { baseUrl: host.address.baseUrl, key: '' },
+    pageAddress: host.pageAddress,
     // Stands in for the host, so it inherits exactly what the host has.
     ...bagOf(host),
   } as SourceNode;
@@ -222,7 +225,7 @@ export function listboxKeydown(
 //
 // Recognized actions: 'exhibit', 'link', 'none'.
 export function actionKeydown(e: KeyboardEvent, rn: RenderNode): boolean {
-  const actionVal = rn.sourceNode.served.attrs.get('action');
+  const actionVal = rn.sourceNode.attrs.get('action');
   if (actionVal === undefined) return false;
   const content = rn.content;
 
@@ -310,7 +313,7 @@ export function applyOnAction(rn: RenderNode): void {
 // ── Tag class application ──────────────────────────────────────────────────
 
 export function applyTagClasses(content: HTMLElement, sourceNode: SourceNode, attrs: ResolvedAttrs): void {
-  for (const { def } of sourceNode.served.tags) {
+  for (const { def } of sourceNode.tags) {
     for (const cls of def.getAll('class')) {
       content.classList.add(...cls.split(/\s+/).filter(Boolean));
     }
@@ -432,12 +435,29 @@ export function wireBulletActions(
 // addressed, so it resolves against the origin that wrote it, and it costs one
 // small lazy fetch instead of a font.
 export function applyBulletProps(content: HTMLElement, attrs: ResolvedAttrs, sourceNode?: SourceNode): void {
+  // The non-media props are applied synchronously, before the icon is asked for.
+  // They are what a node looks like without its bullet image, and holding them
+  // back behind a resolution they do not need would make every decorated row
+  // wait on a round trip to learn it spins.
+  if (attrs.has('bullet-spins')) content.classList.add('node-content--bullet-spins');
+
+  // The marker is a masked box with no text and no alt, so without this a
+  // decorated node announces only its label — and the icon carries meaning the
+  // label often does not repeat ("Warning", "To do"). Applied whatever the
+  // marker is: an author may name the default bullet too.
+  const alt = attrs.get('bullet-alt');
+  if (alt) content.dataset.bulletAlt = alt;
+
+  void applyBulletImages(content, attrs, sourceNode);
+}
+
+async function applyBulletImages(content: HTMLElement, attrs: ResolvedAttrs, sourceNode?: SourceNode): Promise<void> {
   const bullet = attrs.get('bullet');
   if (bullet !== undefined && sourceNode) {
-    // Relative refs resolve against the file the node came FROM (resolveMediaUrl
-    // uses pageAddress) — so a transcluded foreign node gets its OWN origin's
-    // icons, the same rule markdown media and transclusion refs already follow.
-    const url = sourceNode.served.media(bullet);
+    // Relative refs resolve against the file the node came FROM — so a
+    // transcluded foreign node gets its OWN origin's icons, the same rule
+    // markdown media and transclusion refs already follow.
+    const url = await resolveMediaOn(sourceNode, bullet);
     if (url) {
       setBulletImage(content, '--node-bullet-image', url, () => {
         content.classList.remove('node-content--bullet-image');
@@ -452,7 +472,7 @@ export function applyBulletProps(content: HTMLElement, attrs: ResolvedAttrs, sou
     // shows its own state by rotating.
     const open = attrs.get('bullet-open');
     if (open !== undefined) {
-      const openUrl = sourceNode.served.media(open);
+      const openUrl = await resolveMediaOn(sourceNode, open);
       if (openUrl) {
         // Falling back to the closed icon (rather than the default marker) on a
         // dead URL keeps the bullet the author chose; only the state cue is lost.
@@ -464,14 +484,6 @@ export function applyBulletProps(content: HTMLElement, attrs: ResolvedAttrs, sou
       }
     }
   }
-  if (attrs.has('bullet-spins')) content.classList.add('node-content--bullet-spins');
-
-  // The marker is a masked box with no text and no alt, so without this a
-  // decorated node announces only its label — and the icon carries meaning the
-  // label often does not repeat ("Warning", "To do"). Applied whatever the
-  // marker is: an author may name the default bullet too.
-  const alt = attrs.get('bullet-alt');
-  if (alt) content.dataset.bulletAlt = alt;
 }
 
 // Resolve one bullet image into a custom property, with a load probe that
@@ -511,7 +523,7 @@ export function applyListItemProps(content: HTMLElement, attrs: ResolvedAttrs): 
 // Converts to a navigable href via addressToHref.
 export function buildPermalinkHref(rn: RenderNode): string {
   const state    = rn.state.serialize();
-  const basePath = rn.sourceNode ? addressToHref(rn.sourceNode.served.pageAddress ?? '') : '';
+  const basePath = rn.sourceNode ? addressToHref(rn.sourceNode.pageAddress ?? '') : '';
   return basePath + (state ? '?' + state : '') + (rn.permalinkId ? '#' + rn.permalinkId : '');
 }
 

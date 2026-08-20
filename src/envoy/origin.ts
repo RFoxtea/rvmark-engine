@@ -22,27 +22,30 @@
  * matching over content the caller does not hold. What does NOT live here is
  * anything about rendering.
  *
- * A node leaves here already resolved: it carries a `Served` (served.ts) with
- * its address, its merged attrs, its resolved tags and a media resolver. That
- * is the whole of what a client-side reader may know about where a node came
- * from, and it is a value rather than a handle — so the same reads work when
- * the wire is cut underneath them.
+ * A node leaves here already resolved, and flat: its `attrs` have their tags'
+ * `node.*` overrides merged in, its `tags` carry their looked-up definitions,
+ * and it knows its own address. Those are ordinary fields rather than a
+ * compartment, because a reader has no use for the authored form and no way to
+ * resolve it — there is nothing for a second view to be a view of. Every field
+ * is data: what a reader cannot compute it asks for (`resolveResource`,
+ * `reserve`), so nothing on a node can hold this module's store open.
  */
 
-import type { SourceNode, NodeAttrs, FileMeta, OriginDef } from '../shared/parser.js';
+import type { SourceNode, NodeAttrs, FileMeta, OriginDef, Tag, Reserved, Reserve } from '../shared/parser.js';
 import {
   resolveSlugInFile, resolveAddress, resolveMediaAddress, addressToSlug, addressOrigin,
   parseTranscludeEntry, RVMARK_SEGMENT,
 } from '../shared/shared.js';
 import { loadRvmarkFile, invalidateLoaderCaches } from './loader.js';
 import type { SourceFile } from './source-file.js';
-import { tagText, type Reserve } from '../shared/served.js';
+import { tagText } from '../shared/served.js';
 
 /** Where an origin's content is served from, plus one of its keys. */
 export interface Address {
   baseUrl: string;
   key:     string;
 }
+
 
 /**
  * The queries an origin answers.
@@ -77,14 +80,31 @@ export interface Origin {
    *
    * Null for a ref this origin will not serve.
    *
-   * Synchronous while the origin is in-process. It cannot stay that way once
-   * the wire is cut (Stage 3): postMessage is async, so the ~9 client call
-   * sites reading `served.media` today become awaited calls here. Labels are
-   * the exception and are resolved at serve time instead — `mdInlineWithSpans`
-   * calls its resolver mid-render and cannot await. See the design note,
-   * *Media refs, and what `Served` may carry*.
+   * Declared synchronous only because the origin is still in-process. Callers
+   * reach it through `resolveMediaOn`, which is already async, so cutting the
+   * wire moves no call site again. The builder keeps a synchronous twin
+   * (`StaticBuildContext.resolveMedia`) because the wire is not in its path.
+   *
+   * One caller cannot await and so is not served here: `mdInlineWithSpans`
+   * resolves `img:` on a span mid-render. The design note has labels resolved
+   * at serve time for exactly that reason, but spans are parsed client-side, so
+   * the origin would have to learn span syntax to do it. Unsettled — see the
+   * note, *Media refs, and what `Served` may carry*.
    */
   resolveResource(key: string, ref: string): string | null;
+
+  /**
+   * Re-resolve attrs and tags that came back CHANGED from a transform, against
+   * the document `key` names. The answer is the resolved half of a node —
+   * exactly what `node()` would have stamped, for fields the origin did not
+   * itself produce.
+   *
+   * It is a query and not a closure on the node for the reason the whole model
+   * runs on: resolving a tag means reading the document's declarations, which is
+   * the origin's reading. A closure that could do it had the document captured
+   * inside, so holding a node meant holding the store.
+   */
+  reserve(key: string, out: { attrs: NodeAttrs; tags: Tag[]; slug: string }): Promise<Reserved>;
 
   /**
    * Drop whatever this origin has cached. Nothing calls it in the browser: a
@@ -120,20 +140,24 @@ function currentBaseUrl(): string {
 
 /** The address of a node the caller already holds — carried, not derived. */
 export function addressOfNode(node: SourceNode): Address {
-  return node.served.address;
+  return node.address;
 }
 
 /**
- * A `Reserve` for the document `node` came from: the hook `deserializeNode`
- * uses to re-serve a transformed node (served.ts).
+ * Re-serve a node whose attrs and tags came back CHANGED — the output of an
+ * envoy transform, whose fields are not the ones that went in.
  *
- * It is `node.served.reserve` and nothing else — the node carries its own
- * re-serving capability because the alternative is a client-side lookup from a
- * page address back to a parsed document, which is the origin-side index the
- * whole model exists to keep out of the client's hands.
+ * A query rather than a closure the node carries. Resolving a tag means reading
+ * the document's declarations, and that reading is the origin's; what the client
+ * holds is the node's address, which is enough to ask with. The closure it
+ * replaces captured the parsed document, so holding a node meant holding the
+ * store — the thing the boundary exists to prevent.
+ *
+ * The address is bound BEFORE the round trip by the caller, so nothing that came
+ * back over the wire gets a say in which document's rules interpret it.
  */
-export function reserveFrom(node: SourceNode): Reserve {
-  return node.served.reserve;
+export function reserveAt(from: Address): Reserve {
+  return (out) => originFor(from.baseUrl).reserve(from.key, out);
 }
 
 /**
@@ -164,7 +188,30 @@ export async function resolveRefAt(from: Address, rawRef: string | null | undefi
 
 /** `resolveRefAt` for a ref written on a node the caller holds. */
 export function resolveRefOn(node: SourceNode, rawRef: string | null | undefined): Promise<SourceNode | null> {
-  return resolveRefAt(node.served.address, rawRef);
+  return resolveRefAt(node.address, rawRef);
+}
+
+/**
+ * A media/asset ref written on a node the caller holds → the URL it is served
+ * from, or null.
+ *
+ * Relative refs resolve against the document the node came FROM, so a
+ * transcluded foreign node gets its own origin's assets — the same rule
+ * markdown media and transclusion refs already follow.
+ *
+ * Async because the origin is on the far side of a wire. It is not today, and
+ * every one of these resolves in a microtask; the await is here so that when
+ * Stage 3 cuts the wire underneath, no call site moves again.
+ */
+export async function resolveMediaOn(node: SourceNode, ref: string | null | undefined): Promise<string | null> {
+  if (!ref) return null;
+  // Keyed off pageAddress, not the node's own key: a client-minted stand-in (a
+  // loading marker, an error row) has no key — nothing served it — but it does
+  // sit in its host's document, and that is what a relative ref resolves against.
+  const { baseUrl } = node.address;
+  try {
+    return originFor(baseUrl).resolveResource(node.pageAddress.slice(baseUrl.length), ref);
+  } catch { return null; }
 }
 
 // ── Sigils (origin-side: the client never learns these exist) ─────────────────
@@ -283,7 +330,7 @@ function sigilCandidates(
 
 export function nodeTextMatches(node: SourceNode, needle: string): boolean {
   if (node.label && node.label.toLowerCase().includes(needle)) return true;
-  if (node.served.tags.some(tag => tagText(tag)?.toLowerCase().includes(needle))) return true;
+  if (node.tags.some(tag => tagText(tag)?.toLowerCase().includes(needle))) return true;
   return node.bodyLines.some(line => line.toLowerCase().includes(needle));
 }
 
@@ -291,7 +338,7 @@ export function nodeTextMatches(node: SourceNode, needle: string): boolean {
 // this origin can no more follow a ref into a foreign one here than anywhere
 // else.
 function localTranscludeTarget(node: SourceNode, file: SourceFile): SourceNode | null {
-  const raw = node.served.attrs.get('transclude');
+  const raw = node.attrs.get('transclude');
   if (!raw || !raw.startsWith('#') || raw.includes(',')) return null;
   return resolveSlugInFile({ nodeMap: file.nodeMap, roots: file.roots }, raw.slice(1))?.node ?? null;
 }
@@ -393,6 +440,12 @@ class RvmarkOrigin implements Origin {
    */
   resolveResource(key: string, ref: string): string | null {
     return ref ? resolveMediaAddress(ref, this.address(key)) : null;
+  }
+
+  async reserve(key: string, out: { attrs: NodeAttrs; tags: Tag[]; slug: string }): Promise<Reserved> {
+    const file = await loadRvmarkFile(this.address(key));
+    if (!file) throw new Error(`cannot re-serve against an unknown key: ${key}`);
+    return file.resolveShape(out.attrs, out.tags, out.slug);
   }
 
   // Throws on a key this origin cannot serve at all. The one query that does:

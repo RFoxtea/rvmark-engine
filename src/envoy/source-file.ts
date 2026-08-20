@@ -5,18 +5,16 @@
  *
  * This is origin-side storage, not a client-side handle. It is the `.rvmark`
  * origin's answer to "what did I parse", and it exists only inside origin.ts's
- * implementation: nothing outside reads it. What the client gets instead is a
- * `Served` (served.ts), stamped on every node here, carrying the resolved
- * answers rather than the means to compute them.
+ * implementation: nothing outside reads it. What leaves here is a node whose
+ * fields are already resolved — the answers, not the means to compute them.
  *
  * Exports:
  *   SourceFile
  */
 
-import type { SourceNode, Tag, TagDef, Head, FileMeta, NodeAttrs } from '../shared/parser.js';
+import type { SourceNode, Tag, TagDef, Head, FileMeta, NodeAttrs, Reserved } from '../shared/parser.js';
 import { resolveMediaAddress } from '../shared/shared.js';
 import { tagsNodeAttrs, mergeNodeAttrs, resolveTagDef } from '../shared/tags.js';
-import type { Served } from '../shared/served.js';
 import { addressOrigin } from '../shared/shared.js';
 
 export type { Head, FileMeta };
@@ -42,7 +40,7 @@ export class SourceFile {
     this.address     = address;
     this.pageAddress = pageAddress;
     const stamp = (node: SourceNode) => {
-      node.served = this.serve(node);
+      this.serve(node);
       node.children.forEach(stamp);
     };
     roots.forEach(stamp);
@@ -56,23 +54,33 @@ export class SourceFile {
   }
 
   /**
-   * The resolved view of one node, computed once when the file is parsed.
+   * Resolve one node IN PLACE, against this file's head.
+   *
+   * The authored `attrs` and `tags` are overwritten rather than kept alongside
+   * the resolved ones. Nothing downstream of here has a use for the authored
+   * form: rendering wants the resolved values, and the one caller that needs
+   * what the author typed — stringify, in the build tier — works from a RawFile
+   * that never came through here.
    *
    * Eager rather than lazy: every field is wanted by the first handler that
    * touches the node, and computing them together is what makes the wire form
-   * a serialization of this object rather than a second, differently-shaped
-   * answer. `media` stays a closure — see served.ts on why it is not a map.
+   * a serialization of the node rather than a second, differently-shaped answer.
    */
-  private serve(node: SourceNode): Served {
-    return this.serveShape(node.attrs, node.tags, node.slug);
+  private serve(node: SourceNode): void {
+    // Authored on the way in, resolved on the way out — the same field, narrowed
+    // in place. `resolveFile` hands over a tree that is structurally a RawNode
+    // one; this is the step that makes the SourceNode type true of it.
+    const authoredTags = node.tags as unknown as Tag[];
+    Object.assign(node, this.resolveShape(node.attrs, authoredTags, node.slug));
   }
 
   /**
-   * Serve whatever attrs, tags and slug are handed in, against this file's head.
-   * `serve` calls it for a parsed node; `reserve` calls it again for a node an
-   * envoy transform rewrote, which is why it takes the pieces rather than a node.
+   * Resolve whatever attrs, tags and slug are handed in, against this file's
+   * head. `serve` calls it for a parsed node; `Origin.reserve` calls it again
+   * for a node an envoy transform rewrote — which is why it takes the pieces
+   * rather than a node, since a transform's output has no resolved half yet.
    */
-  private serveShape(attrs: NodeAttrs, tags: Tag[], slug: string): Served {
+  resolveShape(attrs: NodeAttrs, tags: Tag[], slug: string): Reserved {
     const baseUrl = addressOrigin(this.pageAddress);
     const local   = this.pageAddress.slice(baseUrl.length).split('#')[0];
     return {
@@ -82,9 +90,7 @@ export class SourceFile {
                      name,
                      def: resolveTagDef(name, props, this.head.tagDefs),
                    })),
-      media:       (ref: string) => this.resolveMediaUrl(ref),
       pageAddress: this.pageAddress,
-      reserve:     (out) => this.serveShape(out.attrs, out.tags, out.slug),
     };
   }
 }

@@ -192,7 +192,7 @@ export function findNodes(query: string): RenderNode[] {
     if (
       sn.slug === query ||
       sn.attrs?.get('id') === query ||
-      (sn.served?.pageAddress && sn.slug && sn.served.pageAddress + '#' + sn.slug === query)
+      (sn.pageAddress && sn.slug && sn.pageAddress + '#' + sn.slug === query)
     ) results.push(rn);
   }
   return results;

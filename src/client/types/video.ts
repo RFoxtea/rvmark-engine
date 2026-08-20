@@ -47,6 +47,7 @@ import { factoryRegister } from '../render-node.js';
 import { treeNavKeydown, actionKeydown, copyPermalink } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
 import { BaseTypeHandler } from '../base-handler.js';
+import { resolveMediaOn } from '../../envoy/origin.js';
 
 import { wireSelectThenAction } from '../interaction.js';
 
@@ -72,7 +73,7 @@ window.addEventListener('message', (e) => {
 const FILE_EXT_RE = /\.(mp4|webm|ogv|ogg|mov|m4v)(?:[?#]|$)/i;
 
 class VideoTypeHandler extends BaseTypeHandler {
-  private readonly _canonicalHref:  string | null;
+  private _canonicalHref:  string | null = null;
   private _iframe:                  HTMLIFrameElement | null = null;
   // True when _iframe is a YouTube embed wired to the IFrame Player API.
   // Odysee iframes have no player API, so their play/pause toggle is a no-op.
@@ -82,7 +83,7 @@ class VideoTypeHandler extends BaseTypeHandler {
   constructor(renderNode: RenderNode) {
     super(renderNode, 'iframe, video');
     const sourceNode = renderNode.sourceNode;
-    const attrs = sourceNode.served.attrs;
+    const attrs = sourceNode.attrs;
     const rawUrl = attrs.get('src') ?? (sourceNode.label || null);
 
     const content = this.content;
@@ -100,60 +101,64 @@ class VideoTypeHandler extends BaseTypeHandler {
     // carried by the source URL when `start` is absent.
     const clip = resolveClip(attrs, null);
 
-    // Decide between a direct video file and a YouTube embed.
-    const fileUrl = rawUrl && isFileSource(rawUrl)
-      ? safeMediaUrl(sourceNode.served.media(rawUrl))
-      : null;
+    // Decide between a direct video file and a YouTube embed. Only the file
+    // branch needs the origin — an embed URL names its own host — so the whole
+    // body waits on one resolution rather than two paths racing.
+    void (async () => {
+      const fileUrl = rawUrl && isFileSource(rawUrl)
+        ? safeMediaUrl(await resolveMediaOn(sourceNode, rawUrl) ?? '')
+        : null;
 
-    if (fileUrl) {
-      this._canonicalHref = fileUrl;
-      const wrap = document.createElement('div');
-      wrap.className = 'video-wrap';
-      const video = document.createElement('video');
-      // `#t=` is honoured natively by the browser; no seek script needed.
-      video.src = withMediaFragment(fileUrl, clip);
-      video.controls = true;
-      video.preload = 'metadata';
-      video.playsInline = true;
-      // Don't leak the visitor's Referer to third-party video hosts.
-      video.setAttribute('referrerpolicy', 'no-referrer');
-      wrap.appendChild(video);
-      content.appendChild(wrap);
-      this._video = video;
-    } else {
-      const yt = rawUrl ? ytEmbed(rawUrl, clip) : null;
-      const odysee = !yt && rawUrl ? odyseeEmbed(rawUrl, clip) : null;
-      this._canonicalHref = yt?.href ?? odysee?.href ?? null;
-      if (yt) {
+      if (fileUrl) {
+        this._canonicalHref = fileUrl;
         const wrap = document.createElement('div');
         wrap.className = 'video-wrap';
-        wrap.innerHTML = `<iframe
-          src="${yt.src}&enablejsapi=1"
-          allowfullscreen
-          loading="lazy"
-        ></iframe>`;
+        const video = document.createElement('video');
+        // `#t=` is honoured natively by the browser; no seek script needed.
+        video.src = withMediaFragment(fileUrl, clip);
+        video.controls = true;
+        video.preload = 'metadata';
+        video.playsInline = true;
+        // Don't leak the visitor's Referer to third-party video hosts.
+        video.setAttribute('referrerpolicy', 'no-referrer');
+        wrap.appendChild(video);
         content.appendChild(wrap);
+        this._video = video;
+      } else {
+        const yt = rawUrl ? ytEmbed(rawUrl, clip) : null;
+        const odysee = !yt && rawUrl ? odyseeEmbed(rawUrl, clip) : null;
+        this._canonicalHref = yt?.href ?? odysee?.href ?? null;
+        if (yt) {
+          const wrap = document.createElement('div');
+          wrap.className = 'video-wrap';
+          wrap.innerHTML = `<iframe
+            src="${yt.src}&enablejsapi=1"
+            allowfullscreen
+            loading="lazy"
+          ></iframe>`;
+          content.appendChild(wrap);
 
-        this._iframe = wrap.querySelector('iframe')!;
-        this._ytIframe = true;
-        this._iframe.addEventListener('load', () => {
-          this._iframe!.contentWindow!.postMessage(
-            JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
-            'https://www.youtube-nocookie.com'
-          );
-        });
-      } else if (odysee) {
-        const wrap = document.createElement('div');
-        wrap.className = 'video-wrap';
-        wrap.innerHTML = `<iframe
-          src="${odysee.src}"
-          allowfullscreen
-          loading="lazy"
-        ></iframe>`;
-        content.appendChild(wrap);
-        this._iframe = wrap.querySelector('iframe')!;
+          this._iframe = wrap.querySelector('iframe')!;
+          this._ytIframe = true;
+          this._iframe.addEventListener('load', () => {
+            this._iframe!.contentWindow!.postMessage(
+              JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
+              'https://www.youtube-nocookie.com'
+            );
+          });
+        } else if (odysee) {
+          const wrap = document.createElement('div');
+          wrap.className = 'video-wrap';
+          wrap.innerHTML = `<iframe
+            src="${odysee.src}"
+            allowfullscreen
+            loading="lazy"
+          ></iframe>`;
+          content.appendChild(wrap);
+          this._iframe = wrap.querySelector('iframe')!;
+        }
       }
-    }
+    })();
 
     content.addEventListener('keydown', (e) => {
       if (e.target !== content) return;
@@ -206,12 +211,12 @@ const videoFactory: NodeTypeFactory = {
   create(renderNode) {
     return new VideoTypeHandler(renderNode);
   },
-  staticRenderBody(node) {
+  staticRenderBody(node, ctx) {
     const rawUrl = node.attrs.get('src') ?? (node.label || null);
     if (!rawUrl) return null;
     const clip = resolveClip(node.attrs, null);
     if (isFileSource(rawUrl)) {
-      const url = safeMediaUrl(node.served.media(rawUrl));
+      const url = safeMediaUrl(ctx.resolveMedia(node, rawUrl));
       if (!url) return null;
       return `<video src="${esc(withMediaFragment(url, clip))}" controls preload="metadata" playsinline referrerpolicy="no-referrer"></video>`;
     }

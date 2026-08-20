@@ -57,12 +57,18 @@ export interface TypeHandler {
  *  sibling files (e.g. inline a referenced .md section) without importing
  *  Node-only APIs that would break browser builds. */
 export interface StaticBuildContext {
-  /** Read a resource by the URL an origin resolved it to (`served.media`).
+  /** Read a resource by the URL an origin resolved it to (`resolveMedia`).
    *  Returns null if not found. The builder is the Node-side half of the
    *  `.rvmark` origin, so mapping that URL back to bytes is its job, not the
    *  handler's — a handler that did its own path arithmetic would be doing
    *  origin work with a client's information. */
   readFile(url: string): string | null;
+
+  /** A media ref on `node` → the URL it is served from. The build-time twin of
+   *  `Origin.resolveResource`, and synchronous for the reason the note gives:
+   *  the builder runs in Node with the store in hand, so the wire that forces
+   *  the hydrated path to await is simply not in this one. */
+  resolveMedia(node: SourceNode, ref: string): string;
 }
 
 export interface NodeTypeFactory {
@@ -214,7 +220,7 @@ export function buildRenderNode(
   const isFocusTarget   = !!focusSlug && (node.slug === focusSlug || node.attrs.get('id') === focusSlug || permalinkBase === focusSlug);
   const isFocusAncestor = !!focusSlug && !isFocusTarget && isOrContainsPermalink(node, permalinkBase, focusSlug);
 
-  const attrs = node.served.attrs;
+  const attrs = node.attrs;
 
   const rn = new RenderNode(node, parentState);
   rn.permalinkId = permalinkBase ?? '';
@@ -327,11 +333,11 @@ export class RenderNode {
   // ancestors that are themselves mid-teardown when picking a new selection.
   _destroying: boolean = false;
 
-  private _handler:          TypeHandler | null = null;
-  private _attrs:            ResolvedAttrs;
-  private _slots:            ChildSlot[] = [];
-  private _pendingSlots:     ChildSlot[] | null = null;
-  private _pendingChildren:  Array<{
+  private _handler:           TypeHandler | null = null;
+  private _attrs:             ResolvedAttrs;
+  private _childSlots:        ChildSlot[] = [];
+  private _pendingChildSlots: ChildSlot[] | null = null;
+  private _pendingChildren:   Array<{
     args: [SourceNode[], string | null, PassEntry[] | undefined];
     settle: (p: Promise<void>) => void;
   }> = [];
@@ -369,7 +375,7 @@ export class RenderNode {
   constructor(node: SourceNode, parentState: StateNode = prerootFrame) {
     this.index      = _rnIndex++;
     this.sourceNode = node;
-    this._attrs     = node.served.attrs;
+    this._attrs     = node.attrs;
     this.li         = document.createElement('li');
     this.children   = document.createElement('div');
 
@@ -422,7 +428,7 @@ export class RenderNode {
 
   watchChildren(nodes: SourceNode[], callback: (anyVisible: boolean) => void): () => void {
     const isVisible = (c: SourceNode) => {
-      const a = c.served.attrs;
+      const a = c.attrs;
       if (a.has('draft')) return false;
       return !a.getAll('show-when').some(sw => evalShowWhen(sw, this.state));
     };
@@ -431,7 +437,7 @@ export class RenderNode {
 
     const keys = new Set<string>();
     for (const child of nodes) {
-      for (const sw of child.served.attrs.getAll('show-when'))
+      for (const sw of child.attrs.getAll('show-when'))
         for (const cond of parseShowWhen(sw)) keys.add(cond.key);
     }
     if (!keys.size) return () => {};
@@ -493,7 +499,7 @@ export class RenderNode {
   replaceHandler(sourceNode: SourceNode): void {
     this.sourceNode = sourceNode;
     this.permalinkId = sourceNode.permalinkId ?? '';
-    this._attrs = sourceNode.served.attrs;
+    this._attrs = sourceNode.attrs;
     blastocyteFactory.create(this);
   }
 
@@ -558,7 +564,7 @@ export class RenderNode {
     ul.className = 'tree';
     ul.setAttribute('role', 'group');
 
-    const hostAddress = this.sourceNode.served?.pageAddress;
+    const hostAddress = this.sourceNode.pageAddress;
     const explicitPass = passChildrenEntries !== undefined
       ? buildStatePass(this.state, passChildrenEntries)
       : null;
@@ -573,7 +579,7 @@ export class RenderNode {
       let parentState: StateNode;
       if (explicitPass) {
         parentState = explicitPass;
-      } else if (node.served?.pageAddress !== hostAddress) {
+      } else if (node.pageAddress !== hostAddress) {
         parentState = defaultBarrier!;
       } else {
         parentState = this.state;
@@ -586,29 +592,29 @@ export class RenderNode {
       slots.push(slot);
     }
 
-    // Keep _slots pointing at the current live children until mount, so the
+    // Keep _childSlots pointing at the current live children until mount, so the
     // old children stay visible while the new ones prepare (no flicker). The
-    // pending off-DOM nodes live in _pendingSlots so they can be torn down if
+    // pending off-DOM nodes live in _pendingChildSlots so they can be torn down if
     // a later setChildren supersedes us or the host is destroyed.
-    if (this._pendingSlots) this._drainSlots(this._pendingSlots);
-    this._pendingSlots = slots;
+    if (this._pendingChildSlots) this._drainChildSlots(this._pendingChildSlots);
+    this._pendingChildSlots = slots;
 
     // Spawn the initial batch (those not deferred by show-when).
     const initialRns: RenderNode[] = [];
     for (const slot of slots) {
-      const showWhenRaws = slot.node.served.attrs.getAll('show-when');
+      const showWhenRaws = slot.node.attrs.getAll('show-when');
       const rn = initSlot(slot, showWhenRaws, focusSlug);
       if (rn) { ul.appendChild(rn.li); initialRns.push(rn); }
     }
     recomputeAria(slots);
 
     const mount = () => {
-      if (this._pendingSlots !== slots) return; // superseded or host destroyed
-      this._pendingSlots = null;
+      if (this._pendingChildSlots !== slots) return; // superseded or host destroyed
+      this._pendingChildSlots = null;
       // Tear down only the currently-live children, not the pending ones we're
       // about to install (still reachable via the closure-captured `slots`).
-      const oldSlots = this._slots;
-      this._slots = slots;
+      const oldSlots = this._childSlots;
+      this._childSlots = slots;
       for (const slot of oldSlots) {
         slot.teardown?.();
         if (slot.live) { slot.live._onVacate = null; slot.live.destroy(); slot.live = null; }
@@ -632,10 +638,10 @@ export class RenderNode {
   }
 
   hasLiveChildren(): boolean {
-    return this._slots.some(s => s.live !== null);
+    return this._childSlots.some(s => s.live !== null);
   }
 
-  private _drainSlots(slots: ChildSlot[]): void {
+  private _drainChildSlots(slots: ChildSlot[]): void {
     for (const slot of slots) {
       slot.teardown?.();
       if (slot.live) {
@@ -647,9 +653,9 @@ export class RenderNode {
   }
 
   private _destroyExistingChildren(): void {
-    this._drainSlots(this._slots);
-    if (this._pendingSlots) { this._drainSlots(this._pendingSlots); this._pendingSlots = null; }
-    this._slots = [];
+    this._drainChildSlots(this._childSlots);
+    if (this._pendingChildSlots) { this._drainChildSlots(this._pendingChildSlots); this._pendingChildSlots = null; }
+    this._childSlots = [];
     this.children.innerHTML = '';
   }
 

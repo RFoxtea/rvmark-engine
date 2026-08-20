@@ -26,7 +26,7 @@
 import type { SourceNode } from '../shared/parser.js';
 import type { PortableNode } from '../shared/portable-node.js';
 import { serializeNode, deserializeNode } from '../shared/portable-node.js';
-import { reserveFrom } from '../envoy/origin.js';
+import { reserveAt } from '../envoy/origin.js';
 
 const ENVOY_PATH = '/envoy.html';
 
@@ -113,7 +113,7 @@ class OriginEnvoy {
     // The transform's output belongs to the same document its input did, so the
     // origin re-serves it against that document. Bound before the round trip:
     // nothing that came back over the wire gets a say in how it is resolved.
-    const reserve = reserveFrom(node);
+    const reserve = reserveAt(node.address);
     const id = this.nextId++;
     const wire = serializeNode(node);
 
@@ -125,7 +125,7 @@ class OriginEnvoy {
       }, TRANSFORM_TIMEOUT_MS);
 
       this.pending.set(id, {
-        resolve: (portable) => resolve(deserializeNode(portable, reserve)),
+        resolve: (portable) => { void deserializeNode(portable, reserve).then(resolve, reject); },
         reject,
         timer,
       });

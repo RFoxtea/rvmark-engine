@@ -270,7 +270,7 @@ export function setViewTarget(rn: RenderNode | null): void {
 
   // pageAddress is canonical ('/_rvmark/docs/writing.rvmark'), which is already
   // the URL the source file is served from — no mapping needed beyond origin.
-  const pageAddress = rn?.sourceNode?.served?.pageAddress
+  const pageAddress = rn?.sourceNode?.pageAddress
     ?? (window.__RVMARK_PAGE__ ? RVMARK_SEGMENT + window.__RVMARK_PAGE__.file : '');
   const fragment = rn?.permalinkId ? '#' + rn.permalinkId : '';
 
