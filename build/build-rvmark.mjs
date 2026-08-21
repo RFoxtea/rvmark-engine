@@ -944,14 +944,35 @@ for (const [relPath, sourceFile] of sourceFiles) {
   mkdirSync(ENGINE_DIR, { recursive: true });
   mkdirSync(VENDOR_DIR, { recursive: true });
 
-  // Engine-authored JS bundles → _engine/, mirroring out/'s tier directories
-  // (shared/, envoy/, client/). The tree is copied rather than flattened
-  // because the modules import each other by relative specifier: flattening
-  // would break every '../shared/x.js' the moment a file left its directory.
-  // build/ is deliberately not copied — server-side utilities, never served.
-  for (const tier of ['shared', 'envoy', 'client']) {
-    if (existsSync(enginePath('out', tier))) {
-      cpSync(enginePath('out', tier), join(ENGINE_DIR, tier), { recursive: true });
+  // Engine-authored JS → _engine/, bundled per entry point rather than copied
+  // as a tree. Two entries, because two realms load engine code independently:
+  // client/main.js (the page) and envoy/envoy-guest.js (the sandboxed iframe).
+  // Each is served as one request instead of the ~43 the module graph would
+  // otherwise fan out to — modules resolve at build time, so a reader pays one
+  // round trip rather than one per wave of the import graph.
+  //
+  // envoy-guest keeps its `registerTransform` export: the generated envoy.html
+  // imports it, and _custom-types/ stay separate unbundled modules that import
+  // from it. Bundling the engine must not swallow author files.
+  //
+  // out/ itself stays unbundled — the CLI and package.json's ./parser,
+  // ./stringify and ./builder exports import from it directly.
+  // build/ is deliberately not served: server-side utilities.
+  {
+    const esbuild = await import('esbuild');
+    for (const [entry, outfile] of [
+      ['out/client/main.js',        join(ENGINE_DIR, 'client/main.js')],
+      ['out/envoy/envoy-guest.js',  join(ENGINE_DIR, 'envoy/envoy-guest.js')],
+    ]) {
+      if (!existsSync(enginePath(entry))) continue;
+      await esbuild.build({
+        entryPoints: [enginePath(entry)],
+        outfile,
+        bundle: true,
+        format: 'esm',
+        minify: true,
+        target: 'es2022',
+      });
     }
   }
 
