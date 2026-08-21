@@ -483,7 +483,7 @@ exhibitRegister('markdown', new MarkdownExhibitStrategy());
 // ── Strategy: html ────────────────────────────────────────────────────────────
 
 class HtmlExhibitStrategy extends ExhibitStrategy {
-  async build(rawRef: string, sourceFileAddress: string, attrs?: NodeAttrs): Promise<ExhibitResult | null> {
+  async build(rawRef: string, sourceFileAddress: string): Promise<ExhibitResult | null> {
     const from = addressOf(sourceFileAddress);
     const fullPath = (await originFor(from.baseUrl).resolveResources(from.key, [rawRef]))[0] ?? rawRef;
     const displayName = fullPath.split('/').pop()!.replace(/\.html$/, '');
