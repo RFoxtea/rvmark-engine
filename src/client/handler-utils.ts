@@ -14,6 +14,7 @@
 import { addressToHref } from '../shared/shared.js';
 import { scrollRowIntoMiddle } from './scroll.js';
 import type { SourceNode } from '../shared/parser.js';
+import type { FetchedResource } from '../shared/portable-node.js';
 import { parseStateEntries } from '../shared/parser.js';
 import { Multimap } from '../shared/multimap.js';
 import { bagOf } from '../shared/inherited.js';
@@ -463,7 +464,9 @@ async function applyBulletImages(content: HTMLElement, attrs: ResolvedAttrs, sou
     // Both icons in one query: they are held together, so they are asked for
     // together — one message rather than two once the origin is behind a wire.
     const open = attrs.get('bullet-open');
-    const [url, openUrl] = await fetchMediaAllOn(sourceNode, [bullet, open]);
+    const [res, openRes] = await fetchMediaAllOn(sourceNode, [bullet, open]);
+    const url     = res     ? bulletDataUri(res)     : null;
+    const openUrl = openRes ? bulletDataUri(openRes) : null;
     if (url) {
       setBulletImage(content, '--node-bullet-image', url);
       content.classList.add('node-content--bullet-image');
@@ -484,16 +487,47 @@ async function applyBulletImages(content: HTMLElement, attrs: ResolvedAttrs, sou
   }
 }
 
+/** Bytes past this stay unpainted. A bullet is an icon: a few hundred bytes of
+ *  SVG, or a small raster. The cap is what keeps a photograph someone pointed a
+ *  {bullet} at out of a CSS custom property — it is this caller's limit, for
+ *  this caller's use, and no statement about what a resource may be. */
+const MAX_BULLET = 16_384;
+
+// A fetched resource → the `data:` URI that paints it, or null.
+//
+// The mime is the origin's own, carried through rather than chosen here: which
+// image formats work is the browser's question, and an allowlist would answer
+// it with whatever we happened to think of, leaving an author to discover from
+// a docs page that their perfectly ordinary icon is not on it. A mime that
+// names nothing renderable simply does not paint.
+//
+// That the type is attacker-influenced buys nothing HERE, and only because of
+// where this goes: the value is a mask/background-image, which renders in image
+// mode — no script, no external references, whatever the bytes are. A caller
+// that put this string somewhere that executes would be making that decision
+// itself, and would not get to blame the mime for it.
+function bulletDataUri(res: FetchedResource): string | null {
+  if (res.bytes.byteLength > MAX_BULLET) return null;
+  const b = new Uint8Array(res.bytes);
+  let bin = '';
+  // Chunked: one spread of a few hundred thousand args overflows the stack, and
+  // a cap here is this function's, not something a caller should have to know.
+  for (let i = 0; i < b.length; i += 8192) {
+    bin += String.fromCharCode(...b.subarray(i, i + 8192));
+  }
+  return `data:${res.mime};base64,${btoa(bin)}`;
+}
+
 // Paint one bullet image into a custom property.
 //
-// There is no load probe. The value is the icon itself — a data: URI the origin
-// inlined (origin.ts fetchResources) — so it cannot fail to load, and a ref
-// that did fail arrived as null and never reached here. The mask was the one
-// paint path with no load event, and the news it could not report now comes
+// There is no load probe. The value is the icon itself, built from bytes the
+// origin fetched (origin.ts fetchResources), so it cannot fail to load, and a
+// ref that did fail arrived as null and never reached here. The mask was the
+// one paint path with no load event, and the news it could not report now comes
 // back with the bytes instead of costing a second request per row to discover.
 function setBulletImage(content: HTMLElement, prop: string, url: string): void {
   // CSS url() token: escape backslashes and quotes only — the value is a
-  // resolved address, never author markup.
+  // data: URI this module built, never author markup.
   content.style.setProperty(prop, `url("${url.replace(/[\\"]/g, '\\$&')}")`);
 }
 

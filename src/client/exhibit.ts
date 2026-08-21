@@ -31,7 +31,7 @@ import { mdToHtml } from './markdown.js';
 import { getPageContext } from './page-context.js';
 
 import { addressToHref } from '../shared/shared.js';
-import { originFor, addressOf, resolveRefAt } from './origin-host.js';
+import { originFor, addressOf, resolveRefAt, fetchMediaAllAt } from './origin-host.js';
 import { parsePass } from './handler-utils.js';
 import { prerootFrame, StateRelay, buildStatePass } from './state.js';
 import { postGuestMode, broadcastPreroot, prerootDeclareMsg, prerootSetMsg, prerootDeleteMsg, wireRelay, registerThemeIframe, unregisterThemeIframe } from './iframe-host.js';
@@ -189,7 +189,22 @@ function _buildIframe(result: ExhibitResult, relay: StateRelay | null, passEntri
     try { return new URL(result.url!, window.location.href).origin === window.location.origin; }
     catch { return false; }
   })() : false);
-  if (!trusted) iframe.setAttribute('sandbox', 'allow-scripts');
+  // A url-backed frame keeps its OWN origin; a srcdoc one would be handed ours.
+  //
+  // `allow-same-origin` does not mean "same origin as this page" — it means the
+  // document is not forced into an opaque origin. With `src` at a foreign URL
+  // that origin is the peer's, never ours, so the flag grants the page its own
+  // cookies, storage and relative asset loads and grants it nothing here. That
+  // is the same trade origin-host.ts makes for an envoy, and it is what an
+  // opaque origin costs: relative subresources become cross-origin requests the
+  // peer's own server never agreed to serve.
+  //
+  // srcdoc has no origin of its own to keep, so the flag there WOULD be ours.
+  // Nothing reaches this holding a srcdoc it does not trust — markdown builds
+  // its own sanitized markup — and if anything ever does, it must not have it.
+  if (!trusted) {
+    iframe.setAttribute('sandbox', result.url ? 'allow-scripts allow-same-origin' : 'allow-scripts');
+  }
   if (result.url) {
     iframe.src = result.url;
   } else {
@@ -407,15 +422,26 @@ class MarkdownExhibitStrategy extends ExhibitStrategy {
     const fullPath = (await originFor(from.baseUrl).resolveResources(from.key, [rawRef]))[0] ?? rawRef;
     const basePath = ctx.basePath;
 
-    let text: string;
-    try {
-      const res = await fetch(fullPath, { cache: 'no-cache' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      text = await res.text();
-    } catch (_) {
-      return null;
-    }
+    // Read through the origin, not off the network. A cross-origin `fetch` from
+    // here needs CORS on the peer's server, which a static host may not even
+    // offer — but the origin's own envoy is same-origin with its files, so it
+    // can read them and hand back the bytes. Same route the bullet mask takes,
+    // and the reason a foreign markdown exhibit works at all.
+    const res = (await fetchMediaAllAt(sourceFileAddress, [rawRef]))[0];
+    if (!res) return null;
 
+    // The bytes are a document to be READ, so this is where they become text,
+    // and UTF-8 is the assumption: `.md` files are UTF-8 in practice, and a
+    // charset from the origin's own header would be the origin deciding how to
+    // decode its own file — which it is, but the label is not worth trusting
+    // for a guess this safe. Malformed sequences become U+FFFD rather than
+    // throwing; a mangled character is a better failure than a blank panel.
+    const text = new TextDecoder().decode(res.bytes);
+
+    // Sanitized here, whatever the origin is. mdToHtml runs DOMPurify over the
+    // rendered markup, and that — not the origin, not the mime — is what makes
+    // this safe to put in a srcdoc that is NOT sandboxed. Foreign markdown gets
+    // exactly the same treatment as local: the bytes were never trusted.
     const renderedHtml = mdToHtml(text);
     const displayName = fullPath.split('/').pop()!.replace(/\.md$/, '');
 
@@ -462,57 +488,20 @@ class HtmlExhibitStrategy extends ExhibitStrategy {
     const fullPath = (await originFor(from.baseUrl).resolveResources(from.key, [rawRef]))[0] ?? rawRef;
     const displayName = fullPath.split('/').pop()!.replace(/\.html$/, '');
 
-    // Same-origin (or path-only build-time) HTML: load via iframe.src so the
-    // page runs in its own origin with full access to its assets. Cross-origin
-    // HTML is fetched and wrapped in srcdoc (sandboxed by _buildIframe).
-    const isSameOrigin = !fullPath.startsWith('http') || (() => {
-      try { return new URL(fullPath).origin === window.location.origin; }
-      catch { return false; }
-    })();
-    if (isSameOrigin) {
-      return { title: displayName, url: addressToHref(fullPath) };
-    }
-
-    const ctx = getPageContext();
-    const basePath = ctx.basePath;
-
-    let text: string;
-    try {
-      const res = await fetch(fullPath, { cache: 'no-cache' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      text = await res.text();
-    } catch (_) {
-      return null;
-    }
-
-    const overflow = attrs?.get('overflow') ?? 'auto';
-
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-${exhibitHead(basePath)}
-<style>
-  html, body {
-    padding: 0;
-    margin: 0;
-    overflow: ${overflow};
-    height: ${overflow === 'hidden' ? '100%' : 'auto'};
-  }
-  body {
-    padding: 1rem;
-    font-family: var(--mono, monospace);
-    font-size: 0.88rem;
-    line-height: 1.6;
-    color: var(--fg);
-  }
-</style>
-</head>
-<body>
-${text}
-</body>
-</html>`;
-
-    return { title: displayName, html };
+    // Always a URL, whatever origin it is on. An HTML exhibit is a PAGE — its
+    // scripts, styles and assets are named relative to where it lives, and the
+    // only place they resolve is there. Fetching the markup and re-hosting it
+    // in a srcdoc, which is what this did for a foreign origin, put the document
+    // at an opaque origin where every one of those relative loads became a
+    // cross-origin request its own server had no reason to permit: the page
+    // arrived and then rendered as a shell of itself.
+    //
+    // Cross-origin is not the same as untrusted, and `src` is what says so
+    // precisely. The document runs at ITS origin, with its own cookies, storage
+    // and assets, and reaches nothing of ours — the same boundary an envoy runs
+    // behind (origin-host.ts), for the same reason. What it cannot do is
+    // anything to this page, and that was never what the srcdoc bought.
+    return { title: displayName, url: addressToHref(fullPath) };
   }
 }
 exhibitRegister('html', new HtmlExhibitStrategy());

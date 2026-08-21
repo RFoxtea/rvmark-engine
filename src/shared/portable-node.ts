@@ -113,3 +113,24 @@ export function deserializeNode(node: PortableNode, baseUrl: string): SourceNode
     ...bagFromWire(node.inherited),
   } as SourceNode;
 }
+
+// ── Fetched resources ─────────────────────────────────────────────────────────
+
+/**
+ * A resource an origin fetched on a caller's behalf, as it crosses the wire.
+ *
+ * Bytes, and the type the origin declared for them. An `ArrayBuffer` is what
+ * structured clone carries without an opinion: it interprets nothing, so a PNG
+ * and a stylesheet cross identically and neither is damaged by a decode the
+ * wire chose. `res.text()` here would have decided every resource was UTF-8
+ * text, which is lossy for everything that is not.
+ *
+ * The mime is REPORTED, never trusted — an origin can label its bytes anything.
+ * It is carried because it is the only thing that says how the bytes are meant
+ * to be read, and a caller that needs one (a `data:` URI's mime, a decode's
+ * charset) has nowhere else to get it.
+ */
+export interface FetchedResource {
+  mime:  string;
+  bytes: ArrayBuffer;
+}

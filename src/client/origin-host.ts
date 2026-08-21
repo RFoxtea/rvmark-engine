@@ -35,7 +35,7 @@
  */
 
 import type { SourceNode, FileMeta } from '../shared/parser.js';
-import type { PortableNode } from '../shared/portable-node.js';
+import type { PortableNode, FetchedResource } from '../shared/portable-node.js';
 import { deserializeNode } from '../shared/portable-node.js';
 import { Multimap } from '../shared/multimap.js';
 import { addressOrigin } from '../shared/shared.js';
@@ -109,13 +109,23 @@ const notFound = {
 // run by the time a node is on the wire; what this side gets to insist on is
 // that it can draw what it was handed.
 
-// An inlined resource, as this side will accept one. Base64's alphabet and
-// nothing else, so a value that passes cannot carry a character that would
-// escape the CSS url() token it is headed for.
-const DATA_SVG = /^data:image\/svg\+xml;base64,[A-Za-z0-9+/]*={0,2}$/;
+// A fetched resource, as this side will accept one: bytes, and the type the
+// origin declared for them.
+//
+// The mime is checked for SHAPE, not for membership of any list. It reaches a
+// `data:` URI's mime position at one caller, so what it must not contain is a
+// character that changes the meaning of that URI — a comma would end the mime
+// and start the data, a semicolon would introduce a parameter. A token of
+// type/subtype characters cannot do either, whatever it names. Which types are
+// useful is the caller's question, and the browser's; it is not answered here.
+const MIME_TOKEN = /^[A-Za-z0-9!#$%^&*_\-+.]+\/[A-Za-z0-9!#$%^&*_\-+.]+$/;
 
-function acceptInlined(v: unknown): string | null {
-  return typeof v === 'string' && DATA_SVG.test(v) ? v : null;
+function acceptFetched(v: unknown): FetchedResource | null {
+  if (typeof v !== 'object' || v === null) return null;
+  const { mime, bytes } = v as { mime?: unknown; bytes?: unknown };
+  if (!(bytes instanceof ArrayBuffer)) return null;
+  if (typeof mime !== 'string' || !MIME_TOKEN.test(mime)) return null;
+  return { mime, bytes };
 }
 
 const MAX_LABEL   = 64_000;
@@ -295,7 +305,7 @@ export interface Origin {
   resolve(key: string, refs: string[]):          Promise<Address[][]>;
   hasMatchBelow(keys: string[], q: string):      Promise<boolean[]>;
   resolveResources(key: string, refs: string[]): Promise<(string | null)[]>;
-  fetchResources(key: string, refs: string[]):   Promise<(string | null)[]>;
+  fetchResources(key: string, refs: string[]):   Promise<(FetchedResource | null)[]>;
   meta(key: string):                             Promise<FileMeta>;
 }
 
@@ -348,20 +358,28 @@ class RemoteOrigin implements Origin {
     return this.ask<(string | null)[]>('resolveResources', [key, refs]);
   }
 
-  // Checked at the wire, like every other thing an envoy says. What comes back
-  // is bound for a CSS url() token, and the charset allowlist is what makes
-  // that interpolation safe whatever the escaping at the call site does: no
-  // quote, backslash or paren survives it, so the token cannot be broken out
-  // of. Anything else is a null — the caller already draws a fallback for that.
+  // Checked at the wire, like every other thing an envoy says. Bytes are bytes:
+  // an ArrayBuffer carries whatever it carries and interprets nothing, so there
+  // is no reading of it for this check to get wrong. The mime is checked for
+  // shape (see MIME_TOKEN) because it lands in a position where punctuation
+  // would mean something. Anything else is a null — the caller already draws a
+  // fallback for that.
   //
-  // Script in the payload is not the risk it looks like: SVG referenced as an
-  // image resource (mask, background-image, <img>) renders in a mode where
-  // script does not run and external references are blocked. That is a
-  // rendering rule, not something checked here.
-  async fetchResources(key: string, refs: string[]): Promise<(string | null)[]> {
-    const wire = await this.ask<(string | null)[]>('fetchResources', [key, refs]);
+  // What the bytes ARE is not decided here, and must not be: this side cannot
+  // know what a caller intends to do with a resource, and a check that guessed
+  // would be a policy about which resources an author may use, written where no
+  // author would think to look for one.
+  //
+  // Script in the payload is not the risk it looks like — but it is only not a
+  // risk because of WHERE the bytes go. SVG referenced as an image resource
+  // (mask, background-image, <img>) renders in a mode where script does not run
+  // and external references are blocked. That safety belongs to the caller that
+  // puts the bytes in an image position and holds only for as long as it does;
+  // it is a rendering rule, not something checked here.
+  async fetchResources(key: string, refs: string[]): Promise<(FetchedResource | null)[]> {
+    const wire = await this.ask<unknown[]>('fetchResources', [key, refs]);
     if (!Array.isArray(wire)) throw new Error('fetchResources did not answer with a list');
-    return refs.map((_, i) => acceptInlined(wire[i]));
+    return refs.map((_, i) => acceptFetched(wire[i]));
   }
 
   async meta(key: string): Promise<FileMeta> {
@@ -459,18 +477,35 @@ export async function resolveMediaAllOn(
 }
 
 /**
- * `resolveMediaAllOn` for a caller that must paint without watching the load —
- * the bullet mask. What comes back is the resource itself as a `data:` URI, so
- * a null is the ref failing rather than news that arrives too late to act on.
+ * `resolveMediaAllOn` for a caller that needs the bytes rather than a URL —
+ * because it must paint without watching the load (the bullet mask), or because
+ * the URL is a foreign origin's and only that origin can read it without CORS.
+ * A null is the ref failing, known before anything is built from it.
  */
 export async function fetchMediaAllOn(
   node: SourceNode,
   refs: (string | null | undefined)[],
-): Promise<(string | null)[]> {
+): Promise<(FetchedResource | null)[]> {
   const { baseUrl } = node.address;
   try {
     return await originFor(baseUrl)
       .fetchResources(node.pageAddress.slice(baseUrl.length), refs.map(r => r || ''));
+  } catch { return refs.map(() => null); }
+}
+
+/**
+ * `fetchMediaAllOn` for a caller holding an address rather than a node — an
+ * exhibit strategy, which is handed the file its ref was written in and never
+ * the node that wrote it. Same query, same reason to use it: the origin can
+ * read its own files without CORS and nothing here can.
+ */
+export async function fetchMediaAllAt(
+  sourceFileAddress: string,
+  refs: (string | null | undefined)[],
+): Promise<(FetchedResource | null)[]> {
+  const { baseUrl, key } = addressOf(sourceFileAddress);
+  try {
+    return await originFor(baseUrl).fetchResources(key, refs.map(r => r || ''));
   } catch { return refs.map(() => null); }
 }
 

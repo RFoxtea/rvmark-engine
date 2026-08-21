@@ -43,6 +43,7 @@ import { loadRvmarkFile, invalidateLoaderCaches } from './loader.js';
 import type { SourceFile } from './source-file.js';
 import { nodeTextMatches } from '../shared/served.js';
 import { Multimap } from '../shared/multimap.js';
+import type { FetchedResource } from '../shared/portable-node.js';
 
 /** The resolved half of a transformed node, in the form the wire carries. */
 export interface WireReserved {
@@ -104,30 +105,41 @@ export interface Origin {
   resolveResources(key: string, refs: string[]): (string | null)[];
 
   /**
-   * A media ref → the resource itself, as a `data:` URI, or null.
+   * A resource ref → the resource itself, or null.
    *
    * Distinct from `resolveResources` because the two answer different
    * questions. That one says WHERE a resource is served from, and a URL is what
-   * its callers need — exhibit fetches one and puts another in an iframe's src.
-   * This one carries the BYTES, for a caller that must paint a resource it
-   * cannot watch load.
-   *
-   * A CSS mask is that caller. It is the one paint path with no load event: a
-   * dead URL leaves an empty box and fires nothing, so the only way to learn a
-   * mask failed used to be to fetch the same URL a second time as an Image and
-   * watch THAT. Two requests per painted icon, and the second one bought
-   * nothing but the news. Inlined bytes cannot fail to load, so the news
-   * arrives with them — null here IS the failure, known before anything paints.
+   * its callers need — exhibit puts one in an iframe's src. This one carries
+   * the BYTES, for a caller that cannot use a URL: because it must paint
+   * something it cannot watch load, or because the URL is cross-origin and a
+   * `fetch` of it would need CORS the peer has no reason to have configured.
    *
    * The fetch is the origin's own, same-origin inside its envoy, so a peer
-   * needs no CORS cooperation to have its icons painted — the same property
-   * that lets an envoy read its own `.rvmark` files.
+   * needs no CORS cooperation for its resources to be read — the same property
+   * that lets an envoy read its own `.rvmark` files. That is the whole point of
+   * the query: it is how anything on this side reads a foreign origin's bytes.
    *
-   * Small SVG only. Everything else is a URL and can find out for itself: a
-   * photo on the wire would be carried by structured clone, badly, and nothing
-   * else paints through a mask.
+   * A CSS mask is one such caller. It is the one paint path with no load event:
+   * a dead URL leaves an empty box and fires nothing, so the only way to learn
+   * a mask failed used to be to fetch the same URL a second time as an Image
+   * and watch THAT. Two requests per painted icon, and the second one bought
+   * nothing but the news. Bytes in hand cannot fail to load, so the news
+   * arrives with them — null here IS the failure, known before anything paints.
+   *
+   * What comes back is bytes and the origin's declared type, and no more than
+   * that. It is `fetchResources`, not "fetch the one format some caller of the
+   * day happens to paint": the query does not know what its answer is for, and
+   * an origin's resource is not less of a resource for being a PNG. Nothing is
+   * refused for its type and nothing is capped for its size — a limit belongs
+   * to the caller that has a reason for one, which is the caller that knows
+   * what it is about to do with the bytes.
+   *
+   * The type is REPORTED, never trusted. An origin can label its bytes
+   * anything, so nothing on this side may let the label decide anything that
+   * matters. What it is good for is the thing only the origin can say: how the
+   * bytes are meant to be read — a `data:` URI's mime, a text decode's charset.
    */
-  fetchResources(key: string, refs: string[]): Promise<(string | null)[]>;
+  fetchResources(key: string, refs: string[]): Promise<(FetchedResource | null)[]>;
 
   /**
    * Re-resolve attrs and tags that came back CHANGED from a nodetype transform,
@@ -298,40 +310,34 @@ function localTranscludeTarget(node: SourceNode, file: SourceFile): SourceNode |
   return resolveSlugInFile({ nodeMap: file.nodeMap, roots: file.roots }, raw.slice(1))?.node ?? null;
 }
 
-// ── Inlined resources ─────────────────────────────────────────────────────────
+// ── Fetched resources ─────────────────────────────────────────────────────────
 
-/** Bytes past this stay a URL. An icon is a few hundred bytes; the cap is what
- *  keeps a photo that happens to be an SVG off the wire. */
-const MAX_INLINE = 16_384;
-
-/** url → its data: URI, or null if it is not a small SVG that loads.
+/** url → its bytes, or null if it did not load.
  *
  *  Keyed on URL, not on the ref or the node that asked: one icon decorates many
  *  nodes, and the answer is a fact about the file. Memoized as the PROMISE, so
  *  a whole subtree's worth of rows asking at once share one fetch rather than
  *  racing to start several. Never evicted — bounded by an origin's distinct
- *  icon set, and an eviction would only buy a re-fetch. */
-const _inlined = new Map<string, Promise<string | null>>();
+ *  resource set, and an eviction would only buy a re-fetch. */
+const _fetched = new Map<string, Promise<FetchedResource | null>>();
 
-function inlineSvg(url: string): Promise<string | null> {
-  let p = _inlined.get(url);
+// What comes back is the resource, whatever it is. No type is preferred and
+// none is refused: this answers `fetchResources`, and the caller that asked
+// knows what it wants to do with an answer. A cap here would be this side
+// inventing a limit for a use it cannot see.
+function fetchResource(url: string): Promise<FetchedResource | null> {
+  let p = _fetched.get(url);
   if (!p) {
     p = (async () => {
       try {
         const res = await fetch(url);
         // Not-ok IS the answer, not an error: the caller paints a fallback.
         if (!res.ok) return null;
-        // Declared type, not the ref's extension — a server that serves an SVG
-        // as something else is not one whose bytes belong in a mask.
-        if (!(res.headers.get('content-type') ?? '').startsWith('image/svg+xml')) return null;
-        const svg = await res.text();
-        if (svg.length > MAX_INLINE) return null;
-        // btoa is Latin-1; the encodeURIComponent/unescape pair widens UTF-8
-        // into bytes it will accept, so a non-ASCII SVG survives.
-        return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+        const mime = (res.headers.get('content-type') ?? '').split(';')[0].trim();
+        return { mime, bytes: await res.arrayBuffer() };
       } catch { return null; }
     })();
-    _inlined.set(url, p);
+    _fetched.set(url, p);
   }
   return p;
 }
@@ -436,11 +442,11 @@ class RvmarkOrigin implements Origin {
     return refs.map(ref => (ref ? resolveMediaAddress(ref, address) : null));
   }
 
-  fetchResources(key: string, refs: string[]): Promise<(string | null)[]> {
+  fetchResources(key: string, refs: string[]): Promise<(FetchedResource | null)[]> {
     const address = this.address(key);
     return Promise.all(refs.map(ref => {
       const url = ref ? resolveMediaAddress(ref, address) : null;
-      return url ? inlineSvg(url) : null;
+      return url ? fetchResource(url) : null;
     }));
   }
 
