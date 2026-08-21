@@ -93,14 +93,20 @@ await import('../out/client/types/gap.js');
 // only types from 'rvmark/envoy' (erased by transpile). We transpile (strip
 // types) rather than typecheck — fast, and isolatedModules-safe.
 async function emitEnvoy(customTypesDir, DIST_DIR) {
-  const ts = (await import(pathToFileURL(requireFromEngine.resolve('typescript')).href)).default;
-
-  const outDir = join(DIST_DIR, '_custom-types');
-  mkdirSync(outDir, { recursive: true });
-
-  const srcFiles = readdirSync(customTypesDir).filter(f => f.endsWith('.ts'));
+  const srcFiles = (customTypesDir && existsSync(customTypesDir))
+    ? readdirSync(customTypesDir).filter(f => f.endsWith('.ts'))
+    : [];
   const modules = []; // emitted module basenames (e.g. 'mytype.js')
 
+  // Only minted when there is something to put in it: a site with no custom
+  // types still gets an envoy, but not an empty directory beside it.
+  if (srcFiles.length) mkdirSync(join(DIST_DIR, '_custom-types'), { recursive: true });
+
+  const ts = srcFiles.length
+    ? (await import(pathToFileURL(requireFromEngine.resolve('typescript')).href)).default
+    : null;
+
+  const outDir = join(DIST_DIR, '_custom-types');
   for (const f of srcFiles) {
     const src = readFileSync(join(customTypesDir, f), 'utf8');
     const { outputText } = ts.transpileModule(src, {
@@ -119,19 +125,24 @@ async function emitEnvoy(customTypesDir, DIST_DIR) {
   // Generated entry glue: import envoy-guest's registerTransform + every author
   // descriptor (default export), then register each. registerTransform is our
   // concern, not the author's — authors only declare a descriptor.
-  const imports = modules
-    .map((m, i) => `import d${i} from './_custom-types/${m}';`)
-    .join('\n    ');
-  const regs = modules.map((_, i) => `registerTransform(d${i});`).join('\n    ');
+  //
+  // With no descriptors the import is still there, as a bare side-effecting one:
+  // importing envoy-guest is what installs the message listener, and that is the
+  // envoy. A site with no custom types needs it exactly as much as one with them.
+  const lines = modules.length
+    ? [
+        `import { registerTransform } from './_engine/envoy/envoy-guest.js';`,
+        ...modules.map((m, i) => `import d${i} from './_custom-types/${m}';`),
+        ...modules.map((_, i) => `registerTransform(d${i});`),
+      ]
+    : [`import './_engine/envoy/envoy-guest.js';`];
 
   const html = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>rvmark envoy</title></head>
 <body>
   <script type="module">
-    import { registerTransform } from './_engine/envoy/envoy-guest.js';
-    ${imports}
-    ${regs}
+    ${lines.join('\n    ')}
   </script>
 </body>
 </html>
@@ -1015,14 +1026,16 @@ for (const [relPath, sourceFile] of sourceFiles) {
   // User assets dir (e.g. ./assets) → dist/_assets/ (contents copied in).
   if (assetsDir && existsSync(assetsDir)) cpSync(assetsDir, join(DIST_DIR, '_assets'), { recursive: true });
 
-  // Custom node types → _custom-types/ + generated envoy.html (dist root).
+  // Generated envoy.html (dist root), plus any custom node types → _custom-types/.
   // Author files default-export a CustomType descriptor (see envoy-guest.ts);
   // each is transpiled (types-only imports erase) into _custom-types/, and the
   // generated envoy.html imports envoy-guest.js + every descriptor and registers
   // them. envoy.html loads into the sandboxed per-origin OriginEnvoy iframe.
-  if (customTypesDir && existsSync(customTypesDir)) {
-    await emitEnvoy(customTypesDir, DIST_DIR);
-  }
+  //
+  // Unconditional: the envoy is the only route to content, so a site without one
+  // renders nothing at all. It is site infrastructure that happens to be where
+  // custom types get registered, not an artifact of having declared any.
+  await emitEnvoy(customTypesDir, DIST_DIR);
 
   // Copy rvmark source files, stripping draft nodes and skipping draft files.
   // Iterate allRvmarkFiles (not the shadow-filtered rvmarkFiles) so the dist
