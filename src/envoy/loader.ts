@@ -7,6 +7,9 @@
  * .rvmark file is the URL its raw source is fetched from — same-origin local
  * files use location.origin; remote files use their declared origin.
  *
+ * A file's source normally comes over HTTP. It can instead be handed to this
+ * origin for the tab's lifetime — see SESSION_SOURCE_PREFIX below.
+ *
  * Exports:
  *   invalidateLoaderCaches(baseUrl)  — drop everything cached for one origin
  *   loadRvmarkFile(address)         — resolve a canonical address → SourceFile | null
@@ -19,15 +22,52 @@ import { SourceFile } from './source-file.js';
 import { addressToFile, addressOrigin, RVMARK_SEGMENT } from '../shared/shared.js';
 
 // ── Source acquisition ────────────────────────────────────────────────────────
-// getRvmarkSource is the abstraction step 7 (adapters) extends: today the only
-// implementation is plain fetch + text. An adapter-backed implementation will
-// post to a Web Worker and return the synthesized rvmark source.
+// getRvmarkSource is the abstraction step 7 (adapters) extends: today there are
+// two implementations — the session override below, and plain fetch + text. An
+// adapter-backed implementation will post to a Web Worker and return the
+// synthesized rvmark source.
 
 interface RvmarkSourceResult {
   source: string;
 }
 
+// Session override: source handed to this origin by whoever opened it, rather
+// than served over HTTP. A host page (the playground) writes the text under
+// this prefix and loads the site; the envoy finds it here instead of fetching.
+//
+// It is read here, on the origin's own side, and not carried in on the wire.
+// The client asks for a node and gets one; nothing in the protocol says where
+// the bytes came from, which is the point — an origin's storage layout is its
+// own affair, and "the buffer in this tab" is a storage layout.
+//
+// sessionStorage rather than a message because the frame is the engine's to
+// create, not the host page's to hold: there is no handle to post to before the
+// first query, and threading one out through the client would put a host
+// concern in the protocol. Per-tab by construction, which is what a scratch
+// buffer wants.
+const SESSION_SOURCE_PREFIX = 'rvmark:source:';
+
+function sessionSource(file: string): string | null {
+  try {
+    return sessionStorage.getItem(SESSION_SOURCE_PREFIX + file);
+  } catch (_) {
+    // Storage can throw outright (disabled, partitioned, quota). An origin with
+    // no session override is the ordinary case, not an error.
+    return null;
+  }
+}
+
 async function getRvmarkSource(address: string): Promise<RvmarkSourceResult> {
+  // Same-origin only: an override names a file, and a file only means something
+  // relative to an origin. A foreign address is served by ITS envoy, reading ITS
+  // own session — not by this one reaching across.
+  if (addressOrigin(address) === location.origin) {
+    const file = addressToFile(address);
+    const overridden = file === null ? null : sessionSource(file);
+    // Empty source is a legitimate document, so test for null, not falsiness.
+    if (overridden !== null) return { source: overridden };
+  }
+
   // address is the canonical full URL of the .rvmark file to fetch.
   const url = addressToFetchUrl(address);
   const res = await fetch(url, { cache: 'no-cache' });

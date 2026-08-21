@@ -23,14 +23,15 @@
  * nodes; it sees an envoy that has authority over some keys, and asks.
  *
  * Security boundary (load-bearing):
- *   - sandbox="allow-scripts" WITHOUT allow-same-origin → the iframe runs at an
- *     opaque origin: author `fetch` is anonymous / CORS-bound and carries none of
- *     our cookies/storage; author code cannot touch our DOM, storage, or origin.
  *   - `src` is ALWAYS the real author-origin URL — never a Blob/srcdoc on our
- *     origin (that would hand author code OUR origin and defeat the boundary).
- *   - a reply is matched by `e.source`, never by `e.origin`: an opaque sandbox
- *     reports its origin as "null". The envoy a reply came through is what
- *     stamps a node's `baseUrl` — never a value read out of the payload.
+ *     origin. This is what keeps author code off OUR origin, and it is the whole
+ *     of what does: the sandbox flags below do not defend it.
+ *   - a reply is matched by `e.source`, never by `e.origin`. The envoy a reply
+ *     came through is what stamps a node's `baseUrl` — never a value read out of
+ *     the payload.
+ *   - what arrives is data, and every node is checked (see `check`) whatever
+ *     origin it came from. That check, not the sandbox, is why a hostile envoy
+ *     cannot hand us something we will mis-render.
  */
 
 import type { SourceNode, FileMeta } from '../shared/parser.js';
@@ -97,9 +98,10 @@ const notFound = {
 // ── The wire boundary ─────────────────────────────────────────────────────────
 //
 // Every node from every origin is checked, not just the interesting ones. An
-// envoy is untrusted by construction — the sandbox is what makes it safe to run,
-// not evidence that what it says is well-formed — and that is owed to a node
-// because of where it came from, not because of what kind of node it is.
+// envoy is untrusted by construction — it runs at its own origin, under its own
+// author's control, and nothing about that makes what it says well-formed — and
+// that is owed to a node because of where it came from, not because of what kind
+// of node it is.
 //
 // The type check runs the direction that is actually the client's business:
 // "`type` must be something I can render". It is not a rule about custom types.
@@ -178,19 +180,23 @@ class OriginEnvoy {
     iframe.setAttribute('aria-hidden', 'true');
     iframe.style.display = 'none';
 
-    // Sandbox policy keyed off the RESOLVED origin (never wire data):
-    //   - FOREIGN origin (federation): allow-scripts ONLY → opaque origin. The
-    //     author is untrusted; the opaque sandbox is the security boundary. Its
-    //     subresources (envoy.html's scripts) are then cross-origin and the
-    //     foreign server must serve them with CORS (its responsibility, on its
-    //     own origin).
-    //   - SAME origin (this site's own content): the "author" IS the site owner,
-    //     who can already run anything on this origin — there is no trust
-    //     boundary to defend. Add allow-same-origin so the envoy can same-origin
-    //     `import` its scripts without CORS. Matches the same-origin branch in
-    //     types/iframe.ts. NEVER granted to a foreign origin.
-    const isSameOrigin = baseUrl === window.location.origin;
-    iframe.setAttribute('sandbox', isSameOrigin ? 'allow-scripts allow-same-origin' : 'allow-scripts');
+    // An envoy runs at its OWN origin, foreign or not. `src` is the real
+    // author-origin URL, so allow-same-origin grants the guest that origin and
+    // never ours — the boundary that matters is the one `src` draws.
+    //
+    // What it buys: envoy.html imports its scripts by relative specifier. At an
+    // opaque origin those are cross-origin subresource loads, so a federated
+    // peer could only be an origin if its host let it set CORS headers — which
+    // rules out the plain static hosts (Neocities and kin) that federation is
+    // most worth having. Same-origin loads need no such cooperation.
+    //
+    // What it costs: a foreign envoy runs with its own site's ambient
+    // authority — its cookies and storage, and a credentialed `fetch`. That is
+    // the peer's own authority over the peer's own data, exercised by the
+    // peer's own code. It is not a capability against us: author code still
+    // cannot reach our DOM, our storage, or our origin, and everything it says
+    // still crosses as data through `check`.
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
     iframe.src = baseUrl + ENVOY_PATH;
 
     iframe.addEventListener('load', () => {
@@ -205,8 +211,9 @@ class OriginEnvoy {
   }
 
   private onMessage = (e: MessageEvent): void => {
-    // Opaque-origin sandbox reports e.origin === "null", so we filter by source
-    // (same pattern as iframe.ts / iframe-host.ts) rather than by origin.
+    // Filter by source, not origin (same pattern as iframe.ts / iframe-host.ts):
+    // identity here is "the frame we created and pointed at this baseUrl", which
+    // is a thing we hold, not a string a sender supplies.
     if (e.source !== this.iframe.contentWindow) return;
     const d = e.data;
     if (!d) return;

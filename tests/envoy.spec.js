@@ -133,9 +133,10 @@ test.describe('custom node types via OriginEnvoy', () => {
 
     // Exactly one envoy iframe, shared by both echo nodes.
     expect(frames).toHaveLength(1);
-    // Test server is same-origin, so the envoy gets allow-same-origin (no CORS
-    // needed for its script imports). A FOREIGN origin would get allow-scripts
-    // only — see federation coverage (deferred).
+    // Every envoy gets allow-same-origin, foreign ones included: it grants the
+    // guest its OWN origin (src is always the real author-origin URL), and
+    // without it a peer's relative script imports would need CORS headers its
+    // static host may not offer.
     expect(frames[0].sandbox).toBe('allow-scripts allow-same-origin');
     expect(frames[0].hidden).toBe(true);
     expect(frames[0].src).toMatch(/\/envoy\.html$/);
