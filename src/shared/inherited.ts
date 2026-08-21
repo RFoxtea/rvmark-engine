@@ -214,7 +214,7 @@ registerInherited<Record<string, unknown>>({
  * A nested declaration overrides for its own subtree — nearest wins, like meta.
  *
  * Carried as the raw ref plus the declaring node's attrs (the panel reads
- * `exhibit-pass` and `overflow` off them). The ref stays raw: inheritance never
+ * `exhibit-pass` off them). The ref stays raw: inheritance never
  * crosses a file, so every node holding a scope is in the file that declared it,
  * and the reader resolves the ref against its own `sourceFile`.
  */

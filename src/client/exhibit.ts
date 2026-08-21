@@ -13,7 +13,7 @@
  * Strategies determine how the iframe content is built:
  *   - rvmark: a full rvmark page with its own parser/renderer/tree
  *   - markdown: a styled rendered .md file
- *   - html: a raw HTML file, overflow controlled by {overflow: …} param
+ *   - html: an HTML file, loaded at its own origin
  *
  * Nodes with {action: exhibit} open the exhibit on select-then-reclick; that
  * wiring is done by the type handlers via wireSelectThenAction, which calls
