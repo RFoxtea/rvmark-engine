@@ -20,7 +20,7 @@ import { bagOf } from '../shared/inherited.js';
 import type { ResolvedAttrs } from '../shared/served.js';
 import { RenderNode } from './render-node.js';
 import { resolveEffectiveChildren, resolveTransclusionConfig } from './transclusion.js';
-import { resolveRefOn, resolveMediaOn, resolveMediaAllOn, childrenOf } from './origin-host.js';
+import { resolveRefOn, resolveMediaOn, resolveMediaAllOn, fetchMediaAllOn, childrenOf } from './origin-host.js';
 import { parseTranscludeEntry } from '../shared/shared.js';
 import { TRANSCLUDE_DEADLINE_MS } from './constants.js';
 import type { PassEntry, PassMode, StateNode } from './state.js';
@@ -463,12 +463,9 @@ async function applyBulletImages(content: HTMLElement, attrs: ResolvedAttrs, sou
     // Both icons in one query: they are held together, so they are asked for
     // together — one message rather than two once the origin is behind a wire.
     const open = attrs.get('bullet-open');
-    const [url, openUrl] = await resolveMediaAllOn(sourceNode, [bullet, open]);
+    const [url, openUrl] = await fetchMediaAllOn(sourceNode, [bullet, open]);
     if (url) {
-      setBulletImage(content, '--node-bullet-image', url, () => {
-        content.classList.remove('node-content--bullet-image');
-        content.style.removeProperty('--node-bullet-image');
-      });
+      setBulletImage(content, '--node-bullet-image', url);
       content.classList.add('node-content--bullet-image');
     }
 
@@ -477,31 +474,27 @@ async function applyBulletImages(content: HTMLElement, attrs: ResolvedAttrs, sou
     // would. Only meaningful alongside a `bullet`: the default triangle already
     // shows its own state by rotating.
     if (open !== undefined) {
+      // A dead bullet-open leaves the closed icon in place: the bullet the
+      // author chose survives, and only the state cue is lost.
       if (openUrl) {
-        // Falling back to the closed icon (rather than the default marker) on a
-        // dead URL keeps the bullet the author chose; only the state cue is lost.
-        setBulletImage(content, '--node-bullet-image-open', openUrl, () => {
-          content.classList.remove('node-content--bullet-open');
-          content.style.removeProperty('--node-bullet-image-open');
-        });
+        setBulletImage(content, '--node-bullet-image-open', openUrl);
         content.classList.add('node-content--bullet-open');
       }
     }
   }
 }
 
-// Resolve one bullet image into a custom property, with a load probe that
-// reverts it if the URL never arrives. A masked box paints nothing when the
-// icon 404s or the origin is offline — a silently empty gutter — and the probe
-// hits the same URL the mask does, so it is served from cache rather than
-// fetched twice.
-function setBulletImage(content: HTMLElement, prop: string, url: string, onFail: () => void): void {
+// Paint one bullet image into a custom property.
+//
+// There is no load probe. The value is the icon itself — a data: URI the origin
+// inlined (origin.ts fetchResources) — so it cannot fail to load, and a ref
+// that did fail arrived as null and never reached here. The mask was the one
+// paint path with no load event, and the news it could not report now comes
+// back with the bytes instead of costing a second request per row to discover.
+function setBulletImage(content: HTMLElement, prop: string, url: string): void {
   // CSS url() token: escape backslashes and quotes only — the value is a
   // resolved address, never author markup.
   content.style.setProperty(prop, `url("${url.replace(/[\\"]/g, '\\$&')}")`);
-  const probe = new Image();
-  probe.onerror = onFail;
-  probe.src = url;
 }
 
 // Apply ordered-list-item marking. Separate from applyBulletProps because only

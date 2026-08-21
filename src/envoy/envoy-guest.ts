@@ -160,6 +160,10 @@ const QUERIES: Record<string, (args: any) => Promise<unknown>> = {
     return originFor(base()).resolveResources(key, refs);
   },
 
+  async fetchResources([key, refs]: [string, string[]]) {
+    return originFor(base()).fetchResources(key, refs);
+  },
+
   async meta([key]: [string]) {
     return [...(await originFor(base()).meta(key)).allEntries()];
   },

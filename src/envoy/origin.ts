@@ -104,6 +104,32 @@ export interface Origin {
   resolveResources(key: string, refs: string[]): (string | null)[];
 
   /**
+   * A media ref → the resource itself, as a `data:` URI, or null.
+   *
+   * Distinct from `resolveResources` because the two answer different
+   * questions. That one says WHERE a resource is served from, and a URL is what
+   * its callers need — exhibit fetches one and puts another in an iframe's src.
+   * This one carries the BYTES, for a caller that must paint a resource it
+   * cannot watch load.
+   *
+   * A CSS mask is that caller. It is the one paint path with no load event: a
+   * dead URL leaves an empty box and fires nothing, so the only way to learn a
+   * mask failed used to be to fetch the same URL a second time as an Image and
+   * watch THAT. Two requests per painted icon, and the second one bought
+   * nothing but the news. Inlined bytes cannot fail to load, so the news
+   * arrives with them — null here IS the failure, known before anything paints.
+   *
+   * The fetch is the origin's own, same-origin inside its envoy, so a peer
+   * needs no CORS cooperation to have its icons painted — the same property
+   * that lets an envoy read its own `.rvmark` files.
+   *
+   * Small SVG only. Everything else is a URL and can find out for itself: a
+   * photo on the wire would be carried by structured clone, badly, and nothing
+   * else paints through a mask.
+   */
+  fetchResources(key: string, refs: string[]): Promise<(string | null)[]>;
+
+  /**
    * Re-resolve attrs and tags that came back CHANGED from a nodetype transform,
    * against the document `key` names. The answer is the resolved half of a node,
    * in wire form — exactly what `node()` would have stamped, for fields the
@@ -272,6 +298,44 @@ function localTranscludeTarget(node: SourceNode, file: SourceFile): SourceNode |
   return resolveSlugInFile({ nodeMap: file.nodeMap, roots: file.roots }, raw.slice(1))?.node ?? null;
 }
 
+// ── Inlined resources ─────────────────────────────────────────────────────────
+
+/** Bytes past this stay a URL. An icon is a few hundred bytes; the cap is what
+ *  keeps a photo that happens to be an SVG off the wire. */
+const MAX_INLINE = 16_384;
+
+/** url → its data: URI, or null if it is not a small SVG that loads.
+ *
+ *  Keyed on URL, not on the ref or the node that asked: one icon decorates many
+ *  nodes, and the answer is a fact about the file. Memoized as the PROMISE, so
+ *  a whole subtree's worth of rows asking at once share one fetch rather than
+ *  racing to start several. Never evicted — bounded by an origin's distinct
+ *  icon set, and an eviction would only buy a re-fetch. */
+const _inlined = new Map<string, Promise<string | null>>();
+
+function inlineSvg(url: string): Promise<string | null> {
+  let p = _inlined.get(url);
+  if (!p) {
+    p = (async () => {
+      try {
+        const res = await fetch(url);
+        // Not-ok IS the answer, not an error: the caller paints a fallback.
+        if (!res.ok) return null;
+        // Declared type, not the ref's extension — a server that serves an SVG
+        // as something else is not one whose bytes belong in a mask.
+        if (!(res.headers.get('content-type') ?? '').startsWith('image/svg+xml')) return null;
+        const svg = await res.text();
+        if (svg.length > MAX_INLINE) return null;
+        // btoa is Latin-1; the encodeURIComponent/unescape pair widens UTF-8
+        // into bytes it will accept, so a non-ASCII SVG survives.
+        return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+      } catch { return null; }
+    })();
+    _inlined.set(url, p);
+  }
+  return p;
+}
+
 // ── The .rvmark origin ────────────────────────────────────────────────────────
 
 class RvmarkOrigin implements Origin {
@@ -370,6 +434,14 @@ class RvmarkOrigin implements Origin {
   resolveResources(key: string, refs: string[]): (string | null)[] {
     const address = this.address(key);
     return refs.map(ref => (ref ? resolveMediaAddress(ref, address) : null));
+  }
+
+  fetchResources(key: string, refs: string[]): Promise<(string | null)[]> {
+    const address = this.address(key);
+    return Promise.all(refs.map(ref => {
+      const url = ref ? resolveMediaAddress(ref, address) : null;
+      return url ? inlineSvg(url) : null;
+    }));
   }
 
   async reserveWire(

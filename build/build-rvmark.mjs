@@ -534,9 +534,12 @@ const ALWAYS_OPEN_TYPES = new Set(['block']);
 // — and costs nothing on a served site, where icon sets are small and already
 // inlined once per page rather than requested per node.
 //
-// Only the static rendering does this. The hydrated path keeps real URLs: it
-// runs from http(s), where the fetch is cached across every node that shares an
-// icon, and applyBulletProps still has its load-failure fallback.
+// The hydrated path inlines too, but arrives there differently: its icons are
+// fetched by the origin that owns them (origin.ts fetchResources) rather than
+// read off disk here, since a federated node's bullet lives on its own origin
+// and this build never sees it. What both paths buy is the same — a mask that
+// cannot fail to load, so neither needs a second request per row to find out
+// whether the first one did.
 const bulletDataUriCache = new Map();
 function inlineBulletUrls(styles, RVMARK_DIR) {
   return styles.map(decl => decl.replace(/url\("([^"]+)"\)/g, (whole, url) => {

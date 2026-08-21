@@ -109,6 +109,15 @@ const notFound = {
 // run by the time a node is on the wire; what this side gets to insist on is
 // that it can draw what it was handed.
 
+// An inlined resource, as this side will accept one. Base64's alphabet and
+// nothing else, so a value that passes cannot carry a character that would
+// escape the CSS url() token it is headed for.
+const DATA_SVG = /^data:image\/svg\+xml;base64,[A-Za-z0-9+/]*={0,2}$/;
+
+function acceptInlined(v: unknown): string | null {
+  return typeof v === 'string' && DATA_SVG.test(v) ? v : null;
+}
+
 const MAX_LABEL   = 64_000;
 const MAX_LINES   = 4_000;
 const MAX_ENTRIES = 2_000;
@@ -286,6 +295,7 @@ export interface Origin {
   resolve(key: string, refs: string[]):          Promise<Address[][]>;
   hasMatchBelow(keys: string[], q: string):      Promise<boolean[]>;
   resolveResources(key: string, refs: string[]): Promise<(string | null)[]>;
+  fetchResources(key: string, refs: string[]):   Promise<(string | null)[]>;
   meta(key: string):                             Promise<FileMeta>;
 }
 
@@ -336,6 +346,22 @@ class RemoteOrigin implements Origin {
 
   resolveResources(key: string, refs: string[]): Promise<(string | null)[]> {
     return this.ask<(string | null)[]>('resolveResources', [key, refs]);
+  }
+
+  // Checked at the wire, like every other thing an envoy says. What comes back
+  // is bound for a CSS url() token, and the charset allowlist is what makes
+  // that interpolation safe whatever the escaping at the call site does: no
+  // quote, backslash or paren survives it, so the token cannot be broken out
+  // of. Anything else is a null — the caller already draws a fallback for that.
+  //
+  // Script in the payload is not the risk it looks like: SVG referenced as an
+  // image resource (mask, background-image, <img>) renders in a mode where
+  // script does not run and external references are blocked. That is a
+  // rendering rule, not something checked here.
+  async fetchResources(key: string, refs: string[]): Promise<(string | null)[]> {
+    const wire = await this.ask<(string | null)[]>('fetchResources', [key, refs]);
+    if (!Array.isArray(wire)) throw new Error('fetchResources did not answer with a list');
+    return refs.map((_, i) => acceptInlined(wire[i]));
   }
 
   async meta(key: string): Promise<FileMeta> {
@@ -429,6 +455,22 @@ export async function resolveMediaAllOn(
   try {
     return await originFor(baseUrl)
       .resolveResources(node.pageAddress.slice(baseUrl.length), refs.map(r => r || ''));
+  } catch { return refs.map(() => null); }
+}
+
+/**
+ * `resolveMediaAllOn` for a caller that must paint without watching the load —
+ * the bullet mask. What comes back is the resource itself as a `data:` URI, so
+ * a null is the ref failing rather than news that arrives too late to act on.
+ */
+export async function fetchMediaAllOn(
+  node: SourceNode,
+  refs: (string | null | undefined)[],
+): Promise<(string | null)[]> {
+  const { baseUrl } = node.address;
+  try {
+    return await originFor(baseUrl)
+      .fetchResources(node.pageAddress.slice(baseUrl.length), refs.map(r => r || ''));
   } catch { return refs.map(() => null); }
 }
 
