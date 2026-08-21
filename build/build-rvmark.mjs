@@ -955,14 +955,20 @@ for (const [relPath, sourceFile] of sourceFiles) {
   // imports it, and _custom-types/ stay separate unbundled modules that import
   // from it. Bundling the engine must not swallow author files.
   //
+  // iframe-guest is an entry because framed pages load it by URL rather than
+  // importing it — exhibit.ts writes that <script src> itself, and an author's
+  // own exhibit page (euclid's viewer.html) does the same. Anything the engine
+  // hands out as a URL is a served entry point, not an internal module.
+  //
   // out/ itself stays unbundled — the CLI and package.json's ./parser,
   // ./stringify and ./builder exports import from it directly.
   // build/ is deliberately not served: server-side utilities.
   {
     const esbuild = await import('esbuild');
     for (const [entry, outfile] of [
-      ['out/client/main.js',        join(ENGINE_DIR, 'client/main.js')],
-      ['out/envoy/envoy-guest.js',  join(ENGINE_DIR, 'envoy/envoy-guest.js')],
+      ['out/client/main.js',         join(ENGINE_DIR, 'client/main.js')],
+      ['out/client/iframe-guest.js', join(ENGINE_DIR, 'client/iframe-guest.js')],
+      ['out/envoy/envoy-guest.js',   join(ENGINE_DIR, 'envoy/envoy-guest.js')],
     ]) {
       if (!existsSync(enginePath(entry))) continue;
       await esbuild.build({
