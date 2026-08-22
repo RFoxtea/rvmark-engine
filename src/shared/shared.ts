@@ -238,18 +238,28 @@ export function parseTranscludeEntry(entry: string): { ref: string; wholeNode: b
 
 // Internal to resolveSlugInFile. Stage 1 took its client callers away — a
 // compound slug is a key the origin answers now, not a path the client walks.
-function parseCompoundSlug(slug: string): { anchor: string; path: number[] } {
+//
+// Ids and ordinals are drawn from the same alphabet (both alphanumeric —
+// `{#5}` is as legal an id as `{#5-proof}`, and an ordinal may be 'd' or '02'),
+// so no test on a segment's SHAPE can say where the name ends and the positions
+// begin. Only nodeMap knows what is a name, so ask it rather than guess.
+//
+// An id cannot contain a dot, so a compound slug is exactly `id.ordinal…`: the
+// named node, then positions beneath it. Returns the node itself (the lookup is
+// done here, so the caller does not repeat it), or null when the first segment
+// names nothing — leaving the caller its root-ordinal walk.
+//
+// A leading dot IS that root-ordinal form (`.1`), never a name: its first
+// segment is empty, so it is declined here outright rather than left to depend
+// on nothing having claimed the empty key.
+function resolveCompoundSlug(
+  slug: string,
+  nodeMap: Record<string, SourceNode>,
+): { node: SourceNode; path: string[] } | null {
+  if (slug.startsWith('.')) return null;
   const parts = slug.split('.');
-  let anchorEnd = 0;
-  // A path segment is a position only when it is ENTIRELY digits. parseInt
-  // accepts a digit prefix, so an id like `43-proof` read as the number 43 and
-  // ended the anchor before it began, collapsing `43-proof.11` into one opaque
-  // key that matched nothing.
-  while (anchorEnd < parts.length && !/^\d+$/.test(parts[anchorEnd])) anchorEnd++;
-  return {
-    anchor: parts.slice(0, anchorEnd).join('.') || slug,
-    path:   parts.slice(anchorEnd).map(s => parseInt(s, 10)).filter(n => !isNaN(n)),
-  };
+  const named = nodeMap[parts[0]];
+  return named ? { node: named, path: parts.slice(1) } : null;
 }
 
 export function resolveSlugInFile(
@@ -257,12 +267,12 @@ export function resolveSlugInFile(
   slug: string | null | undefined,
 ): { node: SourceNode } | null {
   if (!slug) return null;
-  if (nodeMap[slug]) return { node: nodeMap[slug] };
-  const { anchor, path } = parseCompoundSlug(slug);
-  if (nodeMap[anchor]) {
-    let node = nodeMap[anchor];
-    for (const pos of path) {
-      const child = node.children?.find(c => c.numbering.split('.').slice(-1)[0] === String(pos));
+  const anchored = resolveCompoundSlug(slug, nodeMap);
+  if (anchored) {
+    let node = anchored.node;
+    // Ordinals compare as authored ('02' is not 2), matching the root walk.
+    for (const pos of anchored.path) {
+      const child = node.children?.find(c => c.numbering.split('.').slice(-1)[0] === pos);
       if (!child) return null;
       node = child;
     }

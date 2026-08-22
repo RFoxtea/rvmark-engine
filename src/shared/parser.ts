@@ -346,7 +346,16 @@ export function parseAttrBlock(raw: string): Multimap {
   for (const part of splitSegments(raw)) {
     const p = part.trim();
     if (!p) continue;
-    if (p.startsWith('#'))  { out.append('id', p.slice(1)); continue; }
+    if (p.startsWith('#'))  {
+      const id = p.slice(1).trim();
+      // `{#}` is not a name. Left through, it reaches nodeMap under the empty
+      // key, where it captures the leading-dot root-ordinal form (`.1` splits
+      // to ['', '1']) and makes its own child unaddressable — its permalink
+      // chains to `.1`, colliding with the parent's. Reject it at the source.
+      if (!id) throw new Error(`rvmark: empty id in: {${raw}}`);
+      out.append('id', id);
+      continue;
+    }
     if (p.startsWith('.'))  { const c = p.slice(1).trim(); if (c) out.append('class', c); continue; }
     if (p.startsWith('=>')) { out.append('transclude', p.slice(2).trim()); continue; }
     if (p.startsWith('='))  { out.append('type', p.slice(1).trim()); continue; }
@@ -598,7 +607,10 @@ export function parse(src: string): RawFile {
  * was fixed.
  */
 function claimsNodeMapName(n: { attrs: Multimap }): boolean {
-  return n.attrs.get('id') !== undefined;
+  // `{#}` declares an id attribute whose value is the empty string. That is not
+  // a name: indexed, it squats on '' and captures the leading-dot root-ordinal
+  // form (`.1` splits to ['', '1'], so its first segment looks it up).
+  return !!n.attrs.get('id');
 }
 
 export function assignOrdinals(

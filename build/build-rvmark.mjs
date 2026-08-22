@@ -14,6 +14,7 @@
  *   contentDir,            // required — dir holding the .rvmark tree
  *   outDir,                // required — where the built site is written
  *   theme,                 // optional — CSS file appended after core styles
+ *   head,                  // optional — HTML fragment file injected at the end of <head>
  *   template,              // optional — HTML template PATH (defaults to engine's)
  *   templateHtml,          // optional — HTML template CONTENTS (wins over template)
  *   assetsDir,             // optional — dir copied into outDir preserving its name (e.g. ./assets → dist/assets/)
@@ -159,6 +160,7 @@ export async function buildSite(config) {
     contentDir,
     outDir,
     theme = null,
+    head = null,
     template = null,
     templateHtml = null,
     assetsDir = null,
@@ -203,6 +205,20 @@ export async function buildSite(config) {
   // the engine's template. Lets callers patch the template in-memory (e.g. the
   // --test build relaxing the CSP for the http peer) without forking the file.
   const TEMPLATE = templateHtml ?? readFileSync(template ?? enginePath('src/template.html'), 'utf8');
+
+  // Site-supplied <head> fragment. Missing file is fatal rather than ignored:
+  // silently dropping it leaves the author with a page that is merely missing
+  // whatever the fragment was for, and nothing to grep for.
+  let SITE_HEAD = '';
+  if (head) {
+    if (!existsSync(head)) throw new Error(`buildSite: head fragment not found: ${head}`);
+    SITE_HEAD = readFileSync(head, 'utf8');
+    // These duplicate what the template already sets; the browser resolves the
+    // clash on its own terms and the author gets no signal. Warn, don't block —
+    // overriding may be deliberate.
+    for (const [re, what] of [[/<title[\s>]/i, '<title>'], [/<base[\s>]/i, '<base>'], [/http-equiv=/i, 'http-equiv meta']])
+      if (re.test(SITE_HEAD)) console.warn(`  warning: head fragment contains ${what}; the template already sets one`);
+  }
 
   // Per-build state (was module-level in the monorepo script).
   const urlStemToFile = new Map();
@@ -917,6 +933,8 @@ for (const [relPath, sourceFile] of sourceFiles) {
   const staticHtml = rebase(renderStaticNodes(sourceFile.roots, sourceFile));
 
   let html = TEMPLATE;
+  // Before {{BASE}}, so a fragment referencing {{BASE}}_assets/... resolves too.
+  html = html.replaceAll('{{SITE_HEAD}}',     () => SITE_HEAD);
   html = html.replaceAll('{{TITLE}}',         escHtml(title));
   html = html.replaceAll('{{DESCRIPTION}}',   escHtml(description));
   html = html.replaceAll('{{BASE}}',          base);

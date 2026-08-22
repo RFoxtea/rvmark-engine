@@ -8,7 +8,7 @@
  *   rvmark --test            # build the engine's own test fixtures
  *
  *   opts: [--config <file>] [--content <dir>] [--out <dir>] [--theme <file>]
- *         [--template <file>] [--assets <dir>] [--custom-types <dir>]
+ *         [--head <file>] [--template <file>] [--assets <dir>] [--custom-types <dir>]
  *         [--mount <path>] [--include-drafts]
  *         (serve also: [--port <n>] [--dev])
  *
@@ -83,6 +83,7 @@ function loadConfigFile(path) {
     content:      asPath(raw.content),
     out:          asPath(raw.out),
     theme:        asPath(raw.theme),
+    head:         asPath(raw.head),
     template:     asPath(raw.template),
     assets:       asPath(raw.assets),
     customTypes:  asPath(raw.customTypes),
@@ -126,6 +127,7 @@ if (flags.has('test')) {
     contentDir: opts.content  ?? fileCfg.content     ?? 'rvmark',
     outDir:     opts.out      ?? fileCfg.out         ?? 'dist',
     theme:      opts.theme    ?? fileCfg.theme       ?? null,
+    head:       opts.head     ?? fileCfg.head        ?? null,
     template:   opts.template ?? fileCfg.template    ?? null,
     assetsDir:  opts.assets   ?? fileCfg.assets      ?? null,
     customTypesDir: opts['custom-types'] ?? fileCfg.customTypes ?? null,
@@ -158,6 +160,7 @@ if (subcommand === 'serve') {
   const watchTargets = [
     config.contentDir,
     config.theme,
+    config.head,
     config.assetsDir,
     config.customTypesDir,
     config.template,
@@ -170,6 +173,7 @@ if (subcommand === 'serve') {
     const a = ['build', '--content', config.contentDir, '--out', config.outDir,
                '--mount', config.mountPath];
     if (config.theme)          a.push('--theme', config.theme);
+    if (config.head)           a.push('--head', config.head);
     if (config.template)       a.push('--template', config.template);
     if (config.assetsDir)      a.push('--assets', config.assetsDir);
     if (config.customTypesDir) a.push('--custom-types', config.customTypesDir);

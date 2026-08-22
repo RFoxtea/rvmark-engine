@@ -132,7 +132,17 @@ export async function expandNode(rn: RenderNode, transcludeRef?: string): Promis
     }
     await rn.setChildren(allNodes, null, passChildrenEntries);
   } else if (sourceNode.hasChildren) {
-    await rn.setChildren(await childrenOf(sourceNode), null, passChildrenEntries);
+    // The node crossed the wire promising children (that promise is what drew
+    // its toggle), so an empty answer is a contradiction, not an empty subtree:
+    // the origin could not resolve the key — a broken permalink. Say so. Left
+    // silent, the row draws an expandable bullet and does nothing when clicked,
+    // which reads as a dead UI rather than as the authoring error it is.
+    const kids = await childrenOf(sourceNode);
+    await rn.setChildren(
+      kids.length ? kids : [makeErrorNode(sourceNode, sourceNode.permalinkId, 'error')],
+      null,
+      passChildrenEntries,
+    );
   }
 }
 
