@@ -66,6 +66,16 @@ export function wireSelectThenAction(
     const moved = Math.hypot(e.clientX - downX, e.clientY - downY) > DRAG_THRESHOLD_PX;
     if (wasSelected && !moved) doAction(undefined, { scroll: false });
     else focusTarget.focus();
+    // Bring the row horizontally into view even when the click changed nothing.
+    // Selecting a node already scrolls horizontally, but that runs off the
+    // selection CHANGE (see setSelection), so clicking the row you are already
+    // on — the natural thing to do after resizing the window pushes the tree
+    // sideways — did nothing. Horizontal only: the vertical position is where
+    // the reader put it, and a click is not a request to move it.
+    //
+    // Not for a drag: past the threshold this is a text selection, and
+    // scrolling under it would wreck the gesture.
+    if (!moved) scrollRowIntoMiddle(focusTarget, { vertical: false });
   });
 }
 

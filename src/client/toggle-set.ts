@@ -18,6 +18,7 @@ import type { ResolvedAttrs } from '../shared/served.js';
 import { expandNode, applyEventAttr } from './handler-utils.js';
 import { resolveTransclusionConfig } from './transclusion.js';
 import { childrenOf } from './origin-host.js';
+import { scrollRevealIntoView } from './scroll.js';
 
 export interface ToggleSetOpts {
   /** `{open: always}`, plus whatever else forces a node permanently open. */
@@ -112,6 +113,27 @@ export class ToggleSet {
     this._takeHill(el);
     el.setAttribute('aria-expanded', 'true');
     await expandNode(this.rn, ref);
+    this.scrollReveal();
+  }
+
+  /** Frame the node's own row with the content a span just put in its children
+   *  area — the reader wants the line they operated and the reveal beneath it
+   *  both in view.
+   *
+   * One rAF so the revealed children have been laid out; before that they
+   * measure at zero height and the row would be framed against nothing.
+   *
+   * The guard is that SOMEBODY still holds the hill, not that `el` does. A
+   * re-render between the expand and this frame replaces the span element and
+   * the hill is re-adopted by ordinal (see register), which would leave a stale
+   * `el` failing an identity check and silently skipping a scroll the reader
+   * asked for. Nothing here reads `el` anyway — the frame is the node's row
+   * against its children area, whoever filled it. */
+  scrollReveal(): void {
+    requestAnimationFrame(() => {
+      if (this.hillIsFree()) return;
+      scrollRevealIntoView(this.rn.contentEl, this.rn.children);
+    });
   }
 
   /** Release the hill, emptying the children area. No layering: nothing is

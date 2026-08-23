@@ -5,6 +5,7 @@
  *
  * scrollRowIntoMiddle — scrolls a .node-content row into the middle 3/5
  * dead zone of #tree-scroll, both vertically and horizontally.
+ * scrollRevealIntoView — frames a node's row together with what it just revealed.
  */
 
 // The "middle 3/5" dead zone: only scroll vertically if the row is outside
@@ -94,4 +95,56 @@ export function scrollRowIntoMiddle(
     newLeft = Math.max(0, Math.min(newLeft, scroller.scrollWidth - scrollerW));
     if (newLeft !== curLeft) scroller.scrollTo({ left: newLeft, behavior: scrollBehavior() });
   }
+}
+
+/**
+ * Scroll so a node's row and the content it just revealed below are both in view.
+ *
+ * A reveal is unlike a plain move: the row the reader operated stays put and
+ * the thing worth seeing appears underneath it. Centring the row
+ * (scrollRowIntoMiddle) answers the wrong question — it can push the reveal
+ * back off the bottom edge. So the target is the bracket from the node's own
+ * row down through the FIRST revealed row.
+ *
+ * The first row, not the whole children block: a transclusion can drop in
+ * hundreds of children, and what tells the reader the reveal happened is where
+ * it starts. The rest is theirs to scroll. Measuring one row also costs the
+ * same whatever arrived.
+ *
+ * The bracket is placed with a margin of breathing room at each end, and where
+ * both cannot be honoured the top wins — the row is the fixed point the reader
+ * operated. Nothing moves if the bracket is already framed, and nothing is
+ * added at the limits of the scroll range: a top node sitting flush against the
+ * top of the tree is where it belongs.
+ */
+const REVEAL_MARGIN_FRACTION = 12; // breathing room, as a fraction of scroller height
+
+export function scrollRevealIntoView(rowEl: HTMLElement, revealEl: HTMLElement): void {
+  const scroller = document.getElementById('tree-scroll');
+  if (!scroller) return;
+  if (!scroller.contains(rowEl) || !scroller.contains(revealEl)) return;
+
+  const scrollerRect = scroller.getBoundingClientRect();
+  const scrollerH    = scroller.clientHeight;
+  const margin       = scrollerH / REVEAL_MARGIN_FRACTION;
+
+  // Falling back to the container covers a reveal that is not a node list (an
+  // embedded body, say), which is one element and measures the same either way.
+  const footEl = revealEl.querySelector<HTMLElement>('.node-content') ?? revealEl;
+
+  const top    = rowEl.getBoundingClientRect().top     - scrollerRect.top + scroller.scrollTop;
+  const bottom = footEl.getBoundingClientRect().bottom - scrollerRect.top + scroller.scrollTop;
+
+  // The scrollTop window that keeps both margins. It is empty when the bracket
+  // plus its margins exceeds the viewport, and the upper bound then wins.
+  const highest = top - margin;                    // any lower and the row is clipped
+  const lowest  = bottom + margin - scrollerH;     // any higher and the reveal is
+
+  const cur = scroller.scrollTop;
+  const next = Math.max(0, Math.min(
+    Math.min(Math.max(cur, lowest), highest),
+    scroller.scrollHeight - scrollerH,
+  ));
+
+  if (Math.abs(next - cur) > 1) scroller.scrollTo({ top: next, behavior: scrollBehavior() });
 }

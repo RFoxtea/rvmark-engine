@@ -29,8 +29,12 @@ let _rvmarkOptionCounter = 0;
 // no action of its own reports false, and the gesture falls through to the
 // node — so Enter on a targetless highlight span still reaches the node's own
 // Enter behaviour instead of being swallowed by the listbox.
+/** How a selection was made. A click already has the option under the pointer,
+ *  so it needs no scroll to reveal it; a key or a programmatic select does. */
+export type SelectSource = 'click' | 'key';
+
 interface ListboxCallbacks {
-  onSelect?:   (idx: number, el: HTMLElement) => void;
+  onSelect?:   (idx: number, el: HTMLElement, source: SelectSource) => void;
   onActivate?: (idx: number, el: HTMLElement) => boolean | void;
   onReset?:    () => void;
   /** No no-option state: reset() is refused and ArrowLeft off the first option
@@ -49,13 +53,13 @@ export function createListboxNav(
 
   function options() { return getOptions(); }
 
-  function setActive(idx: number) {
+  function setActive(idx: number, source: SelectSource = 'key') {
     const opts = options();
     opts.forEach((el, i) => el.setAttribute('aria-selected', i === idx ? 'true' : 'false'));
     activeIdx = idx;
     if (idx >= 0) {
       listboxEl.setAttribute('aria-activedescendant', opts[idx].id);
-      onSelect?.(idx, opts[idx]);
+      onSelect?.(idx, opts[idx], source);
     } else {
       listboxEl.removeAttribute('aria-activedescendant');
     }
@@ -113,7 +117,7 @@ export function createListboxNav(
       if (i === activeIdx) {
         if (!isNativeLink) onActivate?.(activeIdx, el);
       } else {
-        setActive(i);
+        setActive(i, 'click');
         if (!isNativeLink) onActivate?.(i, el);
       }
       content.focus();

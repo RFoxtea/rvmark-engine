@@ -30,7 +30,7 @@ import { wireListbox, isListbox } from '../listbox-utils.js';
 import { wireSpanVisibility } from '../span-visibility.js';
 import type { ListboxNav } from '../listbox.js';
 import { wireSelectThenAction } from '../interaction.js';
-import { mdToHtmlWithSpans, staticMdToHtml, ensureKatex, hasMath, katexLoaded, clipboardHtml, spanIsInteractive } from '../markdown.js';
+import { mdToHtmlWithSpans, staticMdToHtml, ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
 
 // ── Overflow fade ──────────────────────────────────────────────────────────────
@@ -176,9 +176,20 @@ class BlockTypeHandler extends BaseTypeHandler {
     // selection, so preventDefault or an immediate blur takes the selection with
     // it. Taking focus back on the next frame keeps the selection and paints no
     // frame with the scroller focused.
+    //
+    // The next frame is also when the question this guard asks stops being a
+    // guess. Whether the press lands on the scroller or on something inside it
+    // that takes focus for itself — a toggle span, a link, whatever block
+    // markdown holds — is settled by then, so it is read as fact rather than
+    // predicted from the target. Predicting it meant naming the kinds that win
+    // a mousedown, which both missed kinds (an option is interactive but never
+    // focusable, so it left the scroller focused and the row ringed for the
+    // whole press) and would need extending for every new one.
     scroller.addEventListener('mousedown', (e) => {
-      if (e.button !== 0 || spanIsInteractive(e.target as HTMLElement)) return;
-      requestAnimationFrame(() => content.focus());
+      if (e.button !== 0) return;
+      requestAnimationFrame(() => {
+        if (document.activeElement === scroller) content.focus();
+      });
     });
 
     outer.appendChild(scroller);

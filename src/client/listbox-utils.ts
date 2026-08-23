@@ -89,6 +89,10 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
     // arrows across the highlights beneath it.
     if (!transclude) return;
     toggles?.takeHillForOption(el);
+    // No reveal scroll here, unlike a manual toggle. This runs on every change
+    // of selection, arrow keys included — a reader sweeping across Euclid's
+    // highlights would be chased by a scroll per keypress. A manual toggle is a
+    // committed gesture and gets framed; a selection sweep is not.
     void expandNode(rn, transclude);
   };
 
@@ -97,7 +101,7 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
     optionContainer,
     () => [...optionContainer.querySelectorAll<HTMLElement>('[role="option"]')],
     {
-      onSelect(_idx, el) {
+      onSelect(_idx, el, source) {
         if (_prevEl && _prevEl !== el) {
           fireSpanEvent(_prevEl, 'on-deselect');
           fireSpanEvent(_prevEl, 'on-blur');
@@ -114,7 +118,11 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
         fireSpanEvent(el, 'on-select');
         fireSpanEvent(el, 'on-focus');
         _prevEl = el;
-        if (scrollOnSelect) {
+        // A click needs no scroll: the reader already has the option under the
+        // pointer, and yanking it to the centre moves the thing they just hit.
+        // Keyboard selection is the case that needs it — arrowing off the
+        // visible run would otherwise walk the selection out of sight.
+        if (scrollOnSelect && source !== 'click') {
           const elRect        = el.getBoundingClientRect();
           const containerRect = optionContainer.getBoundingClientRect();
           optionContainer.scrollTop +=
