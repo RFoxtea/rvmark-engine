@@ -24,7 +24,7 @@
  *     1.12. {#child-math} Inline math: $x = 1$
  *     1.13. {#child-cross-embed; => ./other#other-root}
  *     1.14. {#child-cross-children; => ./other#other-root} cross-children label
- *     1.15. {#child-exhibit; exhibit: ./other#other-root} Exhibit node
+ *     1.15. {#child-sidepanel; sidepanel: ./other#other-root} Sidepanel node
  *     1.16. {#child-remote-embed; ...} Remote embed
  *     1.17. {#embed-ai-node; => #embed-ai-target} Embed of AI-tagged node
  *   2. {#embed-target} Embed target node
@@ -40,6 +40,9 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -540,13 +543,13 @@ test.describe('footer and metadata', () => {
     await expect(page.locator('footer')).toContainText('Global AI Author');
   });
 
-  test('selecting AI-tagged node inside exhibit updates parent footer', async ({ page }) => {
-    await page.goto('/#child-exhibit');
+  test('selecting AI-tagged node inside sidepanel updates parent footer', async ({ page }) => {
+    await page.goto('/#child-sidepanel');
     await waitForTree(page);
-    const exhibitRow = await nodeContent(page, 'child-exhibit');
-    await exhibitRow.click(); // select
-    await exhibitRow.click(); // open exhibit
-    const iframeLocator = page.frameLocator('.exhibit-panel .exhibit-iframe');
+    const sidepanelRow = await nodeContent(page, 'child-sidepanel');
+    await sidepanelRow.click(); // select
+    await sidepanelRow.click(); // open sidepanel
+    const iframeLocator = page.frameLocator('.sidepanel .sidepanel-iframe');
     // Wait for the iframe tree to hydrate
     const rootRow = iframeLocator.locator('#tree-scroll .node-content').first();
     await expect(rootRow).toBeVisible();
@@ -558,19 +561,19 @@ test.describe('footer and metadata', () => {
     await expect(page.locator('footer')).toContainText('Global AI Author');
   });
 
-  // {action: exhibit} on a node with no exhibit in force still opens the panel.
+  // {action: sidepanel} on a node with no sidepanel in force still opens the panel.
   // Doing nothing would read as a broken control; the empty panel answers the
   // reader and can be dismissed with Escape.
-  test('exhibit action with no exhibit in force opens an empty panel', async ({ page }) => {
-    await page.goto('/#exhibit-action-no-scope');
+  test('sidepanel action with no sidepanel in force opens an empty panel', async ({ page }) => {
+    await page.goto('/#sidepanel-action-no-scope');
     await waitForTree(page);
-    const row = await nodeContent(page, 'exhibit-action-no-scope');
+    const row = await nodeContent(page, 'sidepanel-action-no-scope');
     await row.click(); // select
     await row.click(); // activate
-    await expect(page.locator('.exhibit-panel')).toBeVisible();
-    await expect(page.locator('.exhibit-panel .exhibit-hint')).toContainText('No exhibit active');
-    await expect(page.locator('.exhibit-panel .exhibit-hint-key')).toBeVisible();
-    await expect(page.locator('.exhibit-panel .exhibit-iframe')).toHaveCount(0);
+    await expect(page.locator('.sidepanel')).toBeVisible();
+    await expect(page.locator('.sidepanel .sidepanel-hint')).toContainText('No sidepanel active');
+    await expect(page.locator('.sidepanel .sidepanel-hint-key')).toBeVisible();
+    await expect(page.locator('.sidepanel .sidepanel-iframe')).toHaveCount(0);
   });
 
   // On a coarse pointer the Escape line is hidden (the × button is the
@@ -578,14 +581,14 @@ test.describe('footer and metadata', () => {
   test.describe('touch device', () => {
     test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
 
-    test('empty exhibit still states its state, without the Escape line', async ({ page }) => {
-      await page.goto('/#exhibit-action-no-scope');
+    test('empty sidepanel still states its state, without the Escape line', async ({ page }) => {
+      await page.goto('/#sidepanel-action-no-scope');
       await waitForTree(page);
-      const row = await nodeContent(page, 'exhibit-action-no-scope');
+      const row = await nodeContent(page, 'sidepanel-action-no-scope');
       await row.click();
       await row.click();
-      await expect(page.locator('.exhibit-panel .exhibit-hint')).toContainText('No exhibit active');
-      await expect(page.locator('.exhibit-panel .exhibit-hint-key')).toBeHidden();
+      await expect(page.locator('.sidepanel .sidepanel-hint')).toContainText('No sidepanel active');
+      await expect(page.locator('.sidepanel .sidepanel-hint-key')).toBeHidden();
     });
   });
 });
@@ -1070,7 +1073,7 @@ test.describe('event attributes', () => {
   });
 
   test('on-action fires on a leaf node when re-clicked', async ({ page }) => {
-    // A leaf has no expand/exhibit behaviour, so on-action is the *only* thing
+    // A leaf has no expand/sidepanel behaviour, so on-action is the *only* thing
     // its action gesture does — the case that had no click wiring at all.
     const root = await nodeContent(page, 'event-action-leaf-root');
     await root.focus();
@@ -1144,16 +1147,16 @@ test.describe('event attributes', () => {
 //     pass-host-dash   {on-action: --dashvar<<1; => other#pass-dash-target}  (no children-pass needed)
 //       (transcluded) pass-dash-indicator {? --dashvar==1}
 //                    + pass-dash-write-attempt {on-action: --dashvar<<99}
-//   pass-scope-exhibit {& exvar=0}
-//     pass-exhibit-host {exhibit: other#pass-exhibit-target; exhibit-pass: exvar rw}
-//       (in exhibit) pass-exhibit-indicator {? exvar==1} + pass-exhibit-writer {on-action: exvar<<1}
-//     pass-exhibit-host-indicator {? exvar==1}
-//   pass-scope-exhibit-blocked {& exvar=0}
-//     pass-exhibit-blocked-host {exhibit: other#pass-exhibit-blocked-target}  (no exhibit-pass)
-//       (in exhibit) pass-exhibit-blocked-indicator {? exvar==1}
-//   pass-scope-exhibit-ro {& exvar=0}
-//     pass-exhibit-ro-host {exhibit: other#pass-exhibit-target; exhibit-pass: exvar}  (read-only)
-//       (in exhibit) pass-exhibit-indicator {? exvar==1} + pass-exhibit-writer {on-action: exvar<<1}
+//   pass-scope-sidepanel {& exvar=0}
+//     pass-sidepanel-host {sidepanel: other#pass-sidepanel-target; sidepanel-pass: exvar rw}
+//       (in sidepanel) pass-sidepanel-indicator {? exvar==1} + pass-sidepanel-writer {on-action: exvar<<1}
+//     pass-sidepanel-host-indicator {? exvar==1}
+//   pass-scope-sidepanel-blocked {& exvar=0}
+//     pass-sidepanel-blocked-host {sidepanel: other#pass-sidepanel-blocked-target}  (no sidepanel-pass)
+//       (in sidepanel) pass-sidepanel-blocked-indicator {? exvar==1}
+//   pass-scope-sidepanel-ro {& exvar=0}
+//     pass-sidepanel-ro-host {sidepanel: other#pass-sidepanel-target; sidepanel-pass: exvar}  (read-only)
+//       (in sidepanel) pass-sidepanel-indicator {? exvar==1} + pass-sidepanel-writer {on-action: exvar<<1}
 
 test.describe('state pass system', () => {
   test.beforeEach(async ({ page }) => {
@@ -1247,49 +1250,49 @@ test.describe('state pass system', () => {
     await expect(await waitForNode(page, 'pass-dash-indicator')).toBeVisible();
   });
 
-  // ── Exhibit iframe pass ─────────────────────────────────────────────────────
+  // ── Sidepanel iframe pass ─────────────────────────────────────────────────────
 
-  async function openExhibit(page, nodeId) {
+  async function openSidepanel(page, nodeId) {
     const row = await nodeContent(page, nodeId);
     await row.click(); // select
-    await row.click(); // open exhibit (second click on selected node)
-    const frame = page.frameLocator('.exhibit-panel .exhibit-iframe');
+    await row.click(); // open sidepanel (second click on selected node)
+    const frame = page.frameLocator('.sidepanel .sidepanel-iframe');
     const root = frame.locator('#tree-scroll .node-content').first();
     await expect(root).toBeVisible();
     await root.press('ArrowRight'); // expand root to reveal children
     return frame;
   }
 
-  test('exhibit-pass: rw — exhibit reads host state and can write back', async ({ page }) => {
-    const frame = await openExhibit(page, 'pass-exhibit-host');
-    // exvar=0 initially; exhibit indicator hidden
-    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-visible' });
+  test('sidepanel-pass: rw — sidepanel reads host state and can write back', async ({ page }) => {
+    const frame = await openSidepanel(page, 'pass-sidepanel-host');
+    // exvar=0 initially; sidepanel indicator hidden
+    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-sidepanel-visible' });
     await expect(iframeIndicator).not.toBeVisible();
-    expect(await tryNodeContent(page, 'pass-exhibit-host-indicator')).toBeNull();
-    // Writer inside exhibit fires on-action: exvar<<1 — relayed back to host frame
-    await frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-writer' }).press('Enter');
+    expect(await tryNodeContent(page, 'pass-sidepanel-host-indicator')).toBeNull();
+    // Writer inside sidepanel fires on-action: exvar<<1 — relayed back to host frame
+    await frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-sidepanel-writer' }).press('Enter');
     // Host-side indicator appears (write-back succeeded)
-    await expect(await waitForNode(page, 'pass-exhibit-host-indicator')).toBeVisible();
-    // Exhibit-side indicator also appears (reads exvar via exhibit-pass)
+    await expect(await waitForNode(page, 'pass-sidepanel-host-indicator')).toBeVisible();
+    // Sidepanel-side indicator also appears (reads exvar via sidepanel-pass)
     await expect(iframeIndicator).toBeVisible();
   });
 
-  test('exhibit without exhibit-pass: host state invisible inside exhibit', async ({ page }) => {
-    const frame = await openExhibit(page, 'pass-exhibit-blocked-host');
+  test('sidepanel without sidepanel-pass: host state invisible inside sidepanel', async ({ page }) => {
+    const frame = await openSidepanel(page, 'pass-sidepanel-blocked-host');
     await page.waitForTimeout(300);
-    // Exhibit content has {? exvar==1} indicator — must NOT appear (no exhibit-pass)
-    const blocked = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-blocked-visible' });
+    // Sidepanel content has {? exvar==1} indicator — must NOT appear (no sidepanel-pass)
+    const blocked = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-sidepanel-blocked-visible' });
     await expect(blocked).not.toBeVisible();
   });
 
-  test('exhibit-pass: r — write-back from exhibit to host is blocked', async ({ page }) => {
-    // pass-exhibit-ro-host has exhibit-pass: exvar (read-only)
-    // The exhibit contains a writer that attempts exvar<<1 — this must NOT propagate to the host.
-    const frame = await openExhibit(page, 'pass-exhibit-ro-host');
-    await frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-writer' }).press('Enter');
+  test('sidepanel-pass: r — write-back from sidepanel to host is blocked', async ({ page }) => {
+    // pass-sidepanel-ro-host has sidepanel-pass: exvar (read-only)
+    // The sidepanel contains a writer that attempts exvar<<1 — this must NOT propagate to the host.
+    const frame = await openSidepanel(page, 'pass-sidepanel-ro-host');
+    await frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-sidepanel-writer' }).press('Enter');
     await page.waitForTimeout(300);
-    // pass-scope-exhibit-ro's pass-exhibit-host-indicator {? exvar==1} must NOT appear
-    expect(await tryNodeContent(page, 'pass-exhibit-host-indicator')).toBeNull();
+    // pass-scope-sidepanel-ro's pass-sidepanel-host-indicator {? exvar==1} must NOT appear
+    expect(await tryNodeContent(page, 'pass-sidepanel-host-indicator')).toBeNull();
   });
 
   // ── Additional children-pass tests ─────────────────────────────────────────
@@ -1423,111 +1426,111 @@ test.describe('state pass system', () => {
     await expect(await waitForNode(page, 'pass-dash-write-node')).toBeVisible();
   });
 
-  // ── exhibit-pass: host→iframe push ────────────────────────────────────────
+  // ── sidepanel-pass: host→iframe push ────────────────────────────────────────
 
-  test('exhibit-pass: host state change after load is pushed to exhibit iframe', async ({ page }) => {
-    // pass-scope-exhibit-reactive: exvar=0, exhibit-pass: exvar rw
+  test('sidepanel-pass: host state change after load is pushed to sidepanel iframe', async ({ page }) => {
+    // pass-scope-sidepanel-reactive: exvar=0, sidepanel-pass: exvar rw
     // Node has listbox spans [zero]{&exvar<<0} [one]{&exvar<<1}.
-    // After opening the exhibit, selecting the "one" span sets exvar=1 on host.
-    // The iframe must receive rvmark-preroot-set and show pass-exhibit-indicator.
-    const frame = await openExhibit(page, 'pass-exhibit-reactive-host');
-    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-visible' });
+    // After opening the sidepanel, selecting the "one" span sets exvar=1 on host.
+    // The iframe must receive rvmark-preroot-set and show pass-sidepanel-indicator.
+    const frame = await openSidepanel(page, 'pass-sidepanel-reactive-host');
+    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-sidepanel-visible' });
     await expect(iframeIndicator).not.toBeVisible();
-    // Select the "one" span — stays on same node, exhibit stays open
-    const host = await nodeContent(page, 'pass-exhibit-reactive-host');
+    // Select the "one" span — stays on same node, sidepanel stays open
+    const host = await nodeContent(page, 'pass-sidepanel-reactive-host');
     await host.locator('[role="option"]').filter({ hasText: 'one' }).click();
     await expect(iframeIndicator).toBeVisible();
   });
 
-  test('exhibit-pass: rename — host push reaches iframe under translated child key', async ({ page }) => {
-    // pass-exhibit-rename-host has exhibit-pass: exvar=exlocal rw
+  test('sidepanel-pass: rename — host push reaches iframe under translated child key', async ({ page }) => {
+    // pass-sidepanel-rename-host has sidepanel-pass: exvar=exlocal rw
     // exlocal=1 set on host (without changing selection) → iframe receives rvmark-preroot-set key=exvar value=1
-    const frame = await openExhibit(page, 'pass-exhibit-rename-host');
-    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-rename-visible' });
+    const frame = await openSidepanel(page, 'pass-sidepanel-rename-host');
+    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-sidepanel-rename-visible' });
     await expect(iframeIndicator).not.toBeVisible();
-    // Mutate host state without navigating away (keeps exhibit open)
+    // Mutate host state without navigating away (keeps sidepanel open)
     await page.evaluate(() => {
-      window._rvmarkFindNodes?.('pass-exhibit-rename-host')?.forEach(rn => rn.state?.set('exlocal', '1'));
+      window._rvmarkFindNodes?.('pass-sidepanel-rename-host')?.forEach(rn => rn.state?.set('exlocal', '1'));
     });
     await expect(iframeIndicator).toBeVisible();
   });
 
-  test('exhibit-pass: r-only key — host push reaches iframe but iframe cannot write back', async ({ page }) => {
-    // pass-exhibit-ro-host has exhibit-pass: exvar (r only)
+  test('sidepanel-pass: r-only key — host push reaches iframe but iframe cannot write back', async ({ page }) => {
+    // pass-sidepanel-ro-host has sidepanel-pass: exvar (r only)
     // Host sets exvar=1 → iframe should receive the push and show indicator
     // (Write-back direction is separately blocked by existing security test)
-    const frame = await openExhibit(page, 'pass-exhibit-ro-host');
-    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-visible' });
+    const frame = await openSidepanel(page, 'pass-sidepanel-ro-host');
+    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-sidepanel-visible' });
     await expect(iframeIndicator).not.toBeVisible();
     await page.evaluate(() => {
-      window._rvmarkFindNodes?.('pass-exhibit-ro-host')?.forEach(rn => rn.state?.set('exvar', '1'));
+      window._rvmarkFindNodes?.('pass-sidepanel-ro-host')?.forEach(rn => rn.state?.set('exvar', '1'));
     });
     await expect(iframeIndicator).toBeVisible();
   });
 
-  // ── Additional exhibit-pass tests ──────────────────────────────────────────
+  // ── Additional sidepanel-pass tests ──────────────────────────────────────────
 
-  test('exhibit-pass: rename — exhibit write-back reaches host under translated key', async ({ page }) => {
-    // pass-exhibit-rename-host has exhibit-pass: exvar=exlocal rw
-    // exlocal=0 on host; relay snapshot sends exvar=0 to exhibit
-    // Writer in exhibit fires exvar<<1 → relayed to host as exlocal<<1
-    const frame = await openExhibit(page, 'pass-exhibit-rename-host');
-    expect(await tryNodeContent(page, 'pass-exhibit-rename-indicator')).toBeNull();
+  test('sidepanel-pass: rename — sidepanel write-back reaches host under translated key', async ({ page }) => {
+    // pass-sidepanel-rename-host has sidepanel-pass: exvar=exlocal rw
+    // exlocal=0 on host; relay snapshot sends exvar=0 to sidepanel
+    // Writer in sidepanel fires exvar<<1 → relayed to host as exlocal<<1
+    const frame = await openSidepanel(page, 'pass-sidepanel-rename-host');
+    expect(await tryNodeContent(page, 'pass-sidepanel-rename-indicator')).toBeNull();
     // Wait for relay listener to be established before firing writer
-    const writer = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-rename-writer' });
+    const writer = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-sidepanel-rename-writer' });
     await expect(writer).toBeVisible();
     await writer.press('Enter');
     // Host indicator {? exlocal==1} must appear (write-back translated exvar→exlocal)
-    await expect(await waitForNode(page, 'pass-exhibit-rename-indicator')).toBeVisible();
+    await expect(await waitForNode(page, 'pass-sidepanel-rename-indicator')).toBeVisible();
   });
 
-  test('exhibit: preroot vars are NOT visible inside exhibit (no exhibit-pass for preroot)', async ({ page }) => {
-    // postPrerootSnapshot is never sent to exhibit iframes (security: would leak all URL params)
-    // Without exhibit-pass for prerootvar, it must not appear in the exhibit
+  test('sidepanel: preroot vars are NOT visible inside sidepanel (no sidepanel-pass for preroot)', async ({ page }) => {
+    // postPrerootSnapshot is never sent to sidepanel iframes (security: would leak all URL params)
+    // Without sidepanel-pass for prerootvar, it must not appear in the sidepanel
     await page.evaluate(() => { window.__rvmarkPreroot?.declare('prerootvar', '1'); });
-    const frame = await openExhibit(page, 'pass-exhibit-preroot-host');
+    const frame = await openSidepanel(page, 'pass-sidepanel-preroot-host');
     await page.waitForTimeout(300);
-    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-preroot-visible' });
+    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-sidepanel-preroot-visible' });
     await expect(iframeIndicator).not.toBeVisible();
   });
 
-  test('exhibit-pass: write-back does not affect sibling scopes', async ({ page }) => {
-    // Writing exvar via pass-scope-exhibit's rw exhibit must not bleed into pass-scope-exhibit-ro
+  test('sidepanel-pass: write-back does not affect sibling scopes', async ({ page }) => {
+    // Writing exvar via pass-scope-sidepanel's rw sidepanel must not bleed into pass-scope-sidepanel-ro
     // Both scopes declare exvar=0 independently; rw write updates only its own scope's frame
-    const frame = await openExhibit(page, 'pass-exhibit-host');
-    await frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-writer' }).press('Enter');
-    await expect(await waitForNode(page, 'pass-exhibit-host-indicator')).toBeVisible();
-    // Now open the ro scope exhibit — its exvar must still be 0
+    const frame = await openSidepanel(page, 'pass-sidepanel-host');
+    await frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-sidepanel-writer' }).press('Enter');
+    await expect(await waitForNode(page, 'pass-sidepanel-host-indicator')).toBeVisible();
+    // Now open the ro scope sidepanel — its exvar must still be 0
     // (We can't easily check inside that iframe without reopening, so check host indicator)
-    // pass-scope-exhibit-ro has its own exvar=0 declared in its scope frame — indicator absent
-    expect(await tryNodeContent(page, 'pass-exhibit-ro-host')).not.toBeNull(); // node exists
+    // pass-scope-sidepanel-ro has its own exvar=0 declared in its scope frame — indicator absent
+    expect(await tryNodeContent(page, 'pass-sidepanel-ro-host')).not.toBeNull(); // node exists
   });
 
   // ── Security: relay write-back attack surfaces ──────────────────────────────
 
   test('security: direct postMessage with r-only key is blocked', async ({ page }) => {
-    // pass-exhibit-ro-host has exhibit-pass: exvar (r only)
+    // pass-sidepanel-ro-host has sidepanel-pass: exvar (r only)
     // A direct rvmark-state-write from the iframe window must not write exvar on the host
-    await openExhibit(page, 'pass-exhibit-ro-host');
+    await openSidepanel(page, 'pass-sidepanel-ro-host');
     // Post as if from the iframe's contentWindow — bypasses UI, hits listenWriteBack directly
     await page.evaluate(() => {
-      const iframe = document.querySelector('.exhibit-iframe');
+      const iframe = document.querySelector('.sidepanel-iframe');
       iframe?.contentWindow?.parent.postMessage(
         { type: 'rvmark-state-write', op: 'set', key: 'exvar', value: '1' }, '*',
       );
     });
     await page.waitForTimeout(300);
-    expect(await tryNodeContent(page, 'pass-exhibit-host-indicator')).toBeNull();
+    expect(await tryNodeContent(page, 'pass-sidepanel-host-indicator')).toBeNull();
   });
 
-  test('security: direct postMessage with key not in exhibit-pass is blocked', async ({ page }) => {
-    // pass-exhibit-host has exhibit-pass: exvar rw — does not include "othervar"
+  test('security: direct postMessage with key not in sidepanel-pass is blocked', async ({ page }) => {
+    // pass-sidepanel-host has sidepanel-pass: exvar rw — does not include "othervar"
     // A direct write of othervar from inside the iframe must not reach the host.
     // We subscribe to othervar changes via a declare to detect if it ever gets set.
-    await openExhibit(page, 'pass-exhibit-host');
+    await openSidepanel(page, 'pass-sidepanel-host');
     await page.evaluate(() => {
       window.__rvmarkPreroot?.declare('othervar', 'safe');
-      const iframe = document.querySelector('.exhibit-iframe');
+      const iframe = document.querySelector('.sidepanel-iframe');
       iframe?.contentWindow?.parent.postMessage(
         { type: 'rvmark-state-write', op: 'set', key: 'othervar', value: 'pwned' }, '*',
       );
@@ -1536,7 +1539,7 @@ test.describe('state pass system', () => {
     // If the write was blocked, othervar remains 'safe' (we set it ourselves above)
     const val = await page.evaluate(() => {
       let result;
-      window._rvmarkFindNodes?.('pass-exhibit-host')?.forEach(rn => {
+      window._rvmarkFindNodes?.('pass-sidepanel-host')?.forEach(rn => {
         result = rn.state?.get('othervar');
       });
       return result;
@@ -1547,10 +1550,10 @@ test.describe('state pass system', () => {
   test('security: direct postMessage with -- key is blocked at relay', async ({ page }) => {
     // -- prefix keys always pass read-only through StatePass but must never be writable via relay.
     // Declare --dashvar=safe on preroot, then attempt to overwrite from iframe.
-    await openExhibit(page, 'pass-exhibit-host');
+    await openSidepanel(page, 'pass-sidepanel-host');
     await page.evaluate(() => {
       window.__rvmarkPreroot?.declare('--dashvar', 'safe');
-      const iframe = document.querySelector('.exhibit-iframe');
+      const iframe = document.querySelector('.sidepanel-iframe');
       iframe?.contentWindow?.parent.postMessage(
         { type: 'rvmark-state-write', op: 'set', key: '--dashvar', value: '99' }, '*',
       );
@@ -1559,7 +1562,7 @@ test.describe('state pass system', () => {
     // Value must remain 'safe' — relay must not have written '99'
     const val = await page.evaluate(() => {
       let result;
-      window._rvmarkFindNodes?.('pass-exhibit-host')?.forEach(rn => {
+      window._rvmarkFindNodes?.('pass-sidepanel-host')?.forEach(rn => {
         result = rn.state?.get('--dashvar');
       });
       return result;
@@ -1570,20 +1573,20 @@ test.describe('state pass system', () => {
   test('security: postMessage from rogue window (wrong source) is ignored', async ({ page }) => {
     // listenWriteBack checks e.source === iframeWindow; a message posted from the page itself
     // (not from the iframe's contentWindow) must be ignored
-    await openExhibit(page, 'pass-exhibit-host');
+    await openSidepanel(page, 'pass-sidepanel-host');
     // Post directly from the top-level page window — wrong source
     await page.evaluate(() => {
       window.postMessage({ type: 'rvmark-state-write', op: 'set', key: 'exvar', value: '1' }, '*');
     });
     await page.waitForTimeout(300);
-    expect(await tryNodeContent(page, 'pass-exhibit-host-indicator')).toBeNull();
+    expect(await tryNodeContent(page, 'pass-sidepanel-host-indicator')).toBeNull();
   });
 
   test('security: prototype pollution key is ignored', async ({ page }) => {
     // A guest sending __proto__ or constructor as key must not pollute Object prototype
-    await openExhibit(page, 'pass-exhibit-host');
+    await openSidepanel(page, 'pass-sidepanel-host');
     await page.evaluate(() => {
-      const iframe = document.querySelector('.exhibit-iframe');
+      const iframe = document.querySelector('.sidepanel-iframe');
       iframe?.contentWindow?.parent.postMessage(
         { type: 'rvmark-state-write', op: 'declare', key: '__proto__', value: '{"polluted":true}' }, '*',
       );
@@ -1597,77 +1600,77 @@ test.describe('state pass system', () => {
   });
 
   // ── Relay rewiring across same-target scope switches ───────────────────────
-  // When selection moves from scope A to scope B and both have the same exhibit
+  // When selection moves from scope A to scope B and both have the same sidepanel
   // target (rawRef), the iframe must NOT be rebuilt and the relay must be
   // rewired so subsequent pushes/write-backs target B's state frame, not A's.
 
-  test('exhibit rewire: iframe element persists across same-target scope switch', async ({ page }) => {
-    // Open exhibit on rewire-host-a, mark its iframe, then click rewire-host-b
+  test('sidepanel rewire: iframe element persists across same-target scope switch', async ({ page }) => {
+    // Open sidepanel on rewire-host-a, mark its iframe, then click rewire-host-b
     // (same target). The marker must still be present, proving no rebuild.
-    await openExhibit(page, 'pass-exhibit-rewire-host-a');
+    await openSidepanel(page, 'pass-sidepanel-rewire-host-a');
     await page.evaluate(() => {
-      document.querySelector('.exhibit-iframe')?.setAttribute('data-rewire-marker', 'persisted');
+      document.querySelector('.sidepanel-iframe')?.setAttribute('data-rewire-marker', 'persisted');
     });
-    await (await nodeContent(page, 'pass-exhibit-rewire-host-b')).click();
+    await (await nodeContent(page, 'pass-sidepanel-rewire-host-b')).click();
     // Give the persist branch time to run; if it rebuilt, the marker would be gone.
     await page.waitForTimeout(200);
     const marker = await page.evaluate(() =>
-      document.querySelector('.exhibit-iframe')?.getAttribute('data-rewire-marker') ?? null,
+      document.querySelector('.sidepanel-iframe')?.getAttribute('data-rewire-marker') ?? null,
     );
     expect(marker).toBe('persisted');
   });
 
-  test('exhibit rewire: host push reaches iframe via NEW scope frame, not old', async ({ page }) => {
+  test('sidepanel rewire: host push reaches iframe via NEW scope frame, not old', async ({ page }) => {
     // After A→B switch, setting exvar=1 on A's frame must NOT push to the iframe;
     // setting exvar=1 on B's frame must push and reveal the iframe indicator.
-    const frame = await openExhibit(page, 'pass-exhibit-rewire-host-a');
-    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-visible' });
+    const frame = await openSidepanel(page, 'pass-sidepanel-rewire-host-a');
+    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-sidepanel-visible' });
     await expect(iframeIndicator).not.toBeVisible();
     // Switch scopes by selecting B's host (same target rawRef triggers rewire)
-    await (await nodeContent(page, 'pass-exhibit-rewire-host-b')).click();
+    await (await nodeContent(page, 'pass-sidepanel-rewire-host-b')).click();
     await page.waitForTimeout(100);
     // Mutate A's frame — iframe must NOT see this (relay no longer points at A)
     await page.evaluate(() => {
-      window._rvmarkFindNodes?.('pass-exhibit-rewire-host-a')?.forEach(rn => rn.state?.set('exvar', '1'));
+      window._rvmarkFindNodes?.('pass-sidepanel-rewire-host-a')?.forEach(rn => rn.state?.set('exvar', '1'));
     });
     await page.waitForTimeout(200);
     await expect(iframeIndicator).not.toBeVisible();
     // Mutate B's frame — iframe MUST see this push (relay now points at B)
     await page.evaluate(() => {
-      window._rvmarkFindNodes?.('pass-exhibit-rewire-host-b')?.forEach(rn => rn.state?.set('exvar', '1'));
+      window._rvmarkFindNodes?.('pass-sidepanel-rewire-host-b')?.forEach(rn => rn.state?.set('exvar', '1'));
     });
     await expect(iframeIndicator).toBeVisible();
   });
 
-  test('exhibit rewire: write-back lands on NEW scope frame, not old', async ({ page }) => {
+  test('sidepanel rewire: write-back lands on NEW scope frame, not old', async ({ page }) => {
     // After A→B switch, the iframe's writer (exvar<<1) must update B's host
     // indicator and leave A's host indicator hidden.
-    const frame = await openExhibit(page, 'pass-exhibit-rewire-host-a');
-    await (await nodeContent(page, 'pass-exhibit-rewire-host-b')).click();
+    const frame = await openSidepanel(page, 'pass-sidepanel-rewire-host-a');
+    await (await nodeContent(page, 'pass-sidepanel-rewire-host-b')).click();
     await page.waitForTimeout(100);
     // Re-grab the writer locator (still inside the persisted iframe)
-    const writer = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-writer' });
+    const writer = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-sidepanel-writer' });
     await expect(writer).toBeVisible();
     await writer.press('Enter');
     // B's indicator must appear; A's must not
-    await expect(await waitForNode(page, 'pass-exhibit-rewire-b-indicator')).toBeVisible();
-    expect(await tryNodeContent(page, 'pass-exhibit-rewire-a-indicator')).toBeNull();
+    await expect(await waitForNode(page, 'pass-sidepanel-rewire-b-indicator')).toBeVisible();
+    expect(await tryNodeContent(page, 'pass-sidepanel-rewire-a-indicator')).toBeNull();
   });
 
-  test('exhibit rewire: snapshot of NEW scope is sent on rewire', async ({ page }) => {
+  test('sidepanel rewire: snapshot of NEW scope is sent on rewire', async ({ page }) => {
     // Set exvar=1 on B's frame BEFORE switching; after switching, the iframe
     // must immediately reflect B's state (relay snapshot pushed on rewire).
-    const frame = await openExhibit(page, 'pass-exhibit-rewire-host-a');
-    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-exhibit-visible' });
+    const frame = await openSidepanel(page, 'pass-sidepanel-rewire-host-a');
+    const iframeIndicator = frame.locator('#tree-scroll .node-content').filter({ hasText: 'pass-sidepanel-visible' });
     await expect(iframeIndicator).not.toBeVisible();
-    // Prime B's frame while exhibit is wired to A (no effect on iframe yet)
+    // Prime B's frame while sidepanel is wired to A (no effect on iframe yet)
     await page.evaluate(() => {
-      window._rvmarkFindNodes?.('pass-exhibit-rewire-host-b')?.forEach(rn => rn.state?.set('exvar', '1'));
+      window._rvmarkFindNodes?.('pass-sidepanel-rewire-host-b')?.forEach(rn => rn.state?.set('exvar', '1'));
     });
     await page.waitForTimeout(100);
     await expect(iframeIndicator).not.toBeVisible(); // still A-wired, A's exvar=0
     // Switch to B — snapshot of B's frame should now be pushed to the iframe
-    await (await nodeContent(page, 'pass-exhibit-rewire-host-b')).click();
+    await (await nodeContent(page, 'pass-sidepanel-rewire-host-b')).click();
     await expect(iframeIndicator).toBeVisible();
   });
 });
@@ -2466,6 +2469,15 @@ test.describe('span toggles', () => {
 // The marker is a masked box, so every assertion here reads the computed
 // mask-image rather than looking for an <img>: the mask IS the icon, and a
 // broken swap shows up as the wrong URL, not a missing element.
+// Fixture icons, by filename, so a mask delivered as an inlined data: URI can be
+// resolved back to the icon it actually is.
+const ICON_DIR = join(dirname(fileURLToPath(import.meta.url)), 'rvmark', 'icons');
+const ICON_FIXTURES = Object.fromEntries(
+  readdirSync(ICON_DIR)
+    .filter((f) => f.endsWith('.svg'))
+    .map((f) => [f, readFileSync(join(ICON_DIR, f), 'utf8').trim()]),
+);
+
 test.describe('bullet-open icon swap', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/#bullet-root');
@@ -2475,12 +2487,22 @@ test.describe('bullet-open icon swap', () => {
 
   // Reads ::before, where the mask actually lives — .toggle itself is an
   // unrotated frame and carries no mask of its own.
+  // Icons may arrive either as a URL or inlined as a base64 data: URI (the build
+  // inlines each unique icon once). Resolve both to the fixture filename so the
+  // assertions below name the icon, not the delivery form.
   async function bulletMask(page, id) {
     const node = await nodeContent(page, id);
-    return node.locator('.toggle').evaluate((el) => {
+    const raw = await node.locator('.toggle').evaluate((el) => {
       const cs = getComputedStyle(el, '::before');
       return cs.maskImage || cs.webkitMaskImage || '';
     });
+    const m = raw.match(/base64,([A-Za-z0-9+/=]+)/);
+    if (!m) return raw;
+    const svg = Buffer.from(m[1], 'base64').toString('utf8').trim();
+    for (const [name, body] of Object.entries(ICON_FIXTURES)) {
+      if (body === svg) return name;
+    }
+    return raw;
   }
 
   test('collapsed shows the closed icon, expanded shows the open one', async ({ page }) => {

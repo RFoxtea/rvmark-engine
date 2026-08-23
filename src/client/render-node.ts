@@ -21,7 +21,7 @@ import { StateFrame, buildStatePass, prerootFrame } from './state.js';
 import type { StateNode, PassEntry } from './state.js';
 import type { ResolvedAttrs } from '../shared/served.js';
 import { isOrContainsPermalink } from './transclusion.js';
-import { exhibitNotifySelection } from './exhibit.js';
+import { sidepanelNotifySelection } from './sidepanel.js';
 import { applyEventAttr } from './handler-utils.js';
 import { scrollRowIntoMiddle } from './scroll.js';
 import { blastocyteFactory } from './types/blastocyte.js';
@@ -313,7 +313,7 @@ export class RenderNode {
       next._handler.activate?.();
       next._handler.onSelect?.();
       for (const v of next.attrs.getAll('on-select')) applyEventAttr(v, next);
-      exhibitNotifySelection(next);
+      sidepanelNotifySelection(next);
       scrollRowIntoMiddle(nextContent, { vertical: false } as any);
       nextContent.dispatchEvent(new CustomEvent('rvmark-select', { bubbles: true, detail: { meta: next.meta } }));
     }

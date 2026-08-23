@@ -6,7 +6,7 @@
  */
 
 import type { RenderNode, SourceNode } from '../render-node.js';
-import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyBulletAlt, applyListItemProps, wireBulletActions } from '../handler-utils.js';
+import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, sidepanelOpenFromNode, makeToggleBadge, applyBulletProps, applyBulletAlt, applyListItemProps, wireBulletActions } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
 import { wireSpanToggles } from '../span-toggle.js';
 import type { ResolvedAttrs } from '../../shared/served.js';
@@ -30,7 +30,7 @@ export interface TrConfig {
   cellClass:         string;
   contentClass:      string;
   focusableSelector: string;
-  withExhibit?:      boolean;
+  withSidepanel?:      boolean;
   withBullet?:       boolean;
   /** Hook called after li/content setup, before toggle/cells. */
   onSetup?: (ctx: { content: HTMLElement; li: HTMLElement; attrs: ResolvedAttrs; sourceNode: SourceNode }) => void;
@@ -69,7 +69,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
 
     cfg.onSetup?.({ content, li, attrs, sourceNode });
 
-    this._actionVal = cfg.withExhibit ? (attrs.get('action') ?? null) : null;
+    this._actionVal = cfg.withSidepanel ? (attrs.get('action') ?? null) : null;
 
 
     const openVal   = attrs.get('open');
@@ -94,8 +94,8 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
     // buildKeyboardHandler; the final branch is the leaf case, where on-action
     // is the only thing a re-click does.
     if (this._toggles.expandable && !this._toggles.alwaysOpen) {
-      if (this._actionVal === 'exhibit') {
-        wireSelectThenAction(content, () => { exhibitOpenFromNode(rn); applyOnAction(rn); });
+      if (this._actionVal === 'sidepanel') {
+        wireSelectThenAction(content, () => { sidepanelOpenFromNode(rn); applyOnAction(rn); });
       } else {
         wireSelectThenAction(content, (expand) => {
           if (rn.toggleable) this._toggles.toggle(expand);
@@ -103,8 +103,8 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
         }, content, undefined,
         () => rn.toggleable || attrs.has('on-action'));
       }
-    } else if (this._actionVal === 'exhibit') {
-      wireSelectThenAction(content, () => { exhibitOpenFromNode(rn); applyOnAction(rn); });
+    } else if (this._actionVal === 'sidepanel') {
+      wireSelectThenAction(content, () => { sidepanelOpenFromNode(rn); applyOnAction(rn); });
     } else {
       // Leaf row: on-action or nothing. A cell of table text should be
       // double-click selectable when the row does nothing.

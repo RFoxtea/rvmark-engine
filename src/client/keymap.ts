@@ -176,7 +176,7 @@ function build(): HTMLDialogElement {
     if (!inside) d.close();
   });
 
-  // The tree also acts on Escape (interaction.ts closes the exhibit panel), and
+  // The tree also acts on Escape (interaction.ts closes the sidepanel), and
   // a <dialog> Escape must not reach it — showModal's own handling closes the
   // dialog, so this only has to stop the propagation.
   d.addEventListener('keydown', (e) => {

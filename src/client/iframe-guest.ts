@@ -1,14 +1,14 @@
 /**
  * iframe-guest.ts
  *
- * Runs inside an iframe (exhibit or otherwise). Loaded as a module script —
+ * Runs inside an iframe (sidepanel or otherwise). Loaded as a module script —
  * no inline scripts needed.
  *
  * Auto-registers on load (when window.parent !== window):
  *   - Escape key → parent.postMessage({ type: 'rvmark-escape' })
- *   - rvmark-select events → parent.postMessage({ type: 'exhibit-meta', meta })
- *   - rvmark-deselect to nothing → parent.postMessage({ type: 'exhibit-meta', meta: null })
- *   - error / unhandledrejection → parent.postMessage({ type: 'exhibit-error' })
+ *   - rvmark-select events → parent.postMessage({ type: 'sidepanel-meta', meta })
+ *   - rvmark-deselect to nothing → parent.postMessage({ type: 'sidepanel-meta', meta: null })
+ *   - error / unhandledrejection → parent.postMessage({ type: 'sidepanel-error' })
  *
  * Also exports:
  *   - initPrerootListeners(preroot): wires rvmark-preroot-* messages to the
@@ -26,22 +26,22 @@ if (window.parent !== window) {
   });
 
   document.addEventListener('rvmark-select', (e: Event) => {
-    parent.postMessage({ type: 'exhibit-meta', meta: (e as CustomEvent).detail?.meta }, '*');
+    parent.postMessage({ type: 'sidepanel-meta', meta: (e as CustomEvent).detail?.meta }, '*');
   });
 
   document.addEventListener('rvmark-deselect', () => {
     // Tell the host to reset its footer to page meta. On an A→B move the paired
     // rvmark-select posts B's meta right after (same turn), so this null is
     // immediately superseded; when selection goes to nothing, it stands.
-    parent.postMessage({ type: 'exhibit-meta', meta: null }, '*');
+    parent.postMessage({ type: 'sidepanel-meta', meta: null }, '*');
   });
 
   window.addEventListener('error', (e: ErrorEvent) => {
-    parent.postMessage({ type: 'exhibit-error', message: e.message || String(e) }, '*');
+    parent.postMessage({ type: 'sidepanel-error', message: e.message || String(e) }, '*');
   });
 
   window.addEventListener('unhandledrejection', (e: PromiseRejectionEvent) => {
-    parent.postMessage({ type: 'exhibit-error', message: String(e.reason?.message || e.reason || 'Unknown error') }, '*');
+    parent.postMessage({ type: 'sidepanel-error', message: String(e.reason?.message || e.reason || 'Unknown error') }, '*');
   });
 
   // Theme reception — applies vars sent by the host to :root.

@@ -4,14 +4,14 @@
  * User interaction logic for the rvmark tree:
  *   - wireSelectThenAction  — select-then-action click behaviour
  *   - Global event listeners:
- *       document Escape     — close exhibit panel
+ *       document Escape     — close sidepanel
  *       document keydown    — bootstrap arrow-key focus into tree
  *
- * Depends on scroll.ts (scrollRowIntoMiddle) and exhibit.js (exhibitIsOpen, exhibitClose).
+ * Depends on scroll.ts (scrollRowIntoMiddle) and sidepanel.js (sidepanelIsOpen, sidepanelClose).
  */
 
 import { scrollRowIntoMiddle } from './scroll.js';
-import { exhibitIsOpen, exhibitClose } from './exhibit.js';
+import { sidepanelIsOpen, sidepanelClose } from './sidepanel.js';
 import { RenderNode } from './render-node.js';
 import { spanIsInteractive } from './markdown.js';
 
@@ -97,13 +97,13 @@ export function siblingContents(li: HTMLElement): HTMLElement[] {
 
 // ── Global event listeners ─────────────────────────────────────────────────
 
-// Escape closes exhibit panel.
+// Escape closes sidepanel.
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || e.defaultPrevented) return;
-  if (!exhibitIsOpen()) return;
+  if (!sidepanelIsOpen()) return;
   const active = document.activeElement;
   if (!active?.classList.contains('node-content')) return;
-  exhibitClose();
+  sidepanelClose();
   e.preventDefault();
 });
 

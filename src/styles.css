@@ -168,7 +168,7 @@ footer { padding-bottom: 1rem; }
 
   /* The tree column is a size container — node widths and any "narrow column"
      responsive rules below trigger off this, not the viewport. This is what
-     makes the tree reflow when an exhibit panel takes half the screen. */
+     makes the tree reflow when a sidepanel takes half the screen. */
   container-type: inline-size;
   container-name: tree;
   --node-w: min(var(--node-max-w), 100cqi - 1.5rem);
@@ -436,7 +436,7 @@ details[open] > .node-content.node-content--bullet-spins:not(.node-content--bull
    only half-honour the request.
 
    Scoped to the transform transitions on purpose. The colour and opacity
-   transitions elsewhere in this file (link hover, permalink and exhibit-close
+   transitions elsewhere in this file (link hover, permalink and sidepanel-close
    reveals) move nothing on screen, and stripping them would make the UI feel
    abrupt without helping anyone this query is meant to protect.
 
@@ -1259,14 +1259,14 @@ a.static-ref--interpage {
   text-underline-offset: 3px;
 }
 
-/* Exhibit handle — small icon link to the underlying asset */
-a.static-exhibit-link {
+/* Sidepanel handle — small icon link to the underlying asset */
+a.static-sidepanel-link {
   color: var(--muted);
   text-decoration: none;
   font-size: 0.85em;
   margin-left: 0.25em;
 }
-a.static-exhibit-link:hover {
+a.static-sidepanel-link:hover {
   color: var(--accent);
 }
 
@@ -1311,7 +1311,7 @@ a.static-iframe-link {
 
 /* ── Narrow tree column (driven by container width, not viewport) ──
    Fires whether the column is narrow because the viewport is small or
-   because an exhibit/sidepanel has squeezed the tree column. */
+   because a sidepanel/sidepanel has squeezed the tree column. */
 @container tree (max-width: 600px) {
   .tree .tree { padding: 0; }
   .block-body { margin-left: 0; }
@@ -1332,19 +1332,19 @@ html.rvmark-iframe-guest body {
 html.rvmark-iframe-guest footer { display: none; }
 html.rvmark-iframe-guest .tree { padding: 0; }
 
-/* ── rvmark exhibit guest (embedded in an exhibit panel) ── */
-html.rvmark-exhibit-guest,
-html.rvmark-exhibit-guest body {
+/* ── rvmark sidepanel guest (embedded in a sidepanel) ── */
+html.rvmark-sidepanel-guest,
+html.rvmark-sidepanel-guest body {
   padding: 0;
   height: 100%;
   overflow: hidden;
 }
-html.rvmark-exhibit-guest #root {
+html.rvmark-sidepanel-guest #root {
   max-width: none;
   margin: 0;
 }
-html.rvmark-exhibit-guest header,
-html.rvmark-exhibit-guest footer { display: none; }
+html.rvmark-sidepanel-guest header,
+html.rvmark-sidepanel-guest footer { display: none; }
 
 /* ============================================================
    Merged type styles (formerly src/types/*.css).
@@ -1631,10 +1631,10 @@ html.rvmark-exhibit-guest footer { display: none; }
   color: var(--muted);
 }
 
-/* ---- exhibit ---- */
-/* ── Exhibit panel ── */
+/* ---- sidepanel ---- */
+/* ── Sidepanel ── */
 
-.exhibit-panel {
+.sidepanel {
   display: none;
   overflow: hidden;
   background: var(--bg);
@@ -1642,15 +1642,15 @@ html.rvmark-exhibit-guest footer { display: none; }
   position: relative;
 }
 
-#exhibit-divider {
+#sidepanel-divider {
   display: none;
 }
 
 /* Square box, and the × inside it is drawn rather than typed — see the comment
- * in exhibit.ts. A text × is centred on its typographic metrics, not its ink,
+ * in sidepanel.ts. A text × is centred on its typographic metrics, not its ink,
  * so it sits high in the box by a font-dependent amount that no box centring
  * can correct. Two lines across a square viewBox have no such offset. */
-.exhibit-close {
+.sidepanel-close {
   position: absolute;
   top: 0.4rem;
   right: 0.4rem;
@@ -1672,7 +1672,7 @@ html.rvmark-exhibit-guest footer { display: none; }
 /* Sized in the button's own box rather than in em, so the mark cannot drift
  * with an inherited font-size. `display: block` keeps the svg off a text
  * baseline, which would reintroduce the descender gap the glyph had. */
-.exhibit-close svg {
+.sidepanel-close svg {
   display: block;
   width: 0.75rem;
   height: 0.75rem;
@@ -1681,24 +1681,24 @@ html.rvmark-exhibit-guest footer { display: none; }
   stroke-linecap: round;
   fill: none;
 }
-.exhibit-panel:hover .exhibit-close { opacity: 1; }
-@media (hover: none) { .exhibit-close { opacity: 1; } }
-.exhibit-close:hover { color: var(--accent); border-color: var(--accent); }
-.exhibit-close:focus { opacity: 1; outline: 1px solid var(--accent); }
+.sidepanel:hover .sidepanel-close { opacity: 1; }
+@media (hover: none) { .sidepanel-close { opacity: 1; } }
+.sidepanel-close:hover { color: var(--accent); border-color: var(--accent); }
+.sidepanel-close:focus { opacity: 1; outline: 1px solid var(--accent); }
 
 /* The iframe fills all available space. `display: block` is load-bearing: an
  * iframe is inline-replaced by default, so it sits on a text baseline and the
  * line box reserves descender space under it — a few pixels of overflow below
  * the panel that no amount of height: 100% removes. */
-.exhibit-iframe {
+.sidepanel-iframe {
   border: none;
   display: block;
   width: 100%;
   flex: 1;
 }
 
-.exhibit-error,
-.exhibit-hint {
+.sidepanel-error,
+.sidepanel-hint {
   flex: 1;
   display: flex;
   align-items: center;
@@ -1709,7 +1709,7 @@ html.rvmark-exhibit-guest footer { display: none; }
   text-align: center;
 }
 
-.exhibit-error {
+.sidepanel-error {
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -1719,24 +1719,24 @@ html.rvmark-exhibit-guest footer { display: none; }
  * only the inherited line-height separates them — exactly as the single \n did
  * under white-space: pre-line.
  * (The shared rule above supplies the flex centering that positions the hint.) */
-.exhibit-hint {
+.sidepanel-hint {
   flex-direction: column;
 }
 
 /* The Escape instruction only applies where there is a keyboard. The state it
- * accompanies ("No exhibit active.") is shown regardless — on touch the ×
+ * accompanies ("No sidepanel active.") is shown regardless — on touch the ×
  * button is affordance enough, but the reader still needs to know the panel is
  * empty by design rather than broken. */
 @media (hover: none) and (pointer: coarse) {
-  .exhibit-hint-key { display: none; }
+  .sidepanel-hint-key { display: none; }
 }
 
-/* ── Layout: exhibit open ── */
+/* ── Layout: sidepanel open ── */
 /*
- * body.exhibit-open: two-column grid — tree on left, exhibit on right.
+ * body.sidepanel-open: two-column grid — tree on left, sidepanel on right.
  */
 
-body.exhibit-open #root {
+body.sidepanel-open #root {
   max-width: none;
   display: grid;
   grid-template-columns: 1fr 1px 1fr;
@@ -1744,29 +1744,29 @@ body.exhibit-open #root {
   column-gap: 1em;
 }
 
-body.exhibit-open header {
+body.sidepanel-open header {
   grid-column: 1 / -1;
   grid-row: 1;
 }
 
-body.exhibit-open footer {
+body.sidepanel-open footer {
   grid-column: 1 / -1;
   grid-row: 3;
 }
 
-body.exhibit-open #exhibit-divider {
+body.sidepanel-open #sidepanel-divider {
   display: block;
   grid-column: 2;
   grid-row: 2;
   background: var(--border);
 }
 
-body.exhibit-open #tree-scroll {
+body.sidepanel-open #tree-scroll {
   grid-column: 1;
   grid-row: 2;
 }
 
-body.exhibit-open .exhibit-panel {
+body.sidepanel-open .sidepanel {
   display: flex;
   grid-column: 3;
   grid-row: 2;
@@ -1774,31 +1774,31 @@ body.exhibit-open .exhibit-panel {
 
 /* ── Portrait mobile: stack vertically ── */
 @media (max-width: 768px) and (orientation: portrait) {
-  body.exhibit-open #root {
+  body.sidepanel-open #root {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr 1px 1fr auto;
     column-gap: 0;
     row-gap: 1em;
   }
 
-  body.exhibit-open header { display: none !important; }
+  body.sidepanel-open header { display: none !important; }
 
-  body.exhibit-open .exhibit-panel {
+  body.sidepanel-open .sidepanel {
     grid-column: 1;
     grid-row: 2;
   }
 
-  body.exhibit-open #exhibit-divider {
+  body.sidepanel-open #sidepanel-divider {
     grid-column: 1;
     grid-row: 3;
   }
 
-  body.exhibit-open #tree-scroll {
+  body.sidepanel-open #tree-scroll {
     grid-column: 1;
     grid-row: 4;
   }
 
-  body.exhibit-open footer {
+  body.sidepanel-open footer {
     grid-row: 5;
   }
 }
@@ -2058,7 +2058,7 @@ label.tr-toggle:not(.leaf):hover { color: var(--accent); }
   }
 
   header, footer,
-  .exhibit-panel, #exhibit-divider,
+  .sidepanel, #sidepanel-divider,
   .show-hidden-toggle {
     display: none !important;
   }

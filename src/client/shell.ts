@@ -7,7 +7,7 @@
 
 import { mdInline } from './markdown.js';
 import { keymapOpen } from './keymap.js';
-import { prerootSet, prerootDelete } from './exhibit.js';
+import { prerootSet, prerootDelete } from './sidepanel.js';
 import { prerootFrame } from './state.js';
 import { addressToHref, addressOrigin, RVMARK_SEGMENT } from '../shared/shared.js';
 import type { Multimap } from '../shared/multimap.js';

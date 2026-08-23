@@ -38,12 +38,12 @@
   1. {#pass-dash-indicator; show-when: &--dashvar == 1} pass-dash-visible
   2. {#pass-dash-write-node; on-action: set &--dashvar = 99} pass-dash-write-attempt
 
-9. {#pass-exhibit-target} Pass exhibit target
-  1. {#pass-exhibit-indicator; show-when: &exvar == 1} pass-exhibit-visible
-  2. {#pass-exhibit-writer; on-action: set &exvar = 1} pass-exhibit-writer
+9. {#pass-sidepanel-target} Pass sidepanel target
+  1. {#pass-sidepanel-indicator; show-when: &exvar == 1} pass-sidepanel-visible
+  2. {#pass-sidepanel-writer; on-action: set &exvar = 1} pass-sidepanel-writer
 
-10. {#pass-exhibit-blocked-target} Pass exhibit blocked target
-  1. {#pass-exhibit-blocked-indicator; show-when: &exvar == 1} pass-exhibit-blocked-visible
+10. {#pass-sidepanel-blocked-target} Pass sidepanel blocked target
+  1. {#pass-sidepanel-blocked-indicator; show-when: &exvar == 1} pass-sidepanel-blocked-visible
 
 11. {#pass-r-write-blocked-target} Pass r-only write-blocked target
   1. {#pass-r-write-blocked-writer; on-action: set &passvar = 1} pass-r-write-blocked-writer
@@ -55,10 +55,10 @@
 13. {#pass-unknown-key-target} Pass unknown key target
   1. {#pass-unknown-key-indicator; show-when: &unknownvar == 1} pass-unknown-key-visible
 
-14. {#pass-exhibit-rename-target} Pass exhibit rename target
-  1. {#pass-exhibit-rename-indicator; show-when: &exvar == 1} pass-exhibit-rename-visible
-  2. {#pass-exhibit-rename-writer; on-action: set &exvar = 1} pass-exhibit-rename-writer
+14. {#pass-sidepanel-rename-target} Pass sidepanel rename target
+  1. {#pass-sidepanel-rename-indicator; show-when: &exvar == 1} pass-sidepanel-rename-visible
+  2. {#pass-sidepanel-rename-writer; on-action: set &exvar = 1} pass-sidepanel-rename-writer
 
-15. {#pass-exhibit-preroot-target} Pass exhibit preroot target
-  1. {#pass-exhibit-preroot-indicator; show-when: &prerootvar == 1} pass-exhibit-preroot-visible
+15. {#pass-sidepanel-preroot-target} Pass sidepanel preroot target
+  1. {#pass-sidepanel-preroot-indicator; show-when: &prerootvar == 1} pass-sidepanel-preroot-visible
 

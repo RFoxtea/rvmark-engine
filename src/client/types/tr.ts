@@ -19,7 +19,7 @@ class TrTypeHandler extends TrTypeHandlerBase {
       cellClass:         'tr-cell',
       contentClass:      'node-content--tr',
       focusableSelector: '.tr-cell a[href]',
-      withExhibit:       true,
+      withSidepanel:       true,
       withBullet:        true,
     });
   }

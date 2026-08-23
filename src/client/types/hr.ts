@@ -30,7 +30,7 @@ class HrTypeHandler implements TypeHandler {
     renderNode.selectable = false;
     renderNode.meta = sourceNode.meta;
 
-    // ── Exhibit scope ────────────────────────────────────────────────────────
+    // ── Sidepanel scope ────────────────────────────────────────────────────────
 
     const hr = document.createElement('hr');
     hr.className = 'divider-rule';

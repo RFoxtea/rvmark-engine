@@ -8,7 +8,7 @@
 import type { NodeTypeFactory, SourceNode, ResolvedAttrs, StaticBuildContext } from '../render-node.js';
 import { factoryRegister, RenderNode } from '../render-node.js';
 
-import { buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyOnAction, exhibitOpenFromNode, makeToggleBadge, applyBulletProps, applyBulletAlt, applyListItemProps, wireBulletActions } from '../handler-utils.js';
+import { buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyOnAction, sidepanelOpenFromNode, makeToggleBadge, applyBulletProps, applyBulletAlt, applyListItemProps, wireBulletActions } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
 import { wireSpanToggles } from '../span-toggle.js';
 import { BaseTypeHandler } from '../base-handler.js';
@@ -101,7 +101,7 @@ class TextTypeHandler extends BaseTypeHandler {
 
     const { content } = this;
 
-    const { exhibitButton } = resolveTransclusionConfig(sourceNode, attrs);
+    const { sidepanelButton } = resolveTransclusionConfig(sourceNode, attrs);
 
     this.buildToggleBullet(sourceNode);
     // Built after the bullet, which it needs; a listbox node is always-open
@@ -139,7 +139,7 @@ class TextTypeHandler extends BaseTypeHandler {
 
     // A nonempty listbox cannot be cleared, so the bullet is not offered as a
     // way to clear it — it keeps only whatever expand job it already had.
-    this.buildClickWiring(!!exhibitButton, hasListbox && !attrs.has('listbox-nonempty'));
+    this.buildClickWiring(!!sidepanelButton, hasListbox && !attrs.has('listbox-nonempty'));
     this.buildKeyboardHandler();
 
     this.deactivate();
@@ -304,7 +304,7 @@ class TextTypeHandler extends BaseTypeHandler {
     this._unwireSpanToggles?.();
   }
 
-  private buildClickWiring(exhibitButton: boolean, hasListbox: boolean) {
+  private buildClickWiring(sidepanelButton: boolean, hasListbox: boolean) {
     const { tog, lbl, content, rn, toggles } = this;
 
     // The bullet expands when it can, and otherwise clears a listbox selection.
@@ -317,13 +317,13 @@ class TextTypeHandler extends BaseTypeHandler {
       listbox: hasListbox ? () => this._listboxNav : undefined,
     });
 
-    // Re-click wiring: exhibit opens the exhibit; otherwise toggle expand/collapse.
+    // Re-click wiring: sidepanel opens the sidepanel; otherwise toggle expand/collapse.
     // Every branch fires on-action too, so re-clicking a selected node matches
     // what Enter/Space already do in buildKeyboardHandler.
     const notTog = (el: HTMLElement) => el === tog || tog.contains(el);
-    if (exhibitButton) {
+    if (sidepanelButton) {
       lbl.style.cursor = 'pointer';
-      wireSelectThenAction(content, () => { exhibitOpenFromNode(rn); applyOnAction(rn); }, content, notTog);
+      wireSelectThenAction(content, () => { sidepanelOpenFromNode(rn); applyOnAction(rn); }, content, notTog);
     } else if (toggles.expandable && !toggles.alwaysOpen) {
       wireSelectThenAction(content, (expand) => {
         if (rn.toggleable) toggles.toggle(expand, { scroll: false });

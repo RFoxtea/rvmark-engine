@@ -179,7 +179,7 @@ async function init(page: RvmarkPageContext): Promise<void> {
 
   window.addEventListener('message', (e: MessageEvent) => {
     if (e.origin !== window.location.origin) return;
-    if (e.data?.type === 'exhibit-meta') setFooter(e.data.meta);
+    if (e.data?.type === 'sidepanel-meta') setFooter(e.data.meta);
   });
 }
 

@@ -170,7 +170,7 @@ function rejected(w: PortableNode, baseUrl: string, message: string): SourceNode
     slug: str(w?.slug), permalinkId: str(w?.permalinkId), numbering: str(w?.numbering),
     attrs, tags: [], label: `⚠ ${message}`, bodyLines: [],
     children: [], hasChildren: false,
-    meta: {}, searchable: false, exhibit: null,
+    meta: {}, searchable: false, sidepanel: null,
     address:     { baseUrl, key: str(w?.key) },
     pageAddress: str(w?.pageAddress),
     stateScope:  str(w?.stateScope),
@@ -495,7 +495,7 @@ export async function fetchMediaAllOn(
 
 /**
  * `fetchMediaAllOn` for a caller holding an address rather than a node — an
- * exhibit strategy, which is handed the file its ref was written in and never
+ * sidepanel strategy, which is handed the file its ref was written in and never
  * the node that wrote it. Same query, same reason to use it: the origin can
  * read its own files without CORS and nothing here can.
  */

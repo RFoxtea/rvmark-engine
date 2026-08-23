@@ -342,7 +342,7 @@ function renderInlineSpan(token: any, label: string): string {
   // A conditional span starts hidden and is revealed by wireSpanVisibility once
   // it has a state frame to read. Hiding here rather than after wiring is what
   // keeps a span that starts false from flashing on first paint; a span with no
-  // live state (static build, exhibit preview) simply stays hidden, matching how
+  // live state (static build, sidepanel preview) simply stays hidden, matching how
   // an unmounted show-when node renders as absent.
   if (attrs.has('show-when')) classes.push('span-conditional-pending');
   for (const c of attrs.getAll('class')) classes.push(...c.split(/\s+/).filter(Boolean));

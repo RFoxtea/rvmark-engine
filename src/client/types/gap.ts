@@ -35,7 +35,7 @@ class GapTypeHandler implements TypeHandler {
     renderNode.selectable = false;
     renderNode.meta = sourceNode.meta;
 
-    // ── Exhibit scope ────────────────────────────────────────────────────────
+    // ── Sidepanel scope ────────────────────────────────────────────────────────
   }
 
   getFocusableElements(_content: HTMLElement): NodeListOf<HTMLElement> {

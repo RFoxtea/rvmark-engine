@@ -14,7 +14,7 @@
  * buildNode() produces a real RawNode with the plumbing fields stubbed, and
  * finalising goes through the *same* exported assignOrdinals() that parse() uses,
  * so numbering/slug/permalinkId come out identically. Nothing downstream (render,
- * transclusion, exhibit, stringify) can tell a built node from a parsed one.
+ * transclusion, sidepanel, stringify) can tell a built node from a parsed one.
  *
  * Exports:
  *   buildNode(spec)            → a RawNode (ordinals stubbed; call assignOrdinals)

@@ -109,7 +109,7 @@ export interface Origin {
    *
    * Distinct from `resolveResources` because the two answer different
    * questions. That one says WHERE a resource is served from, and a URL is what
-   * its callers need — exhibit puts one in an iframe's src. This one carries
+   * its callers need — sidepanel puts one in an iframe's src. This one carries
    * the BYTES, for a caller that cannot use a URL: because it must paint
    * something it cannot watch load, or because the URL is cross-origin and a
    * `fetch` of it would need CORS the peer has no reason to have configured.
@@ -429,7 +429,7 @@ class RvmarkOrigin implements Origin {
   /**
    * A media/asset ref → the URL it is served from. Same path arithmetic
    * `served.media` performs, reached by key rather than by node: the caller
-   * that wants this — exhibit's markdown and html strategies — is holding a ref
+   * that wants this — sidepanel's markdown and html strategies — is holding a ref
    * off a node's attrs and a key, not a node to read `served` off.
    *
    * Absolute http(s) refs pass through: a ref that names its own location is

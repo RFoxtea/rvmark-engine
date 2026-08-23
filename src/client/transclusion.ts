@@ -5,7 +5,7 @@
  * No DOM, no side effects.
  *
  * Exports:
- *   resolveTransclusionConfig  — derive all transclusion/exhibit refs from node attrs
+ *   resolveTransclusionConfig  — derive all transclusion/sidepanel refs from node attrs
  *   resolveEffectiveChildren   — follow a node's transclude chain recursively
  *   isOrContainsPermalink      — walk parsed tree to check if targetSlug is node or descendant
  */
@@ -17,8 +17,8 @@ import type { SourceNode, NodeAttrs } from '../shared/parser.js';
 interface TransclusionConfig {
   embedVal:       string | null;
   childrenList:   string[] | null;
-  exhibitVal:     string | null;
-  exhibitButton:  boolean;
+  sidepanelVal:     string | null;
+  sidepanelButton:  boolean;
   transcludeMode: 'link' | 'children' | null;
 }
 
@@ -41,12 +41,12 @@ export function resolveTransclusionConfig(node: SourceNode, attrs: NodeAttrs): T
   const embedVal     = !isChildrenMode && embedList ? embedList[0] : null;
   const childrenList = isChildrenMode ? embedList : null;
 
-  const exhibitVal    = attrs.get('exhibit') ?? null;
-  const exhibitButton: boolean = attrs.get('action') === 'exhibit';
+  const sidepanelVal    = attrs.get('sidepanel') ?? null;
+  const sidepanelButton: boolean = attrs.get('action') === 'sidepanel';
 
   const transcludeMode: 'link' | 'children' | null = embedVal ? 'link' : (childrenList ? 'children' : null);
 
-  return { embedVal, childrenList, exhibitVal, exhibitButton, transcludeMode };
+  return { embedVal, childrenList, sidepanelVal, sidepanelButton, transcludeMode };
 }
 
 // ── resolveEffectiveChildren ──────────────────────────────────────────────

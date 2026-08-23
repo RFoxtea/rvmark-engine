@@ -20,7 +20,7 @@
 
 import type { NodeTypeFactory, SourceNode, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, exhibitOpenFromNode, wireBulletActions } from '../handler-utils.js';
+import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, sidepanelOpenFromNode, wireBulletActions } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
 import { wireSpanToggles } from '../span-toggle.js';
 import type { ResolvedAttrs } from '../../shared/served.js';
@@ -103,8 +103,8 @@ class BlockTypeHandler extends BaseTypeHandler {
     const { content } = this;
 
     this._actionVal = attrs.get('action') ?? null;
-    if (this._actionVal === 'exhibit') {
-      wireSelectThenAction(content, () => { exhibitOpenFromNode(rn); applyOnAction(rn); });
+    if (this._actionVal === 'sidepanel') {
+      wireSelectThenAction(content, () => { sidepanelOpenFromNode(rn); applyOnAction(rn); });
     } else {
       // A block is prose first: unless it declares on-action there is nothing a
       // re-click does, and double-click must select a word like anywhere else.

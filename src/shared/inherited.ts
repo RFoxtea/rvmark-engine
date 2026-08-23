@@ -21,7 +21,7 @@
  * parent-pointer walk cannot supply without teaching every consumer about file
  * heads and tag resolution, and is why the parser owns the threading.
  *
- * The parser itself knows nothing about meta, searchable, or exhibit. It carries
+ * The parser itself knows nothing about meta, searchable, or sidepanel. It carries
  * an opaque bag of values down the recursion, asking each registered property to
  * seed and derive itself. Adding an inherited property is one registration here.
  */
@@ -59,8 +59,8 @@ export interface InheritedProp<T = unknown> {
 /** A bag in transit: every property in its declared wire form. */
 export type WireBag = Record<string, unknown>;
 
-/** The in-force `{exhibit}` for a node — see the `exhibit` registration below. */
-export interface ExhibitScope {
+/** The in-force `{sidepanel}` for a node — see the `sidepanel` registration below. */
+export interface SidepanelScope {
   rawRef: string;
   attrs:  NodeAttrs;
 }
@@ -76,7 +76,7 @@ export interface ExhibitScope {
 export interface InheritedBag {
   meta:       Record<string, unknown>;
   searchable: boolean;
-  exhibit:    ExhibitScope | null;
+  sidepanel:    SidepanelScope | null;
 }
 
 const _props = new Map<string, InheritedProp<any>>();
@@ -198,7 +198,7 @@ registerInherited<Record<string, unknown>>({
     }
     // Share the parent's object when this node contributes nothing — a derived
     // bag value is never mutated after construction, and an unconditional spread
-    // gives every node in a subtree its own identical copy. Same as `exhibit`
+    // gives every node in a subtree its own identical copy. Same as `sidepanel`
     // below, which returns `parentScope` by reference.
     const hasOwn = Object.keys(tagMeta).length > 0 || Object.keys(attrMeta).length > 0;
     if (!hasOwn) return parentMeta;
@@ -207,25 +207,25 @@ registerInherited<Record<string, unknown>>({
 });
 
 /**
- * exhibit — the side-panel target a node presents for joint attention. Declared
- * once with `{exhibit: ./path#slug}` and in force for that whole subtree, so
+ * sidepanel — the sidepanel target a node presents for joint attention. Declared
+ * once with `{sidepanel: ./path#slug}` and in force for that whole subtree, so
  * selecting anything beneath the declaring node keeps the same panel up.
  *
  * A nested declaration overrides for its own subtree — nearest wins, like meta.
  *
  * Carried as the raw ref plus the declaring node's attrs (the panel reads
- * `exhibit-pass` off them). The ref stays raw: inheritance never
+ * `sidepanel-pass` off them). The ref stays raw: inheritance never
  * crosses a file, so every node holding a scope is in the file that declared it,
  * and the reader resolves the ref against its own `sourceFile`.
  */
-registerInherited<ExhibitScope | null>({
-  name:  'exhibit',
+registerInherited<SidepanelScope | null>({
+  name:  'sidepanel',
   empty: null,
-  // A file-level {exhibit} would be a page-wide panel; not a feature today.
+  // A file-level {sidepanel} would be a page-wide panel; not a feature today.
   seed:  () => null,
   derive: (parentScope, raw, tagDefs) => {
     const attrs = mergeNodeAttrs(tagsNodeAttrs(raw.tags, tagDefs), raw.attrs);
-    const own   = attrs.get('exhibit');
+    const own   = attrs.get('sidepanel');
     return own ? { rawRef: own, attrs } : parentScope;
   },
   // `attrs` is a Multimap and would arrive method-less; entries are the same
@@ -237,7 +237,7 @@ registerInherited<ExhibitScope | null>({
     // and a bare string is one — it would quietly yield an entry per character
     // instead of failing. bagFromWire turns a throw here into `empty`.
     if (typeof w?.rawRef !== 'string' || !Array.isArray(w.attrs)) {
-      throw new Error('malformed exhibit scope on the wire');
+      throw new Error('malformed sidepanel scope on the wire');
     }
     return { rawRef: w.rawRef, attrs: new Multimap(w.attrs as Array<[string, string]>) };
   },

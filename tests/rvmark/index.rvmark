@@ -33,7 +33,7 @@
   12. {#child-math} Inline math: $x = 1$
   13. {#child-cross-embed; => ./other#other-root}
   14. {#child-cross-children; => ./other#other-root} cross-children label
-  15. {#child-exhibit; exhibit: ./other#other-root; action: exhibit} Exhibit node
+  15. {#child-sidepanel; sidepanel: ./other#other-root; action: sidepanel} Sidepanel node
   16. {#child-remote-embed; => https://test.invalid/remote.rvmark#remote-root} Remote embed
   17. {#embed-ai-node; => #embed-ai-target} Embed of AI-tagged node
   18. {#search-root-node; searchable; open} Search fixture SEARCHABLE_TOP_TEXT
@@ -62,17 +62,17 @@
 30. {#search-cycle-target} Cycle target, transcludes its own host back
   1. {=> #search-transclude-cycle}
 
-31. {#exhibit-scope-root; exhibit: ./other#other-root} Exhibit scope root
-  1. {#exhibit-scope-child} Child under the exhibit scope
-    1. {#exhibit-scope-grandchild} Grandchild under the exhibit scope
-  2. {#exhibit-scope-nested; exhibit: ./other#pass-exhibit-target} Nested override
-    1. {#exhibit-scope-nested-child} Child under the nested override
-  3. {#exhibit-scope-transclude-host; => ./other#other-root} Host transcluding foreign content
+31. {#sidepanel-scope-root; sidepanel: ./other#other-root} Sidepanel scope root
+  1. {#sidepanel-scope-child} Child under the sidepanel scope
+    1. {#sidepanel-scope-grandchild} Grandchild under the sidepanel scope
+  2. {#sidepanel-scope-nested; sidepanel: ./other#pass-sidepanel-target} Nested override
+    1. {#sidepanel-scope-nested-child} Child under the nested override
+  3. {#sidepanel-scope-transclude-host; => ./other#other-root} Host transcluding foreign content
 
-32. {#exhibit-outside} Node outside any exhibit scope
-  1. {#exhibit-outside-child} Child outside any exhibit scope
+32. {#sidepanel-outside} Node outside any sidepanel scope
+  1. {#sidepanel-outside-child} Child outside any sidepanel scope
 
-33. {#exhibit-action-no-scope; action: exhibit} Opens the panel with no exhibit in force
+33. {#sidepanel-action-no-scope; action: sidepanel} Opens the panel with no sidepanel in force
 
 2. {#embed-target} Embed target node
   1. Embed target child A
@@ -131,13 +131,13 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
     1. {#pass-host-rename; on-action: set &passvar = 1; => ./other#pass-rename-target; children-pass: &remotevar=&passvar} pass-host-rename
   6. {#pass-scope-dash; let &--dashvar = 0; open} pass-scope-dash
     1. {#pass-host-dash; on-action: set &--dashvar = 1; => ./other#pass-dash-target} pass-host-dash
-  7. {#pass-scope-exhibit; let &exvar = 0; open} pass-scope-exhibit
-    1. {#pass-exhibit-host; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: &exvar rw} pass-exhibit-host
-    2. {#pass-exhibit-host-indicator; show-when: &exvar == 1} pass-exhibit-written
-  8. {#pass-scope-exhibit-blocked; let &exvar = 0; open} pass-scope-exhibit-blocked
-    1. {#pass-exhibit-blocked-host; exhibit: ./other#pass-exhibit-blocked-target; action: exhibit} pass-exhibit-blocked-host
-  9. {#pass-scope-exhibit-ro; let &exvar = 0; open} pass-scope-exhibit-ro
-    1. {#pass-exhibit-ro-host; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: &exvar} pass-exhibit-ro-host
+  7. {#pass-scope-sidepanel; let &exvar = 0; open} pass-scope-sidepanel
+    1. {#pass-sidepanel-host; sidepanel: ./other#pass-sidepanel-target; action: sidepanel; sidepanel-pass: &exvar rw} pass-sidepanel-host
+    2. {#pass-sidepanel-host-indicator; show-when: &exvar == 1} pass-sidepanel-written
+  8. {#pass-scope-sidepanel-blocked; let &exvar = 0; open} pass-scope-sidepanel-blocked
+    1. {#pass-sidepanel-blocked-host; sidepanel: ./other#pass-sidepanel-blocked-target; action: sidepanel} pass-sidepanel-blocked-host
+  9. {#pass-scope-sidepanel-ro; let &exvar = 0; open} pass-scope-sidepanel-ro
+    1. {#pass-sidepanel-ro-host; sidepanel: ./other#pass-sidepanel-target; action: sidepanel; sidepanel-pass: &exvar} pass-sidepanel-ro-host
   10. {#pass-scope-r-write-blocked; let &passvar = 0; open} pass-scope-r-write-blocked
     1. {#pass-host-r-write-blocked; => ./other#pass-r-write-blocked-target; children-pass: &passvar} pass-host-r-write-blocked
     2. {#pass-host-r-write-blocked-indicator; show-when: &passvar == 1} pass-r-write-blocked-host-written
@@ -149,19 +149,19 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
     2. {#pass-host-multi-indicator; show-when: &bvar == 1} pass-multi-host-written
   13. {#pass-scope-unknown-key; let &passvar = 0; open} pass-scope-unknown-key
     1. {#pass-host-unknown-key; => ./other#pass-unknown-key-target; children-pass: &passvar} pass-host-unknown-key
-  14. {#pass-scope-exhibit-reactive; let &exvar = 0; open} pass-scope-exhibit-reactive
-    1. {#pass-exhibit-reactive-host; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: &exvar rw} [zero]{set &exvar = 0} [one]{set &exvar = 1}
-  15. {#pass-scope-exhibit-rename; let &exlocal = 0; open} pass-scope-exhibit-rename
-    1. {#pass-exhibit-rename-host; exhibit: ./other#pass-exhibit-rename-target; action: exhibit; exhibit-pass: &exvar=&exlocal rw} pass-exhibit-rename-host
-    2. {#pass-exhibit-rename-indicator; show-when: &exlocal == 1} pass-exhibit-rename-written
-  16. {#pass-scope-exhibit-preroot; open} pass-scope-exhibit-preroot
-    1. {#pass-exhibit-preroot-host; exhibit: ./other#pass-exhibit-preroot-target; action: exhibit} pass-exhibit-preroot-host
-  17. {#pass-scope-exhibit-rewire-a; let &exvar = 0; open} pass-scope-exhibit-rewire-a
-    1. {#pass-exhibit-rewire-host-a; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: &exvar rw} pass-exhibit-rewire-host-a
-    2. {#pass-exhibit-rewire-a-indicator; show-when: &exvar == 1} pass-exhibit-rewire-a-written
-  18. {#pass-scope-exhibit-rewire-b; let &exvar = 0; open} pass-scope-exhibit-rewire-b
-    1. {#pass-exhibit-rewire-host-b; exhibit: ./other#pass-exhibit-target; action: exhibit; exhibit-pass: &exvar rw} pass-exhibit-rewire-host-b
-    2. {#pass-exhibit-rewire-b-indicator; show-when: &exvar == 1} pass-exhibit-rewire-b-written
+  14. {#pass-scope-sidepanel-reactive; let &exvar = 0; open} pass-scope-sidepanel-reactive
+    1. {#pass-sidepanel-reactive-host; sidepanel: ./other#pass-sidepanel-target; action: sidepanel; sidepanel-pass: &exvar rw} [zero]{set &exvar = 0} [one]{set &exvar = 1}
+  15. {#pass-scope-sidepanel-rename; let &exlocal = 0; open} pass-scope-sidepanel-rename
+    1. {#pass-sidepanel-rename-host; sidepanel: ./other#pass-sidepanel-rename-target; action: sidepanel; sidepanel-pass: &exvar=&exlocal rw} pass-sidepanel-rename-host
+    2. {#pass-sidepanel-rename-indicator; show-when: &exlocal == 1} pass-sidepanel-rename-written
+  16. {#pass-scope-sidepanel-preroot; open} pass-scope-sidepanel-preroot
+    1. {#pass-sidepanel-preroot-host; sidepanel: ./other#pass-sidepanel-preroot-target; action: sidepanel} pass-sidepanel-preroot-host
+  17. {#pass-scope-sidepanel-rewire-a; let &exvar = 0; open} pass-scope-sidepanel-rewire-a
+    1. {#pass-sidepanel-rewire-host-a; sidepanel: ./other#pass-sidepanel-target; action: sidepanel; sidepanel-pass: &exvar rw} pass-sidepanel-rewire-host-a
+    2. {#pass-sidepanel-rewire-a-indicator; show-when: &exvar == 1} pass-sidepanel-rewire-a-written
+  18. {#pass-scope-sidepanel-rewire-b; let &exvar = 0; open} pass-scope-sidepanel-rewire-b
+    1. {#pass-sidepanel-rewire-host-b; sidepanel: ./other#pass-sidepanel-target; action: sidepanel; sidepanel-pass: &exvar rw} pass-sidepanel-rewire-host-b
+    2. {#pass-sidepanel-rewire-b-indicator; show-when: &exvar == 1} pass-sidepanel-rewire-b-written
 23. {#iframe-pass-root; open} iframe-pass fixture root
   1. {#iframe-pass-scope-rw; let &iframevar = 0; open} iframe-pass-scope-rw
     1. {#iframe-pass-host-rw; = iframe; iframe-pass: &iframevar rw} ./iframe-fixture.html

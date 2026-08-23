@@ -1,7 +1,7 @@
 /**
  * iframe-host.ts
  *
- * Host-side iframe protocol helpers shared by exhibit.ts and iframe.ts.
+ * Host-side iframe protocol helpers shared by sidepanel.ts and iframe.ts.
  *
  * Handles:
  *   - Broadcasting preroot state to guest iframes (rvmark-preroot-*)

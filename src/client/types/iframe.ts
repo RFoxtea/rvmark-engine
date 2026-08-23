@@ -180,7 +180,7 @@ class IframeTypeHandler extends BaseTypeHandler {
     const content = this.content;
     content.classList.add('node-content--iframe');
 
-    // ── Click / exhibit wiring ────────────────────────────────────────────────
+    // ── Click / sidepanel wiring ────────────────────────────────────────────────
 
     // No re-click action: the iframe owns its own interior clicks.
     wireSelectThenAction(content, () => {}, content, undefined, () => false);

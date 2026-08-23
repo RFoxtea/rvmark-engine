@@ -261,7 +261,7 @@ export interface SourceNode {
   meta:       Record<string, unknown>;
   children:   SourceNode[];
   searchable: boolean;
-  exhibit:    import('./inherited.js').ExhibitScope | null;
+  sidepanel:    import('./inherited.js').SidepanelScope | null;
 
   attrs:      NodeAttrs;
   tags:       ResolvedTag[];

@@ -25,8 +25,8 @@ import { resolveRefOn, resolveMediaOn, resolveMediaAllOn, fetchMediaAllOn, child
 import { parseTranscludeEntry } from '../shared/shared.js';
 import { TRANSCLUDE_DEADLINE_MS } from './constants.js';
 import type { PassEntry, PassMode, StateNode } from './state.js';
-import { exhibitOpenFromNode } from './exhibit.js';
-export { exhibitOpenFromNode };
+import { sidepanelOpenFromNode } from './sidepanel.js';
+export { sidepanelOpenFromNode };
 
 // ── parsePass ──────────────────────────────────────────────────────────────
 // Parse a `pass` or `children-pass` attribute value into PassEntry[].
@@ -236,16 +236,16 @@ export function listboxKeydown(
 // ArrowRight for action: link). Handlers should call this at the top of their
 // keydown listener and bail if it returns true.
 //
-// Recognized actions: 'exhibit', 'link', 'none'.
+// Recognized actions: 'sidepanel', 'link', 'none'.
 export function actionKeydown(e: KeyboardEvent, rn: RenderNode): boolean {
   const actionVal = rn.sourceNode.attrs.get('action');
   if (actionVal === undefined) return false;
   const content = rn.content;
 
-  if (actionVal === 'exhibit') {
+  if (actionVal === 'sidepanel') {
     if (e.key === 'Enter' || e.key === ' ') {
       if (e.target !== content) return false;
-      exhibitOpenFromNode(rn);
+      sidepanelOpenFromNode(rn);
       applyOnAction(rn);
       e.preventDefault();
       return true;

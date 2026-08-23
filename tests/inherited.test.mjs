@@ -21,7 +21,7 @@ import { parse, resolveFile } from '../out/shared/parser.js';
 import { Multimap } from '../out/shared/multimap.js';
 import { seedBag, deriveBag, emptyBag, bagOf, bagToWire, bagFromWire, inheritedProps } from '../out/shared/inherited.js';
 import { serializeNode, deserializeNode } from '../out/shared/portable-node.js';
-import { exhibitConfigOf } from '../out/client/exhibit.js';
+import { sidepanelConfigOf } from '../out/client/sidepanel.js';
 import { StateFrame, buildStatePass } from '../out/client/state.js';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), 'rvmark');
@@ -44,7 +44,7 @@ function nodeOf(file, slug) {
 
 test('every registered property supplies the full contract', () => {
   const props = inheritedProps();
-  assert.ok(props.length >= 3, 'expected at least meta, searchable, exhibit');
+  assert.ok(props.length >= 3, 'expected at least meta, searchable, sidepanel');
   for (const p of props) {
     assert.equal(typeof p.name, 'string', `${p.name}: name`);
     assert.equal(typeof p.seed, 'function', `${p.name}: seed`);
@@ -60,7 +60,7 @@ test('emptyBag covers exactly the registered properties', () => {
 });
 
 test('bagOf copies every registered property off a node', () => {
-  const bag = bagOf(nodeOf(index, 'exhibit-scope-child'));
+  const bag = bagOf(nodeOf(index, 'sidepanel-scope-child'));
   const names = inheritedProps().map(p => p.name).sort();
   assert.deepEqual(Object.keys(bag).sort(), names);
 });
@@ -76,32 +76,32 @@ test('every registered property declares toWire and fromWire together or not at 
   }
 });
 
-test('an exhibit scope survives a structured clone with its attrs live', () => {
-  const node = nodeOf(index, 'exhibit-scope-child');
-  assert.ok(node.exhibit, 'fixture node carries no exhibit scope');
+test('a sidepanel scope survives a structured clone with its attrs live', () => {
+  const node = nodeOf(index, 'sidepanel-scope-child');
+  assert.ok(node.sidepanel, 'fixture node carries no sidepanel scope');
 
   const back = bagFromWire(structuredClone(bagToWire(node)));
-  assert.equal(back.exhibit.rawRef, node.exhibit.rawRef);
-  assert.equal(typeof back.exhibit.attrs.get, 'function');
-  assert.deepEqual(back.exhibit.attrs.allEntries(), node.exhibit.attrs.allEntries());
+  assert.equal(back.sidepanel.rawRef, node.sidepanel.rawRef);
+  assert.equal(typeof back.sidepanel.attrs.get, 'function');
+  assert.deepEqual(back.sidepanel.attrs.allEntries(), node.sidepanel.attrs.allEntries());
 });
 
 test('a node round-trips through an envoy-shaped clone with its scope intact', () => {
-  const node = nodeOf(index, 'exhibit-scope-child');
+  const node = nodeOf(index, 'sidepanel-scope-child');
   // Serialization reads the node's own address for its key. A node straight out
   // of the parser has not been through a SourceFile, so it has none — the point
   // of the test is the inherited bag surviving the clone, not the addressing.
-  node.address = { baseUrl: 'https://example.test', key: '/_rvmark/index.rvmark#exhibit-scope-child' };
+  node.address = { baseUrl: 'https://example.test', key: '/_rvmark/index.rvmark#sidepanel-scope-child' };
   node.pageAddress = 'https://example.test/_rvmark/index.rvmark';
 
   const back = deserializeNode(structuredClone(serializeNode(node)), 'https://example.test');
-  assert.equal(typeof back.exhibit.attrs.get, 'function');
-  assert.equal(back.exhibit.attrs.get('exhibit'), node.exhibit.attrs.get('exhibit'));
+  assert.equal(typeof back.sidepanel.attrs.get, 'function');
+  assert.equal(back.sidepanel.attrs.get('sidepanel'), node.sidepanel.attrs.get('sidepanel'));
 });
 
 test('a node crossing the wire arrives without its subtree, but knowing it has one', () => {
-  const node = nodeOf(index, 'exhibit-scope-root');
-  node.address = { baseUrl: 'https://example.test', key: '/_rvmark/index.rvmark#exhibit-scope-root' };
+  const node = nodeOf(index, 'sidepanel-scope-root');
+  node.address = { baseUrl: 'https://example.test', key: '/_rvmark/index.rvmark#sidepanel-scope-root' };
   node.pageAddress = 'https://example.test/_rvmark/index.rvmark';
   assert.ok(node.children.length, 'fixture node has no children to drop');
 
@@ -113,12 +113,12 @@ test('a node crossing the wire arrives without its subtree, but knowing it has o
   assert.deepEqual(back.children, [], 'a node arrives with no children in hand');
   assert.equal(back.hasChildren, true, 'but knowing childrenOf would answer');
   assert.equal(back.address.baseUrl, 'https://example.test');
-  assert.equal(back.address.key, '/_rvmark/index.rvmark#exhibit-scope-root');
+  assert.equal(back.address.key, '/_rvmark/index.rvmark#sidepanel-scope-root');
 });
 
 test('a bag whose wire form is malformed falls back rather than throwing', () => {
-  const bag = bagFromWire({ exhibit: { rawRef: './x#y', attrs: 'not entries' } });
-  assert.equal(bag.exhibit, null);
+  const bag = bagFromWire({ sidepanel: { rawRef: './x#y', attrs: 'not entries' } });
+  assert.equal(bag.sidepanel, null);
 });
 
 test('a bag missing from the wire entirely comes back empty, not undefined', () => {
@@ -135,79 +135,79 @@ test('seedBag with an empty head equals the empty bag', () => {
   assert.deepEqual(seedBag(EMPTY_HEAD), emptyBag());
 });
 
-// ── exhibit: inheritance ──────────────────────────────────────────────────────
+// ── sidepanel: inheritance ──────────────────────────────────────────────────────
 
-test('the declaring node carries its own exhibit', () => {
-  const node = nodeOf(index, 'exhibit-scope-root');
-  assert.equal(node.exhibit.rawRef, './other#other-root');
+test('the declaring node carries its own sidepanel', () => {
+  const node = nodeOf(index, 'sidepanel-scope-root');
+  assert.equal(node.sidepanel.rawRef, './other#other-root');
 });
 
-test('a child inherits the exhibit of its declaring ancestor', () => {
-  assert.equal(nodeOf(index, 'exhibit-scope-child').exhibit.rawRef, './other#other-root');
+test('a child inherits the sidepanel of its declaring ancestor', () => {
+  assert.equal(nodeOf(index, 'sidepanel-scope-child').sidepanel.rawRef, './other#other-root');
 });
 
 test('inheritance reaches arbitrarily deep, not just one level', () => {
-  assert.equal(nodeOf(index, 'exhibit-scope-grandchild').exhibit.rawRef, './other#other-root');
+  assert.equal(nodeOf(index, 'sidepanel-scope-grandchild').sidepanel.rawRef, './other#other-root');
 });
 
 test('a nested declaration overrides for its own subtree', () => {
-  assert.equal(nodeOf(index, 'exhibit-scope-nested').exhibit.rawRef, './other#pass-exhibit-target');
+  assert.equal(nodeOf(index, 'sidepanel-scope-nested').sidepanel.rawRef, './other#pass-sidepanel-target');
 });
 
 test('the override applies below the node that declares it', () => {
-  assert.equal(nodeOf(index, 'exhibit-scope-nested-child').exhibit.rawRef, './other#pass-exhibit-target');
+  assert.equal(nodeOf(index, 'sidepanel-scope-nested-child').sidepanel.rawRef, './other#pass-sidepanel-target');
 });
 
 test('a nested override does not leak back to its siblings', () => {
-  assert.equal(nodeOf(index, 'exhibit-scope-child').exhibit.rawRef, './other#other-root');
+  assert.equal(nodeOf(index, 'sidepanel-scope-child').sidepanel.rawRef, './other#other-root');
 });
 
-test('a node outside every exhibit scope has none', () => {
-  assert.equal(nodeOf(index, 'exhibit-outside').exhibit, null);
+test('a node outside every sidepanel scope has none', () => {
+  assert.equal(nodeOf(index, 'sidepanel-outside').sidepanel, null);
 });
 
 test('being outside a scope is inherited too', () => {
-  assert.equal(nodeOf(index, 'exhibit-outside-child').exhibit, null);
+  assert.equal(nodeOf(index, 'sidepanel-outside-child').sidepanel, null);
 });
 
-test('exhibit carries the declaring node attrs, so the panel can read exhibit-pass', () => {
-  const node = nodeOf(index, 'pass-exhibit-host');
-  assert.equal(node.exhibit.attrs.get('exhibit-pass'), '&exvar rw');
+test('sidepanel carries the declaring node attrs, so the panel can read sidepanel-pass', () => {
+  const node = nodeOf(index, 'pass-sidepanel-host');
+  assert.equal(node.sidepanel.attrs.get('sidepanel-pass'), '&exvar rw');
 });
 
 test('an inheriting node sees the DECLARING node attrs, not its own', () => {
-  // pass-exhibit-host declares exhibit-pass; its scope is what descendants get.
-  const declaring  = nodeOf(index, 'exhibit-scope-nested');
-  const descendant = nodeOf(index, 'exhibit-scope-nested-child');
-  assert.equal(descendant.exhibit.attrs, declaring.exhibit.attrs);
+  // pass-sidepanel-host declares sidepanel-pass; its scope is what descendants get.
+  const declaring  = nodeOf(index, 'sidepanel-scope-nested');
+  const descendant = nodeOf(index, 'sidepanel-scope-nested-child');
+  assert.equal(descendant.sidepanel.attrs, declaring.sidepanel.attrs);
 });
 
-// ── exhibit: the source-tree rule ─────────────────────────────────────────────
+// ── sidepanel: the source-tree rule ─────────────────────────────────────────────
 //
 // The bug this replaced: scope was read by walking rendered ancestors, so a node
-// transcluded into a page adopted whatever exhibit it happened to land under.
+// transcluded into a page adopted whatever sidepanel it happened to land under.
 
-test('a node in another file is unaffected by the transcluding page exhibit', () => {
-  // other-root is transcluded under exhibit-scope-transclude-host, which sits
-  // inside exhibit-scope-root's subtree. Its own file declares no exhibit.
-  assert.equal(nodeOf(other, 'other-root').exhibit, null);
+test('a node in another file is unaffected by the transcluding page sidepanel', () => {
+  // other-root is transcluded under sidepanel-scope-transclude-host, which sits
+  // inside sidepanel-scope-root's subtree. Its own file declares no sidepanel.
+  assert.equal(nodeOf(other, 'other-root').sidepanel, null);
 });
 
-test('the transcluding host keeps the exhibit its own document gave it', () => {
+test('the transcluding host keeps the sidepanel its own document gave it', () => {
   assert.equal(
-    nodeOf(index, 'exhibit-scope-transclude-host').exhibit.rawRef,
+    nodeOf(index, 'sidepanel-scope-transclude-host').sidepanel.rawRef,
     './other#other-root',
   );
 });
 
-test('exhibit resolves for nodes that are never mounted', () => {
+test('sidepanel resolves for nodes that are never mounted', () => {
   // Nothing here has been rendered — the property is a parse-time fact.
-  assert.equal(nodeOf(index, 'exhibit-scope-grandchild').exhibit.rawRef, './other#other-root');
+  assert.equal(nodeOf(index, 'sidepanel-scope-grandchild').sidepanel.rawRef, './other#other-root');
 });
 
-// ── exhibit: the reader ───────────────────────────────────────────────────────
+// ── sidepanel: the reader ───────────────────────────────────────────────────────
 //
-// exhibitConfigOf is what the panel actually calls. It touches only sourceNode,
+// sidepanelConfigOf is what the panel actually calls. It touches only sourceNode,
 // so a stub with the right shape exercises it without a renderer.
 
 function stubRn(file, slug, pageAddress) {
@@ -216,36 +216,36 @@ function stubRn(file, slug, pageAddress) {
 }
 
 test('the reader returns the inherited ref for a node below the declaration', () => {
-  const config = exhibitConfigOf(stubRn(index, 'exhibit-scope-grandchild', '/index.rvmark'));
+  const config = sidepanelConfigOf(stubRn(index, 'sidepanel-scope-grandchild', '/index.rvmark'));
   assert.equal(config.rawRef, './other#other-root');
 });
 
 test('the reader resolves the ref against the holding node own file', () => {
-  const config = exhibitConfigOf(stubRn(index, 'exhibit-scope-child', '/sub/index.rvmark'));
+  const config = sidepanelConfigOf(stubRn(index, 'sidepanel-scope-child', '/sub/index.rvmark'));
   assert.equal(config.sourceFileAddress, '/sub/index.rvmark');
 });
 
 test('the reader returns null outside any scope, which blanks the panel', () => {
-  assert.equal(exhibitConfigOf(stubRn(index, 'exhibit-outside', '/index.rvmark')), null);
+  assert.equal(sidepanelConfigOf(stubRn(index, 'sidepanel-outside', '/index.rvmark')), null);
 });
 
 test('the reader hands the panel the declaring node attrs', () => {
-  const config = exhibitConfigOf(stubRn(index, 'pass-exhibit-host', '/index.rvmark'));
-  assert.equal(config.attrs.get('exhibit-pass'), '&exvar rw');
+  const config = sidepanelConfigOf(stubRn(index, 'pass-sidepanel-host', '/index.rvmark'));
+  assert.equal(config.attrs.get('sidepanel-pass'), '&exvar rw');
 });
 
-test('a foreign node under a transcluding host reads no exhibit from that host', () => {
-  // The regression: the old DOM walk gave this node the host page's exhibit.
-  assert.equal(exhibitConfigOf(stubRn(other, 'other-root', '/other.rvmark')), null);
+test('a foreign node under a transcluding host reads no sidepanel from that host', () => {
+  // The regression: the old DOM walk gave this node the host page's sidepanel.
+  assert.equal(sidepanelConfigOf(stubRn(other, 'other-root', '/other.rvmark')), null);
 });
 
-// ── exhibit-pass binds in the selected node's frame ───────────────────────────
+// ── sidepanel-pass binds in the selected node's frame ───────────────────────────
 //
-// The selected node determines which exhibit is shown, and likewise the state
-// the exhibit sees: {exhibit-pass} resolves its names from that node's frame.
-// See the comment on exhibitOpen.
+// The selected node determines which sidepanel is shown, and likewise the state
+// the sidepanel sees: {sidepanel-pass} resolves its names from that node's frame.
+// See the comment on sidepanelOpen.
 
-test('exhibit-pass from a node under a scope reaches the declared variable', () => {
+test('sidepanel-pass from a node under a scope reaches the declared variable', () => {
   const scope = new StateFrame(null);
   scope.declare('exvar', '0');
   const host  = new StateFrame(scope);
@@ -257,7 +257,7 @@ test('exhibit-pass from a node under a scope reaches the declared variable', () 
   assert.equal(scope.get('exvar'), '1');
 });
 
-test('exhibit-pass observes an intervening let, like any other state attribute', () => {
+test('sidepanel-pass observes an intervening let, like any other state attribute', () => {
   const scope = new StateFrame(null);
   scope.declare('exvar', '0');
   const middle = new StateFrame(scope);
@@ -287,17 +287,17 @@ test('a node outside every {searchable} is not in scope', () => {
 });
 
 test('searchable is false, not undefined, when absent', () => {
-  assert.equal(nodeOf(index, 'exhibit-outside').searchable, false);
+  assert.equal(nodeOf(index, 'sidepanel-outside').searchable, false);
 });
 
 // ── meta ──────────────────────────────────────────────────────────────────────
 
 test('meta inherits from the file head', () => {
-  assert.equal(nodeOf(index, 'exhibit-scope-child').meta.author, 'test-author');
+  assert.equal(nodeOf(index, 'sidepanel-scope-child').meta.author, 'test-author');
 });
 
 test('meta inherits down the source tree', () => {
-  assert.equal(nodeOf(index, 'exhibit-scope-grandchild').meta.author, 'test-author');
+  assert.equal(nodeOf(index, 'sidepanel-scope-grandchild').meta.author, 'test-author');
 });
 
 test('a node in another file gets that file own head meta, not the transcluding page', () => {
@@ -307,7 +307,7 @@ test('a node in another file gets that file own head meta, not the transcluding 
 });
 
 test('meta is always an object, never undefined', () => {
-  for (const slug of ['exhibit-outside', 'exhibit-scope-root', 'search-child-visible']) {
+  for (const slug of ['sidepanel-outside', 'sidepanel-scope-root', 'search-child-visible']) {
     assert.equal(typeof nodeOf(index, slug).meta, 'object');
   }
 });

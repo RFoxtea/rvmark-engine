@@ -1,11 +1,11 @@
 /**
- * exhibit.ts
+ * sidepanel.ts
  *
- * Exhibit panel manager. Nodes with {exhibit: ./path#slug} open rich content
+ * Sidepanel manager. Nodes with {sidepanel: ./path#slug} open rich content
  * in a side panel for joint attention — the tree presents something for the
  * reader to contemplate alongside it.
  *
- * Each exhibit runs inside an iframe — a completely separate DOM universe.
+ * Each sidepanel runs inside an iframe — a completely separate DOM universe.
  * This gives true isolation: no leaked queries, no shared focus/selection
  * state, no event bubbling across boundaries. The only communication channel
  * is postMessage (used for Escape-to-close).
@@ -15,15 +15,15 @@
  *   - markdown: a styled rendered .md file
  *   - html: an HTML file, loaded at its own origin
  *
- * Nodes with {action: exhibit} open the exhibit on select-then-reclick; that
+ * Nodes with {action: sidepanel} open the sidepanel on select-then-reclick; that
  * wiring is done by the type handlers via wireSelectThenAction, which calls
- * exhibitOpenFromNode. Keyboard activation goes through actionKeydown.
+ * sidepanelOpenFromNode. Keyboard activation goes through actionKeydown.
  *
- * Selection scoping: {exhibit} is an inherited property (inherited.ts), resolved
+ * Selection scoping: {sidepanel} is an inherited property (inherited.ts), resolved
  * down the source tree at parse time. Selecting any node under a declaring node
- * keeps that exhibit up; selecting one with no exhibit in force blanks the panel.
+ * keeps that sidepanel up; selecting one with no sidepanel in force blanks the panel.
  * Because scope comes from the source tree, a node transcluded elsewhere carries
- * its own document's exhibit rather than adopting its host's.
+ * its own document's sidepanel rather than adopting its host's.
  * notifySelection(content) must be called whenever selection changes.
  */
 
@@ -38,13 +38,13 @@ import { postGuestMode, broadcastPreroot, prerootDeclareMsg, prerootSetMsg, prer
 import { RenderNode } from './render-node.js';
 import type { NodeAttrs, SourceNode } from '../shared/parser.js';
 
-export interface ExhibitConfig {
+export interface SidepanelConfig {
   rawRef:            string;
   sourceFileAddress: string;
   attrs:             NodeAttrs;
 }
 
-interface ExhibitResult {
+interface SidepanelResult {
   title: string;
   /** srcdoc HTML — used by markdown/html strategies. */
   html?: string;
@@ -59,11 +59,11 @@ interface ExhibitResult {
   trusted?: boolean;
 }
 
-const _exhibitStrategies = new Map<string, ExhibitStrategy>();
+const _sidepanelStrategies = new Map<string, SidepanelStrategy>();
 
 // State: one persistent panel, one trigger .node-content, one content cleanup.
 // The panel is created on first open and destroyed only when the user explicitly
-// closes it (× button or Escape). While it exists, body.exhibit-open is true.
+// closes it (× button or Escape). While it exists, body.sidepanel-open is true.
 //
 // Scope rule: when selection moves outside the subtree of the trigger node,
 // the panel is blanked but stays open.
@@ -72,18 +72,18 @@ let _currentTriggerRn:   RenderNode | null = null;
 let _currentRefString:   string | null = null;
 let _currentCleanup:     (() => void) | null = null;
 // Cleanup for the current relay wiring. Promoted from _buildIframe's closure
-// so exhibitOpen() can rewire to a new relay when the scope changes but the
-// exhibit target stays the same.
+// so sidepanelOpen() can rewire to a new relay when the scope changes but the
+// sidepanel target stays the same.
 let _relayCleanup:       (() => void) | null = null;
 
-export class ExhibitStrategy {
-  async build(_rawRef: string, _sourceFileAddress: string, _attrs?: NodeAttrs): Promise<ExhibitResult | null> {
+export class SidepanelStrategy {
+  async build(_rawRef: string, _sourceFileAddress: string, _attrs?: NodeAttrs): Promise<SidepanelResult | null> {
     return null;
   }
 }
 
-export function exhibitRegister(name: string, strategy: ExhibitStrategy): void {
-  _exhibitStrategies.set(name, strategy);
+export function sidepanelRegister(name: string, strategy: SidepanelStrategy): void {
+  _sidepanelStrategies.set(name, strategy);
 }
 
 function strategyFor(refString: string | null): string {
@@ -98,7 +98,7 @@ function strategyFor(refString: string | null): string {
 function _ensurePanel(): void {
   if (_panel) return;
   _panel = document.createElement('div');
-  _panel.className = 'exhibit-panel';
+  _panel.className = 'sidepanel';
   // Add the close button once; it lives for the _panel's lifetime.
   //
   // The × is drawn, not typed. As a character (U+00D7) it is centred on its
@@ -110,26 +110,26 @@ function _ensurePanel(): void {
   // identical on every platform, and scale with the button rather than with the
   // font stack.
   const closeBtn = document.createElement('button');
-  closeBtn.className = 'exhibit-close';
+  closeBtn.className = 'sidepanel-close';
   closeBtn.innerHTML =
     '<svg viewBox="0 0 16 16" aria-hidden="true">' +
     '<path d="M4.5 4.5 11.5 11.5M11.5 4.5 4.5 11.5"/></svg>';
-  closeBtn.title = 'Close exhibit (Escape)';
+  closeBtn.title = 'Close sidepanel (Escape)';
   // The glyph carried the accessible name while it was text; an aria-hidden
   // drawing carries none, so it is stated.
-  closeBtn.setAttribute('aria-label', 'Close exhibit');
+  closeBtn.setAttribute('aria-label', 'Close sidepanel');
   closeBtn.tabIndex = -1;
-  closeBtn.addEventListener('click', () => exhibitClose());
+  closeBtn.addEventListener('click', () => sidepanelClose());
   _panel.appendChild(closeBtn);
   const root = document.getElementById('root');
   const footer = root?.querySelector('footer');
   if (footer) root!.insertBefore(_panel, footer);
   else root?.appendChild(_panel);
-  document.body.classList.add('exhibit-open');
+  document.body.classList.add('sidepanel-open');
 }
 
 // Clear iframe/error content from the panel, leaving only the close button.
-// Shows a muted "Press esc to close." hint when idle (no exhibit active).
+// Shows a muted "Press esc to close." hint when idle (no sidepanel active).
 function _blankPanel({ showHint = true }: { showHint?: boolean } = {}): void {
   if (!_panel) return;
   _currentCleanup?.();
@@ -140,18 +140,18 @@ function _blankPanel({ showHint = true }: { showHint?: boolean } = {}): void {
   _currentRefString      = null;
   // Remove everything except the close button.
   for (const child of [..._panel.children]) {
-    if (!child.classList.contains('exhibit-close')) child.remove();
+    if (!child.classList.contains('sidepanel-close')) child.remove();
   }
   if (showHint) {
     const hint = document.createElement('div');
-    hint.className = 'exhibit-hint';
+    hint.className = 'sidepanel-hint';
     // Two spans, not one string: the state applies everywhere, but the Escape
     // instruction is keyboard-only and is hidden on coarse pointers, where the
-    // × button is the obvious affordance. See .exhibit-hint-key in styles.css.
+    // × button is the obvious affordance. See .sidepanel-hint-key in styles.css.
     const state = document.createElement('span');
-    state.textContent = 'No exhibit active.';
+    state.textContent = 'No sidepanel active.';
     const key = document.createElement('span');
-    key.className = 'exhibit-hint-key';
+    key.className = 'sidepanel-hint-key';
     key.textContent = 'Press Esc to close.';
     hint.append(state, key);
     _panel.appendChild(hint);
@@ -161,23 +161,23 @@ function _blankPanel({ showHint = true }: { showHint?: boolean } = {}): void {
 function _showError(msg: string): void {
   _blankPanel({ showHint: false });
   const div = document.createElement('div');
-  div.className = 'exhibit-error';
+  div.className = 'sidepanel-error';
   div.textContent = msg;
   _panel!.appendChild(div);
 }
 
-function _exhibitIframes(): HTMLIFrameElement[] {
-  return _panel ? [..._panel.querySelectorAll<HTMLIFrameElement>('.exhibit-iframe')] : [];
+function _sidepanelIframes(): HTMLIFrameElement[] {
+  return _panel ? [..._panel.querySelectorAll<HTMLIFrameElement>('.sidepanel-iframe')] : [];
 }
 
-function _buildIframe(result: ExhibitResult, relay: StateRelay | null, passEntries: ReturnType<typeof parsePass>): HTMLIFrameElement {
+function _buildIframe(result: SidepanelResult, relay: StateRelay | null, passEntries: ReturnType<typeof parsePass>): HTMLIFrameElement {
   const iframe = document.createElement('iframe');
-  iframe.className = 'exhibit-iframe';
+  iframe.className = 'sidepanel-iframe';
   _panel!.appendChild(iframe);
   iframe.addEventListener('load', () => {
     if (iframe.contentWindow) {
       registerThemeIframe(iframe.contentWindow);
-      postGuestMode(iframe.contentWindow, 'rvmark-exhibit-guest');
+      postGuestMode(iframe.contentWindow, 'rvmark-sidepanel-guest');
       _relayCleanup?.();
       _relayCleanup = relay ? wireRelay(relay, passEntries, iframe.contentWindow) : null;
     }
@@ -223,30 +223,30 @@ function _buildIframe(result: ExhibitResult, relay: StateRelay | null, passEntri
 
 export function prerootDeclare(key: string, value: string): void {
   prerootFrame.declare(key, value);
-  broadcastPreroot(_exhibitIframes(), prerootDeclareMsg(key, value));
+  broadcastPreroot(_sidepanelIframes(), prerootDeclareMsg(key, value));
 }
 
 export function prerootSet(key: string, value: string): void {
   prerootFrame.set(key, value);
-  broadcastPreroot(_exhibitIframes(), prerootSetMsg(key, value));
+  broadcastPreroot(_sidepanelIframes(), prerootSetMsg(key, value));
 }
 
 export function prerootDelete(key: string): void {
   prerootFrame.delete(key);
-  broadcastPreroot(_exhibitIframes(), prerootDeleteMsg(key));
+  broadcastPreroot(_sidepanelIframes(), prerootDeleteMsg(key));
 }
 
 // `triggerRn` is the node the reader acted on — selected, clicked, or activated.
-// The selected node already determines WHICH exhibit is shown; it determines the
-// state the exhibit sees for the same reason. {exhibit-pass} binds its variables
+// The selected node already determines WHICH sidepanel is shown; it determines the
+// state the sidepanel sees for the same reason. {sidepanel-pass} binds its variables
 // in that node's frame, resolving names up the frame chain exactly as
 // {show-when} and {on-action} do on any node — ordinary lexical scoping, with a
 // nearer `let` winning over an outer one.
 //
-// This is also the only well-defined choice: {exhibit} is inherited down the
-// source tree, so a node can hold an exhibit whose declaring ancestor was never
+// This is also the only well-defined choice: {sidepanel} is inherited down the
+// source tree, so a node can hold a sidepanel whose declaring ancestor was never
 // rendered and therefore has no frame to bind against.
-export async function exhibitOpen(
+export async function sidepanelOpen(
   rawRef:         string,
   sourceFileAddress: string,
   triggerRn:      RenderNode | null,
@@ -255,14 +255,14 @@ export async function exhibitOpen(
   // Already showing this trigger — nothing to do.
   if (triggerRn && _currentTriggerRn === triggerRn) return;
 
-  // Same exhibit target, different node under the same scope — keep the iframe
+  // Same sidepanel target, different node under the same scope — keep the iframe
   // in place and only rewire the state relay to that node's frame.
   if (triggerRn && _currentRefString === rawRef && _panel) {
-    const iframe = _panel.querySelector<HTMLIFrameElement>('.exhibit-iframe');
+    const iframe = _panel.querySelector<HTMLIFrameElement>('.sidepanel-iframe');
     const win    = iframe?.contentWindow ?? null;
-    const exhibitPassRaw = attrs.get('exhibit-pass') ?? null;
-    const passEntries    = exhibitPassRaw ? parsePass(exhibitPassRaw) : [];
-    const relay = exhibitPassRaw
+    const sidepanelPassRaw = attrs.get('sidepanel-pass') ?? null;
+    const passEntries    = sidepanelPassRaw ? parsePass(sidepanelPassRaw) : [];
+    const relay = sidepanelPassRaw
       ? new StateRelay(buildStatePass(triggerRn.state, passEntries))
       : null;
     _relayCleanup?.();
@@ -275,30 +275,30 @@ export async function exhibitOpen(
   _blankPanel({ showHint: false }); // clear previous content before loading new
 
   const name = strategyFor(rawRef);
-  const strategy = _exhibitStrategies.get(name);
+  const strategy = _sidepanelStrategies.get(name);
   if (!strategy) {
-    _showError(`No exhibit strategy for '${name}'.`);
+    _showError(`No sidepanel strategy for '${name}'.`);
     _currentTriggerRn = triggerRn;
     return;
   }
 
-  let result: ExhibitResult | null;
+  let result: SidepanelResult | null;
   try {
     result = await strategy.build(rawRef, sourceFileAddress, attrs);
   } catch (err) {
-    _showError(`Exhibit failed to load: ${(err as Error).message}`);
+    _showError(`Sidepanel failed to load: ${(err as Error).message}`);
     _currentTriggerRn = triggerRn;
     return;
   }
   if (!result) {
-    _showError(`Exhibit not found: ${rawRef}`);
+    _showError(`Sidepanel not found: ${rawRef}`);
     _currentTriggerRn = triggerRn;
     return;
   }
 
-  const exhibitPassRaw = attrs.get('exhibit-pass') ?? null;
-  const passEntries = exhibitPassRaw ? parsePass(exhibitPassRaw) : [];
-  const relay = (exhibitPassRaw && triggerRn)
+  const sidepanelPassRaw = attrs.get('sidepanel-pass') ?? null;
+  const passEntries = sidepanelPassRaw ? parsePass(sidepanelPassRaw) : [];
+  const relay = (sidepanelPassRaw && triggerRn)
     ? new StateRelay(buildStatePass(triggerRn.state, passEntries))
     : null;
 
@@ -306,7 +306,7 @@ export async function exhibitOpen(
 
   const onMessage = (e: MessageEvent) => {
     if (e.source !== iframe.contentWindow) return;
-    if (e.data?.type === 'rvmark-escape') exhibitClose();
+    if (e.data?.type === 'rvmark-escape') sidepanelClose();
   };
   window.addEventListener('message', onMessage);
 
@@ -316,7 +316,7 @@ export async function exhibitOpen(
 }
 
 // Explicitly close the panel (user action). Removes _panel from DOM entirely.
-export function exhibitClose(): void {
+export function sidepanelClose(): void {
   if (!_panel) return;
   _currentCleanup?.();
   _panel.remove();
@@ -324,27 +324,27 @@ export function exhibitClose(): void {
   _currentTriggerRn  = null;
   _currentRefString  = null;
   _currentCleanup    = null;
-  document.body.classList.remove('exhibit-open');
+  document.body.classList.remove('sidepanel-open');
 }
 
-export function exhibitIsOpen(): boolean {
+export function sidepanelIsOpen(): boolean {
   return _panel !== null;
 }
 
-export function exhibitCurrentTrigger(): RenderNode | null {
+export function sidepanelCurrentTrigger(): RenderNode | null {
   return _currentTriggerRn;
 }
 
-// The exhibit in force for a node. Inherited down the source tree at parse time
+// The sidepanel in force for a node. Inherited down the source tree at parse time
 // (inherited.ts), so this is a field read — no walk over rendered ancestors.
 //
-// A node's exhibit is the one its own document declared over it. The DOM walk
+// A node's sidepanel is the one its own document declared over it. The DOM walk
 // this replaced derived scope from where a subtree landed instead, so content
-// transcluded into a page picked up that page's exhibit rather than its own.
+// transcluded into a page picked up that page's sidepanel rather than its own.
 // Exported for tests: it reads only `sourceNode`, so it is exercisable without
 // a DOM. Callers in this module pass a real RenderNode.
-export function exhibitConfigOf(rn: { sourceNode: SourceNode }): ExhibitConfig | null {
-  const scope = rn.sourceNode.exhibit;
+export function sidepanelConfigOf(rn: { sourceNode: SourceNode }): SidepanelConfig | null {
+  const scope = rn.sourceNode.sidepanel;
   if (!scope) return null;
   return {
     rawRef:            scope.rawRef,
@@ -356,47 +356,47 @@ export function exhibitConfigOf(rn: { sourceNode: SourceNode }): ExhibitConfig |
 }
 
 // Called by the renderer whenever selection changes.
-// Loads the nearest enclosing exhibit scope for the new selection.
-// Blanks the panel if no exhibit scope is found.
-export function exhibitNotifySelection(selectedRn: RenderNode): void {
+// Loads the nearest enclosing sidepanel scope for the new selection.
+// Blanks the panel if no sidepanel scope is found.
+export function sidepanelNotifySelection(selectedRn: RenderNode): void {
   if (!_panel) return;
-  const config = exhibitConfigOf(selectedRn);
+  const config = sidepanelConfigOf(selectedRn);
   if (!config) { _blankPanel(); return; }
-  exhibitOpen(config.rawRef, config.sourceFileAddress, selectedRn, config.attrs);
+  sidepanelOpen(config.rawRef, config.sourceFileAddress, selectedRn, config.attrs);
 }
 
 // ── Renderer interface ─────────────────────────────────────────────────────
 
-// Open the exhibit panel for the exhibit in force at rn.
+// Open the sidepanel for the sidepanel in force at rn.
 //
-// An explicit open — {action: exhibit}, or the keyboard equivalent — always
-// opens the panel, even where no exhibit is in force. The reader asked for the
-// panel; showing it empty ("No exhibit active") answers them, whereas doing
+// An explicit open — {action: sidepanel}, or the keyboard equivalent — always
+// opens the panel, even where no sidepanel is in force. The reader asked for the
+// panel; showing it empty ("No sidepanel active") answers them, whereas doing
 // nothing looks like a broken control. Only selection-driven updates
-// (exhibitNotifySelection) leave a closed panel closed.
-export function exhibitOpenFromNode(rn: RenderNode): void {
-  const config = exhibitConfigOf(rn);
+// (sidepanelNotifySelection) leave a closed panel closed.
+export function sidepanelOpenFromNode(rn: RenderNode): void {
+  const config = sidepanelConfigOf(rn);
   if (!config) { _ensurePanel(); _blankPanel(); return; }
-  void exhibitOpen(config.rawRef, config.sourceFileAddress, rn, config.attrs);
+  void sidepanelOpen(config.rawRef, config.sourceFileAddress, rn, config.attrs);
 }
 
 // ── Shared head builder ───────────────────────────────────────────────────────
 
-function exhibitHead(basePath: string): string {
+function sidepanelHead(basePath: string): string {
   return `
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- No webfonts here either — see the note in template.html. -->
   <link rel="stylesheet" href="${basePath}styles.css">
-  <!-- No KaTeX here either — exhibits run the engine, so ensureKatex() fetches
-       it on demand if the exhibited content actually contains math. -->
+  <!-- No KaTeX here either — sidepanels run the engine, so ensureKatex() fetches
+       it on demand if the sidepaneled content actually contains math. -->
   <script type="module" src="${basePath}_engine/client/iframe-guest.js"><\/script>`;
 }
 
 // ── Strategy: rvmark tree ─────────────────────────────────────────────────────
 
-class RvmarkExhibitStrategy extends ExhibitStrategy {
-  async build(rawRef: string, sourceFileAddress: string): Promise<ExhibitResult | null> {
+class RvmarkSidepanelStrategy extends SidepanelStrategy {
+  async build(rawRef: string, sourceFileAddress: string): Promise<SidepanelResult | null> {
     const node = await resolveRefAt(addressOf(sourceFileAddress), rawRef);
     if (!node) return null;
 
@@ -410,13 +410,13 @@ class RvmarkExhibitStrategy extends ExhibitStrategy {
     return { title: node.label || '', url: addressToHref(address) };
   }
 }
-exhibitRegister('rvmark', new RvmarkExhibitStrategy());
+sidepanelRegister('rvmark', new RvmarkSidepanelStrategy());
 
 
 // ── Strategy: markdown ────────────────────────────────────────────────────────
 
-class MarkdownExhibitStrategy extends ExhibitStrategy {
-  async build(rawRef: string, sourceFileAddress: string): Promise<ExhibitResult | null> {
+class MarkdownSidepanelStrategy extends SidepanelStrategy {
+  async build(rawRef: string, sourceFileAddress: string): Promise<SidepanelResult | null> {
     const ctx = getPageContext();
     const from = addressOf(sourceFileAddress);
     const fullPath = (await originFor(from.baseUrl).resolveResources(from.key, [rawRef]))[0] ?? rawRef;
@@ -426,7 +426,7 @@ class MarkdownExhibitStrategy extends ExhibitStrategy {
     // here needs CORS on the peer's server, which a static host may not even
     // offer — but the origin's own envoy is same-origin with its files, so it
     // can read them and hand back the bytes. Same route the bullet mask takes,
-    // and the reason a foreign markdown exhibit works at all.
+    // and the reason a foreign markdown sidepanel works at all.
     const res = (await fetchMediaAllAt(sourceFileAddress, [rawRef]))[0];
     if (!res) return null;
 
@@ -448,7 +448,7 @@ class MarkdownExhibitStrategy extends ExhibitStrategy {
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
-${exhibitHead(basePath)}
+${sidepanelHead(basePath)}
 <style>
   html, body {
     padding: 0;
@@ -477,18 +477,18 @@ ${exhibitHead(basePath)}
     return { title: displayName, html, trusted: true };
   }
 }
-exhibitRegister('markdown', new MarkdownExhibitStrategy());
+sidepanelRegister('markdown', new MarkdownSidepanelStrategy());
 
 
 // ── Strategy: html ────────────────────────────────────────────────────────────
 
-class HtmlExhibitStrategy extends ExhibitStrategy {
-  async build(rawRef: string, sourceFileAddress: string): Promise<ExhibitResult | null> {
+class HtmlSidepanelStrategy extends SidepanelStrategy {
+  async build(rawRef: string, sourceFileAddress: string): Promise<SidepanelResult | null> {
     const from = addressOf(sourceFileAddress);
     const fullPath = (await originFor(from.baseUrl).resolveResources(from.key, [rawRef]))[0] ?? rawRef;
     const displayName = fullPath.split('/').pop()!.replace(/\.html$/, '');
 
-    // Always a URL, whatever origin it is on. An HTML exhibit is a PAGE — its
+    // Always a URL, whatever origin it is on. An HTML sidepanel is a PAGE — its
     // scripts, styles and assets are named relative to where it lives, and the
     // only place they resolve is there. Fetching the markup and re-hosting it
     // in a srcdoc, which is what this did for a foreign origin, put the document
@@ -504,4 +504,4 @@ class HtmlExhibitStrategy extends ExhibitStrategy {
     return { title: displayName, url: addressToHref(fullPath) };
   }
 }
-exhibitRegister('html', new HtmlExhibitStrategy());
+sidepanelRegister('html', new HtmlSidepanelStrategy());
