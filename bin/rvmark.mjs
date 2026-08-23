@@ -16,7 +16,9 @@
  *     also watch engine src/ and recompile the engine on changes.
  *
  * With no path flags, looks for rvmark.config.json in the current directory.
- * Explicit flags override values from the config file.
+ * Explicit flags override values from the config file. Under `serve` the config
+ * file is watched: edits reload it and re-arm the watchers ('out' and '--port'
+ * excepted — the listener is already bound, so those need a restart).
  *
  * Defaults: --content rvmark  --out dist  --port 8000
  */
@@ -25,7 +27,7 @@ import { buildSite } from '../build/build-rvmark.mjs';
 import { watchPaths, serializeBuilds } from '../scripts/watch.mjs';
 import { startServer } from '../scripts/static-server.mjs';
 import { execSync } from 'child_process';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, statSync } from 'fs';
 import { join, dirname, resolve, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -103,12 +105,11 @@ if (!['build', 'serve'].includes(subcommand)) {
 const { opts, flags } = parseArgs(rawArgs);
 
 // Resolve config file: explicit --config, else rvmark.config.json in cwd if present.
-let fileCfg = {};
-if (opts.config !== undefined) {
-  fileCfg = loadConfigFile(opts.config);
-} else if (existsSync('rvmark.config.json')) {
-  fileCfg = loadConfigFile('rvmark.config.json');
-}
+// Held as a path so `serve` can re-read it when it changes.
+const configPath = opts.config !== undefined ? opts.config
+                 : existsSync('rvmark.config.json') ? 'rvmark.config.json'
+                 : null;
+let fileCfg = configPath ? loadConfigFile(configPath) : {};
 
 let config;
 if (flags.has('test')) {
@@ -122,17 +123,23 @@ if (flags.has('test')) {
     includeDrafts: flags.has('includeDrafts'),
   };
 } else {
-  // Precedence: explicit CLI flag > config file > built-in default.
-  config = {
-    contentDir: opts.content  ?? fileCfg.content     ?? 'rvmark',
-    outDir:     opts.out      ?? fileCfg.out         ?? 'dist',
-    theme:      opts.theme    ?? fileCfg.theme       ?? null,
-    head:       opts.head     ?? fileCfg.head        ?? null,
-    template:   opts.template ?? fileCfg.template    ?? null,
-    assetsDir:  opts.assets   ?? fileCfg.assets      ?? null,
-    customTypesDir: opts['custom-types'] ?? fileCfg.customTypes ?? null,
+  config = resolveConfig(fileCfg);
+}
+
+// Precedence: explicit CLI flag > config file > built-in default. A function
+// rather than a literal so `serve` can re-resolve after the config file changes
+// — flags still win, so a reload can never override what was typed on argv.
+function resolveConfig(cfg) {
+  return {
+    contentDir: opts.content  ?? cfg.content     ?? 'rvmark',
+    outDir:     opts.out      ?? cfg.out         ?? 'dist',
+    theme:      opts.theme    ?? cfg.theme       ?? null,
+    head:       opts.head     ?? cfg.head        ?? null,
+    template:   opts.template ?? cfg.template    ?? null,
+    assetsDir:  opts.assets   ?? cfg.assets      ?? null,
+    customTypesDir: opts['custom-types'] ?? cfg.customTypes ?? null,
     mountPath:  opts.mount    ?? '/_rvmark/',
-    includeDrafts: flags.has('includeDrafts') || fileCfg.includeDrafts === true,
+    includeDrafts: flags.has('includeDrafts') || cfg.includeDrafts === true,
   };
 }
 
@@ -157,15 +164,22 @@ if (subcommand === 'serve') {
 
   // Watch the configured input dirs; the engine's own out/dist is excluded.
   // In --dev mode, also watch engine src/ so engine edits trigger a recompile.
-  const watchTargets = [
-    config.contentDir,
-    config.theme,
-    config.head,
-    config.assetsDir,
-    config.customTypesDir,
-    config.template,
-    dev ? engineSrc : null,
-  ].filter((p) => p && existsSync(p));
+  // The config file itself is watched too, so adding or dropping an input (a
+  // theme, a head partial) takes effect without a restart. Recomputed on reload
+  // because existsSync filtering means a newly-configured path was never armed.
+  function currentWatchTargets() {
+    return [
+      configPath,
+      config.contentDir,
+      config.theme,
+      config.head,
+      config.assetsDir,
+      config.customTypesDir,
+      config.template,
+      dev ? engineSrc : null,
+    ].filter((p) => p && existsSync(p));
+  }
+  let watchTargets = currentWatchTargets();
 
   // Reproduce the resolved config as explicit CLI flags for the subprocess build,
   // so --dev rebuilds use identical inputs without re-reading the config file.
@@ -215,7 +229,54 @@ if (subcommand === 'serve') {
 
   const port = Number(opts.port ?? fileCfg.port ?? 8000);
   const server = await startServer(config.outDir, port);
-  watchPaths(watchTargets, rebuild);
+  // Re-read the config on change, re-resolve, and re-arm the watchers against the
+  // new input set. A malformed config (mid-edit JSON) is reported and ignored:
+  // the previous good config keeps serving rather than taking the server down.
+  let configStamp = stampOf(configPath);
+  function stampOf(f) {
+    if (!f) return null;
+    try { const st = statSync(f); return `${st.mtimeMs}:${st.size}`; } catch { return null; }
+  }
+  function configTouched() {
+    const next = stampOf(configPath);
+    if (next === configStamp) return false;
+    configStamp = next;
+    return true;
+  }
+
+  let watchers = watchPaths(watchTargets, onChange);
+  function onChange() {
+    // Match on the file's own mtime rather than the reported filename: fs.watch
+    // may report null, and on a file target reports a bare basename, so the name
+    // alone cannot be trusted to tell the config apart from a like-named input.
+    if (configPath && configTouched()) {
+      let next;
+      try {
+        next = loadConfigFile(configPath);
+      } catch (e) {
+        console.error(`  config not reloaded: ${e.message}\n`);
+        return;                      // keep the last good config; no rebuild
+      }
+      fileCfg = next;
+      const prevOut = config.outDir;
+      config = resolveConfig(fileCfg);
+      // The server is already bound to a directory and a port; neither can be
+      // rehomed under a live listener. Say so rather than build somewhere the
+      // server isn't looking.
+      if (config.outDir !== prevOut) {
+        console.error(`  note: 'out' changed to ${config.outDir}; serving still from ${prevOut} — restart to apply\n`);
+        config.outDir = prevOut;
+      }
+      const retargeted = currentWatchTargets();
+      if (retargeted.join('\0') !== watchTargets.join('\0')) {
+        for (const w of watchers) w.close();
+        watchTargets = retargeted;
+        watchers = watchPaths(watchTargets, onChange);
+        console.log(`  watching: ${watchTargets.join(', ') || '(nothing)'}`);
+      }
+    }
+    rebuild();
+  }
 
   console.log(`\n  rvmark serving ${config.outDir} → http://localhost:${port}`);
   if (dev) console.log('  --dev: recompiling engine (incremental) on every change');
