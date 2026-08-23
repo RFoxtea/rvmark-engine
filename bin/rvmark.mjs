@@ -195,10 +195,12 @@ if (subcommand === 'serve') {
     return a;
   }
 
-  const rebuild = serializeBuilds((done) => {
+  // One build, however triggered. In dev, recompile the engine and build via a
+  // fresh subprocess so out/ is fresh — the in-process buildSite() already
+  // imported the engine and wouldn't see a recompiled out/.
+  function runBuild() {
     const start = Date.now();
     if (dev) {
-      // Recompile engine, then build the site in a fresh process (loads new out/).
       try {
         execSync('npx tsc --incremental', { stdio: 'inherit', cwd: ENGINE_ROOT });
         execSync(`node ${JSON.stringify(fileURLToPath(import.meta.url))} ${buildArgv().map(s => JSON.stringify(s)).join(' ')}`,
@@ -207,25 +209,32 @@ if (subcommand === 'serve') {
       } catch (e) {
         console.error(`  build failed (exit ${e.status ?? '?'})\n`);
       }
-      done();
-    } else {
-      buildSite(config)
-        .then(() => console.log(`  rebuilt in ${Date.now() - start}ms\n`))
-        .catch((e) => console.error(`  build failed: ${e.message}\n`))
-        .finally(done);
+      return Promise.resolve();
     }
+    return buildSite(config)
+      .then(() => console.log(`  rebuilt in ${Date.now() - start}ms\n`))
+      .catch((e) => console.error(`  build failed: ${e.message}\n`));
+  }
+
+  // ONE queue for every build, the initial one included — a second
+  // serializeBuilds instance would serialize against nothing. buildSite() wipes
+  // outDir before repopulating it, so two overlapping builds leave one deleting
+  // the directory the other is writing into (ENOENT on lstat). Each run resolves
+  // the waiters registered when it began, so the initial build can be awaited
+  // without giving it a private queue.
+  let waiters = [];
+  const rebuild = serializeBuilds((done) => {
+    const settle = waiters;
+    waiters = [];
+    runBuild().finally(() => {
+      done();
+      for (const w of settle) w();
+    });
   });
 
-  // Initial build before serving. In dev, recompile the engine and build via a
-  // fresh subprocess so out/ is fresh from the first serve — the in-process
-  // buildSite() already imported the engine and wouldn't see a recompiled out/.
-  if (dev) {
-    execSync('npx tsc --incremental', { stdio: 'inherit', cwd: ENGINE_ROOT });
-    execSync(`node ${JSON.stringify(fileURLToPath(import.meta.url))} ${buildArgv().map(s => JSON.stringify(s)).join(' ')}`,
-             { stdio: 'inherit' });
-  } else {
-    await buildSite(config);
-  }
+  // Initial build before serving, through the shared queue: any watcher event
+  // can then only queue behind it, never overlap it.
+  await new Promise((resolve) => { waiters.push(resolve); rebuild(); });
 
   const port = Number(opts.port ?? fileCfg.port ?? 8000);
   const server = await startServer(config.outDir, port);
