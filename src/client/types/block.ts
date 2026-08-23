@@ -177,14 +177,11 @@ class BlockTypeHandler extends BaseTypeHandler {
     // it. Taking focus back on the next frame keeps the selection and paints no
     // frame with the scroller focused.
     //
-    // The next frame is also when the question this guard asks stops being a
-    // guess. Whether the press lands on the scroller or on something inside it
-    // that takes focus for itself — a toggle span, a link, whatever block
-    // markdown holds — is settled by then, so it is read as fact rather than
-    // predicted from the target. Predicting it meant naming the kinds that win
-    // a mousedown, which both missed kinds (an option is interactive but never
-    // focusable, so it left the scroller focused and the row ringed for the
-    // whole press) and would need extending for every new one.
+    // Whether the press instead landed on something that takes focus for itself
+    // — a toggle span, a link — is settled by that frame, so it is read rather
+    // than predicted from the target. Predicting it missed the kinds that are
+    // interactive but never focusable: an option left the scroller focused, and
+    // the row ringed, for the whole press.
     scroller.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
       requestAnimationFrame(() => {

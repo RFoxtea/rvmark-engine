@@ -314,7 +314,7 @@ export class RenderNode {
       next._handler.onSelect?.();
       for (const v of next.attrs.getAll('on-select')) applyEventAttr(v, next);
       sidepanelNotifySelection(next);
-      scrollRowIntoMiddle(nextContent, { vertical: false } as any);
+      scrollRowIntoMiddle(nextContent, { vertical: false });
       nextContent.dispatchEvent(new CustomEvent('rvmark-select', { bubbles: true, detail: { meta: next.meta } }));
     }
   }
