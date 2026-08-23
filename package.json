@@ -54,6 +54,7 @@
   "dependencies": {
     "dompurify": "^3.4.12",
     "marked": "^15.0.12",
+    "split.js": "^1.6.5",
     "typescript": "^6.0.2"
   },
   "devDependencies": {

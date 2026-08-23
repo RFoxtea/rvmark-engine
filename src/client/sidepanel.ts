@@ -36,6 +36,7 @@ import { parsePass } from './handler-utils.js';
 import { prerootFrame, StateRelay, buildStatePass } from './state.js';
 import { postGuestMode, broadcastPreroot, prerootDeclareMsg, prerootSetMsg, prerootDeleteMsg, wireRelay, registerThemeIframe, unregisterThemeIframe } from './iframe-host.js';
 import { RenderNode } from './render-node.js';
+import { sidepanelSplitAttach, sidepanelSplitDetach } from './sidepanel-split.js';
 import type { NodeAttrs, SourceNode } from '../shared/parser.js';
 
 export interface SidepanelConfig {
@@ -126,6 +127,9 @@ function _ensurePanel(): void {
   if (footer) root!.insertBefore(_panel, footer);
   else root?.appendChild(_panel);
   document.body.classList.add('sidepanel-open');
+  // After the class, so the grid the split writes tracks onto is the one the
+  // stylesheet's sidepanel-open rules established.
+  void sidepanelSplitAttach();
 }
 
 // Clear iframe/error content from the panel, leaving only the close button.
@@ -319,6 +323,7 @@ export async function sidepanelOpen(
 export function sidepanelClose(): void {
   if (!_panel) return;
   _currentCleanup?.();
+  sidepanelSplitDetach();
   _panel.remove();
   _panel             = null;
   _currentTriggerRn  = null;

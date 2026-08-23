@@ -1642,9 +1642,20 @@ html.rvmark-sidepanel-guest footer { display: none; }
   position: relative;
 }
 
+/* The divider is the drag handle, so it is a pointer target ~9px thick while
+ * the rule it draws stays 1px: the background is painted into a centred 1px
+ * content box and the rest of the width is transparent padding. Widening the
+ * visible rule to match the target would put a heavy bar down the middle of
+ * the page; widening only the target costs nothing visually. */
 #sidepanel-divider {
   display: none;
+  box-sizing: border-box;
+  background-clip: content-box;
+  touch-action: none;
 }
+/* An ordinary affordance, so hover deepens the rule toward --muted rather than
+ * taking --accent, which marks focus elsewhere in this file. */
+#sidepanel-divider:hover { background-color: var(--muted); }
 
 /* Square box, and the × inside it is drawn rather than typed — see the comment
  * in sidepanel.ts. A text × is centred on its typographic metrics, not its ink,
@@ -1736,12 +1747,16 @@ html.rvmark-sidepanel-guest footer { display: none; }
  * body.sidepanel-open: two-column grid — tree on left, sidepanel on right.
  */
 
+/* The columns here are the split's starting point only; once the reader drags,
+ * sidepanel-split.ts writes grid-template-columns inline and that wins. The
+ * gutter track is the divider's own width, and the column-gap the layout used
+ * to need is folded into it — the handle now supplies the separation. */
 body.sidepanel-open #root {
   max-width: none;
   display: grid;
-  grid-template-columns: 1fr 1px 1fr;
-  grid-template-rows: auto 1fr auto;
-  column-gap: 1em;
+  grid-template-columns: minmax(0, 1fr) 9px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  column-gap: 0.5em;
 }
 
 body.sidepanel-open header {
@@ -1758,7 +1773,9 @@ body.sidepanel-open #sidepanel-divider {
   display: block;
   grid-column: 2;
   grid-row: 2;
-  background: var(--border);
+  background-color: var(--border);
+  padding: 0 4px;
+  cursor: col-resize;
 }
 
 body.sidepanel-open #tree-scroll {
@@ -1776,9 +1793,9 @@ body.sidepanel-open .sidepanel {
 @media (max-width: 768px) and (orientation: portrait) {
   body.sidepanel-open #root {
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr 1px 1fr auto;
+    grid-template-rows: auto minmax(0, 1fr) 9px minmax(0, 1fr) auto;
     column-gap: 0;
-    row-gap: 1em;
+    row-gap: 0.5em;
   }
 
   body.sidepanel-open header { display: none !important; }
@@ -1791,6 +1808,8 @@ body.sidepanel-open .sidepanel {
   body.sidepanel-open #sidepanel-divider {
     grid-column: 1;
     grid-row: 3;
+    padding: 4px 0;
+    cursor: row-resize;
   }
 
   body.sidepanel-open #tree-scroll {
