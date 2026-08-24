@@ -17,7 +17,7 @@ import { wireSpanVisibility } from '../span-visibility.js';
 import type { ListboxNav } from '../listbox.js';
 import { buildTagChips } from '../tag-chips.js';
 import { scrollRowIntoMiddle } from '../scroll.js';
-import { mdInlineWithSpans, mdInlineWithSpansResolved, staticMdInline, ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../markdown.js';
+import { mdInlineWithSpans, mdInlineWithSpansResolved, ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
 import { resolveTransclusionConfig } from '../transclusion.js';
 import { wireSelectThenAction } from '../interaction.js';
@@ -464,10 +464,6 @@ const textFactory: NodeTypeFactory = {
 };
 
 factoryRegister('text', textFactory);
-
-export function staticRenderTextLabel(label: string): string {
-  return staticMdInline(label || '');
-}
 
 // ── Static bullet ─────────────────────────────────────────────────────────────
 // Build-time twin of buildToggleBullet + makeToggleBadge + applyBulletAlt.
