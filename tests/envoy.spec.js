@@ -1,5 +1,5 @@
 /**
- * envoy.spec.js — end-to-end tests for site-defined custom node types.
+ * envoy.spec.js — end-to-end tests for site-defined custom nodetypes.
  *
  * A custom type ({= echo}) routes its SourceNode through an OriginEnvoy: an
  * invisible, sandboxed, per-origin iframe (envoy.html) that runs untrusted
@@ -38,7 +38,7 @@ async function waitForResolved(page, id, timeout = 5000) {
   }, id, { timeout });
 }
 
-test.describe('custom node types via OriginEnvoy', () => {
+test.describe('custom nodetypes via OriginEnvoy', () => {
   test('echo custom type renders as a normal text node, children intact', async ({ page }) => {
     await page.goto('/#envoy-root');
     await waitForTree(page);

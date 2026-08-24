@@ -5,7 +5,7 @@
  * Owns the ARIA tree contract, DOM structure, children, and state frame.
  * Delegates all type-specific behavior to a TypeHandler instance.
  *
- * TypeHandler — interface for per-node type behavior. One instance per RenderNode.
+ * TypeHandler — interface for per-nodetype behavior. One instance per RenderNode.
  * Constructed by a NodeTypeFactory. Construction IS rendering — the factory receives
  * a live RenderNode and builds content + wires behaviour during create(). No separate
  * render step.

@@ -1,5 +1,5 @@
 /**
- * Table-row node type. Must be a child of {= table}.
+ * Table-row nodetype. Must be a child of {= table}.
  *
  * Syntax:
  *   1. {= tr} Cell one | Cell two | Cell three

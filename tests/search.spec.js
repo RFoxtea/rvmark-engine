@@ -295,7 +295,7 @@ test.describe('matching and stepping to results', () => {
   });
 
   // table/tr rows build their .toggle as a direct child of the <li>, not
-  // inside .node-content like every other node type, so an indicator anchored
+  // inside .node-content like every other nodetype, so an indicator anchored
   // only within .node-content silently never appeared on a table.
   test('a collapsed table gets a breadcrumb dot for a hidden row match', async ({ page }) => {
     await page.goto('/');

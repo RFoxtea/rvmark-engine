@@ -1,7 +1,7 @@
 /**
  * types/text.ts
  *
- * Default node type — inline text label with toggle bullet and permalink.
+ * Default nodetype — inline text label with toggle bullet and permalink.
  * Also serves as the fallback when an unrecognised type is encountered.
  */
 

@@ -1,7 +1,7 @@
 /**
  * types/block.ts
  *
- * Implements the `block` node type: a multiline Markdown body rendered inside a
+ * Implements the `block` nodetype: a multiline Markdown body rendered inside a
  * node. Body lines are collected by the parser from a following fenced code
  * block. Supports:
  *   - Inline block: body lines inside a fenced code block (``` or ~~~)
