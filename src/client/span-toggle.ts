@@ -30,6 +30,15 @@ function makeSpanMarker(): HTMLElement {
   return marker;
 }
 
+/** A checkbox's marker. Distinct from the disclosure's (§6): the two mechanisms
+ *  must not look identical while behaving differently. */
+function makeCheckboxMarker(): HTMLElement {
+  const marker = document.createElement('span');
+  marker.className = 'span-checkbox-marker';
+  marker.setAttribute('aria-hidden', 'true');
+  return marker;
+}
+
 /**
  * Wire every manual toggle under `root`. Returns a teardown.
  *
@@ -47,14 +56,60 @@ function makeSpanMarker(): HTMLElement {
 // An explicitly written `{on-action: …}` is left exactly where it is. The author
 // named the gesture key, so it keeps firing on Enter/Space — and makes the
 // option consume that key, rather than passing it to the node.
-function retargetBareMutations(span: ParsedSpanAttrs): void {
+function retargetBareMutations(span: ParsedSpanAttrs, to: 'on-select' | 'on-on'): void {
   const bare = span.getAll(BARE_MUTATION_KEY);
   if (!bare.length) return;
   const explicit = span.getAll('on-action').filter(v => !bare.includes(v));
   span.delete('on-action');
   for (const v of explicit) span.append('on-action', v);
-  for (const v of bare)     span.append('on-select', v);
+  for (const v of bare)     span.append(to, v);
   span.delete(BARE_MUTATION_KEY);
+}
+
+/**
+ * Wire one checkbox span: a targetless `{toggle}`.
+ *
+ * Its state is its own — no hill, no exclusivity, no children area — so it is
+ * held on the element as aria-checked rather than in the ToggleSet. A bare
+ * `set`/`let`/`remove` on it means the on-transition, so `[x]{toggle; set &a}`
+ * fires going on and, having no `on-off`, leaves &a alone going off. Authors
+ * who want it cleared write `{toggle; set &a = "1"; on-off: set &a = ""}`.
+ */
+function wireSpanCheckbox(el: HTMLElement, span: ParsedSpanAttrs, rn: RenderNode): () => void {
+  retargetBareMutations(span, 'on-on');
+
+  el.classList.add(INTERACTIVE_SPAN_CLASSES.checkbox);
+  el.setAttribute('role', 'checkbox');
+  if (!el.hasAttribute('aria-checked')) el.setAttribute('aria-checked', 'false');
+  el.tabIndex = 0;
+  if (!el.querySelector('.span-checkbox-marker')) el.prepend(makeCheckboxMarker());
+
+  const activate = () => {
+    const on = el.getAttribute('aria-checked') !== 'true';
+    el.setAttribute('aria-checked', String(on));
+    for (const v of span.getAll(on ? 'on-on' : 'on-off')) applyEventAttr(v, rn);
+    // on-action is the gesture, and fires on both transitions — an author who
+    // wrote it named the activation, not a state.
+    for (const v of span.getAll('on-action')) applyEventAttr(v, rn);
+  };
+
+  const onClick = (e: MouseEvent) => { e.stopPropagation(); activate(); };
+
+  // Enter/Space only. A checkbox opens nothing, so the disclosure's
+  // ArrowRight/Left have no meaning here; arrows are left to the node.
+  const onKeydown = (e: KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    activate();
+    e.stopPropagation();
+    e.preventDefault();
+  };
+
+  el.addEventListener('click', onClick);
+  el.addEventListener('keydown', onKeydown);
+  return () => {
+    el.removeEventListener('click', onClick);
+    el.removeEventListener('keydown', onKeydown);
+  };
 }
 
 export function wireSpanToggles(
@@ -71,7 +126,7 @@ export function wireSpanToggles(
     const span    = spanMap.get(ordinal);
     if (!span) continue;
     if (spanIsSelectionDriven(span, nodeAttrs)) {
-      retargetBareMutations(span);
+      retargetBareMutations(span, 'on-select');
       // The renderer marks a bare `=> #ref` as a manual toggle, but node-level
       // `{listbox}` may make it an option — which the renderer cannot see. Undo
       // the guess now that node attrs are known. Options are wired by the
@@ -84,18 +139,18 @@ export function wireSpanToggles(
     }
 
     const ref = span.get('transclude');
-    // A targetless {toggle} is a checkbox: it contends for no children area, so
-    // it is not a member of the toggle set and its meaning is whatever state it
-    // sets. Not wired here — its on-action mutations already fire through the
-    // ordinary span path.
-    if (!ref) continue;
+    // A targetless {toggle} is a checkbox (§6): it contends for no children
+    // area, so it is not a member of the toggle set and its meaning is whatever
+    // state it sets. It has its own wiring — a disclosure's open/close is not
+    // its on/off — so it is handed off rather than skipped.
+    if (!ref) { teardowns.push(wireSpanCheckbox(el, span, rn)); continue; }
 
     el.classList.add(INTERACTIVE_SPAN_CLASSES.toggle);
     if (!el.hasAttribute('role')) el.setAttribute('role', 'button');
     el.setAttribute('aria-expanded', 'false');
     // Tab-reachable: the baseline keyboard model for a toggle span is a button,
     // independent of whether the node is also a listbox.
-    if (!el.hasAttribute('tabindex')) el.tabIndex = 0;
+    el.tabIndex = 0;
     // Scoped to the span's own children: querySelector would also match a
     // marker nested inside the label (e.g. an <em> wrapper), and wiring runs
     // more than once — markdown.ts re-renders on fetch and again on KaTeX —

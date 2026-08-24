@@ -204,6 +204,11 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
 // See rvmark-site/tools/toggle-spans-design-note.md §1c.
 
 export function spanIsSelectionDriven(span: ParsedSpanAttrs, nodeAttrs: Multimap): boolean {
+  // A targetless {toggle} is a checkbox (§6), never an option: it is
+  // independently on/off, where an option is one-of-N. Tested before {option}
+  // so that even `{option; toggle}` with no target stays a checkbox rather
+  // than joining a listbox it cannot behave like.
+  if (span.has('toggle') && !span.get('transclude')) return false;
   // `{option}` is explicit and settles it.
   if (span.has('option')) return true;
   // An explicit span-level `{toggle}` opts OUT of an inherited node-level
@@ -246,7 +251,11 @@ export function isListbox(
   // behaves, not that there is one. A node with only toggles and that attribute
   // has no listbox, and building an empty one would give it a role=listbox with
   // nothing to select.
+  // A checkbox is excluded: its bare mutation files under on-action like any
+  // other, so without this a label of pure checkboxes would build a listbox
+  // around controls that are not options and carry no role="option".
+  const isCheckbox = (s: ParsedSpanAttrs) => s.has('toggle') && !s.get('transclude');
   return attrs.has('listbox') ||
-    [...spanMap.values()].some(s =>
-      s.has('option') || s.has('on-action') || s.has('on-select') || spanIsSelectionDriven(s, attrs));
+    [...spanMap.values()].some(s => !isCheckbox(s) &&
+      (s.has('option') || s.has('on-action') || s.has('on-select') || spanIsSelectionDriven(s, attrs)));
 }

@@ -268,8 +268,9 @@ export const BARE_MUTATION_KEY = 'rvmark-bare-mutation';
 // callers ask spanIsInteractive rather than re-writing the selector, and a new
 // interactive kind is added in one place instead of found by grep.
 export const INTERACTIVE_SPAN_CLASSES = {
-  toggle: 'inline-toggle',
-  option: 'inline-option',
+  toggle:   'inline-toggle',
+  option:   'inline-option',
+  checkbox: 'inline-checkbox',
 } as const;
 
 export const INTERACTIVE_SPAN_SELECTOR =
@@ -320,7 +321,6 @@ function renderInlineSpan(token: any, label: string): string {
   const ordinal: number = token._rvmarkOrdinal ?? 0;
   const classes: string[]   = [];
   const dataAttrs: string[] = [`data-rvmark-span="${ordinal}"`];
-  const directAttrs: string[] = [];
 
   let role:  string | null = attrs.get('role')  ?? null;
   const style: string | null = attrs.get('style') ?? null;
@@ -330,7 +330,16 @@ function renderInlineSpan(token: any, label: string): string {
   // an option — which this renderer cannot see — so the handler restamps
   // role/marker once node attrs are known.
   // See listbox-utils.spanIsSelectionDriven and the design note §1c.
-  if (attrs.has('option') || attrs.has('on-action')) {
+  // An explicit {toggle} is tested first and wins: a bare `set` files under
+  // on-action, so an option test that ran first would claim every checkbox
+  // — `[x]{toggle; set &a}` — before the keyword the author actually wrote was
+  // ever consulted. Same precedence spanIsSelectionDriven applies at the node
+  // level: span-level {toggle} beats an inferred kind.
+  if (attrs.has('toggle') && !attrs.has('transclude')) {
+    // Targetless: a checkbox (§6). role/aria-checked are stamped at wiring
+    // time by wireSpanCheckboxes, which owns its on/off state.
+    classes.push(INTERACTIVE_SPAN_CLASSES.checkbox);
+  } else if (attrs.has('option') || attrs.has('on-action')) {
     classes.push(INTERACTIVE_SPAN_CLASSES.option);
     role = 'option';
   } else if (attrs.has('transclude') || attrs.has('toggle')) {
@@ -348,21 +357,21 @@ function renderInlineSpan(token: any, label: string): string {
   for (const c of attrs.getAll('class')) classes.push(...c.split(/\s+/).filter(Boolean));
 
   const reserved = spanReserved();
-  for (const [k, v] of attrs.allEntries()) {
+  for (const [k] of attrs.allEntries()) {
     if (reserved.has(k)) continue;
     if (k.startsWith('.')) {
       classes.push(k.slice(1));
-    } else if (k === 'tabindex' || k.startsWith('aria-')) {
-      directAttrs.push(`${mdEscHtml(k)}="${mdEscHtml(v)}"`);
-    } else {
-      dataAttrs.push(`data-${mdEscHtml(k)}="${mdEscHtml(v)}"`);
     }
+    // No fall-through: an unrecognised key is dropped. It used to become a
+    // data-* attribute (and tabindex/aria-* went on directly), which meant no
+    // span attribute could ever be wrong — a typo silently became inert markup.
+    // ARIA and tab order on interactive spans are the engine's to set; an author
+    // value fought the wiring that maintains them.
   }
 
   const cls       = classes.length     ? ` class="${classes.map(mdEscHtml).join(' ')}"` : '';
   const roleAt    = role               ? ` role="${mdEscHtml(role)}"` : '';
   const styleAt   = style              ? ` style="${mdEscHtml(style)}"` : '';
-  const directStr = directAttrs.length ? ' ' + directAttrs.join(' ')  : '';
   const dataStr   = dataAttrs.length   ? ' ' + dataAttrs.join(' ')    : '';
 
   const img    = attrs.get('img');
@@ -381,9 +390,9 @@ function renderInlineSpan(token: any, label: string): string {
   const href = attrs.get('href');
   if (href) {
     const hrefAt = ` href="${mdEscHtml(href)}"`;
-    return `<a${hrefAt} target="_blank" rel="noopener noreferrer"${roleAt}${cls}${styleAt}${directStr}${dataStr}>${content}</a>`;
+    return `<a${hrefAt} target="_blank" rel="noopener noreferrer"${roleAt}${cls}${styleAt}${dataStr}>${content}</a>`;
   }
-  return `<span${roleAt}${cls}${styleAt}${directStr}${dataStr}>${content}</span>`;
+  return `<span${roleAt}${cls}${styleAt}${dataStr}>${content}</span>`;
 }
 
 const rvmarkSpanExtension = {

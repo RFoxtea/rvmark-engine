@@ -2,7 +2,7 @@
  * parser.ts
  *
  * Parses rvmark source text into a document tree.
- * Completely type-agnostic: the parser does not know or care what node types
+ * Completely type-agnostic: the parser does not know or care what nodetypes
  * exist. It only extracts structure (numbering, attrs, label, bodyLines).
  *
  * The one parser-level convention for body lines is the fenced code block
@@ -324,6 +324,10 @@ export interface RawFile {
 export const STATE_EVENT_ATTRS = new Set([
   'on-spawn', 'on-select', 'on-deselect', 'on-focus', 'on-blur',
   'on-action', 'on-expand', 'on-collapse', 'on-no-option-select',
+  // A checkbox span's two transitions (§6). It is neither expanded nor
+  // selected, so it needs its own pair: `set` cannot express "flip" — the
+  // grammar assigns literals only — and one event could not clear what it set.
+  'on-on', 'on-off',
 ]);
 
 // Parse a `;`-separated attribute block body (the part inside `{…}`).

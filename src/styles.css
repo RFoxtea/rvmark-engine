@@ -123,6 +123,10 @@
      pair rather than two different weights. */
   --icon-expand:   url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M3 7.2h10v1.6H3zM7.2 3h1.6v10H7.2z"/></svg>');
   --icon-tick:     url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M12.7 4.4l-1.1-1.1L8 6.9 4.4 3.3 3.3 4.4 6.9 8l-3.6 3.6 1.1 1.1L8 9.1l3.6 3.6 1.1-1.1L9.1 8z"/></svg>');
+  /* Checkbox marker (§6): a box, not the disclosure's triangle — the two
+     mechanisms must not look identical while behaving differently. */
+  --icon-box:      url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M3 3h10v10H3zm1.5 1.5v7h7v-7z"/></svg>');
+  --icon-box-checked: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M3 3h10v10H3zm1.5 1.5v7h7v-7z"/><path d="M5.5 8.1l1.9 1.9 3.2-3.9 1.1 0.9-4.2 5.1L4.5 9.2z"/></svg>');
   --icon-error:    url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 1.5a5.5 5.5 0 013.6 1.35L3.85 11.6A5.5 5.5 0 018 2.5zm0 11a5.5 5.5 0 01-3.6-1.35l7.75-7.75A5.5 5.5 0 018 13.5z"/></svg>');
 }
 
@@ -573,6 +577,40 @@ details[open] > .node-content.node-content--bullet-spins:not(.node-content--bull
 }
 @media (prefers-reduced-motion: reduce) {
   .span-toggle-marker { transition: none; }
+}
+
+/* ── Checkbox spans: targetless {toggle} ── */
+.span-checkbox-marker {
+  display: inline-block;
+  width: var(--text-chrome);
+  height: var(--text-chrome);
+  margin-right: 0.15em;
+  vertical-align: -0.12em;
+  background-color: var(--muted);
+  -webkit-mask: var(--icon-box) no-repeat center / contain;
+          mask: var(--icon-box) no-repeat center / contain;
+}
+.inline-checkbox[aria-checked="true"] > .span-checkbox-marker {
+  -webkit-mask-image: var(--icon-box-checked);
+          mask-image: var(--icon-box-checked);
+  background-color: var(--accent);
+}
+/* Focus on the marker, not a ring around the span — see .inline-toggle above. */
+.inline-checkbox:focus > .span-checkbox-marker,
+.inline-checkbox:focus-visible > .span-checkbox-marker {
+  background-color: var(--accent);
+}
+.inline-checkbox {
+  color: var(--fg);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  /* Same reason as .inline-toggle: keep marker and label on one line. */
+  white-space: nowrap;
+}
+.inline-checkbox:focus,
+.inline-checkbox:focus-visible {
+  outline: none;
 }
 
 /* ── .badges: inline listbox styled as 88x31 badge strip ── */
@@ -1351,7 +1389,7 @@ html.rvmark-sidepanel-guest footer { display: none; }
    ============================================================ */
 
 /* ---- markdown ---- */
-/* types/block.css — styles for the block node type */
+/* types/block.css — styles for the block nodetype */
 
 .block-body {
   /* Border aligns with centre of child bullet column (same x as node-children + bullet-w/2) */
@@ -1489,7 +1527,7 @@ html.rvmark-sidepanel-guest footer { display: none; }
 }
 
 /* ---- video ---- */
-/* types/video.css — styles for the video node type */
+/* types/video.css — styles for the video nodetype */
 
 .node-content--video {
   display: block;
@@ -1526,7 +1564,7 @@ html.rvmark-sidepanel-guest footer { display: none; }
 }
 
 /* ---- html ---- */
-/* types/html.css — styles for the html node type */
+/* types/html.css — styles for the html nodetype */
 
 .html-body {
   max-width: calc(100% - var(--indent));
@@ -1570,7 +1608,7 @@ html.rvmark-sidepanel-guest footer { display: none; }
 }
 
 /* ---- image ---- */
-/* types/image.css — styles for the image node type */
+/* types/image.css — styles for the image nodetype */
 
 .img-body {
   margin: 0;
