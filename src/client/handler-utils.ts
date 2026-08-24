@@ -21,7 +21,7 @@ import { bagOf } from '../shared/inherited.js';
 import type { ResolvedAttrs } from '../shared/served.js';
 import { RenderNode } from './render-node.js';
 import { resolveEffectiveChildren, resolveTransclusionConfig } from './transclusion.js';
-import { resolveRefOn, resolveMediaOn, resolveMediaAllOn, fetchMediaAllOn, childrenOf } from './origin-host.js';
+import { resolveRefOn, fetchMediaAllOn, childrenOf } from './origin-host.js';
 import { parseTranscludeEntry } from '../shared/shared.js';
 import { TRANSCLUDE_DEADLINE_MS } from './constants.js';
 import type { PassEntry, PassMode, StateNode } from './state.js';

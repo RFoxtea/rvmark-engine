@@ -123,7 +123,7 @@ class TextTypeHandler extends BaseTypeHandler {
     // about to discard, and a listbox wired against discarded elements is the
     // shape of the bug this replaced — dead options carrying no id, no
     // selection and no click handler.
-    if (!provisional) this._wireLabel(sourceNode, attrs);
+    if (!provisional) this._wireLabel(attrs);
 
     if (sourceNode.attrs.get('id')) {
       const anchor = document.createElement('a');
@@ -179,7 +179,7 @@ class TextTypeHandler extends BaseTypeHandler {
    * simply be re-taken, because `wireListbox` also registers a listener on the
    * row, which is not replaced and would accumulate one nav per render.
    */
-  private _wireLabel(sourceNode: SourceNode, attrs: ResolvedAttrs): void {
+  private _wireLabel(attrs: ResolvedAttrs): void {
     const { lbl, rn } = this;
     const spanMap = this._spanMap;
 
@@ -232,7 +232,7 @@ class TextTypeHandler extends BaseTypeHandler {
       this._paintLabel(html, spanMap, sourceNode);
     } catch { /* the first render stands, and is what gets wired */ }
     this._reRenderLabel = null;
-    this._wireLabel(sourceNode, attrs);
+    this._wireLabel(attrs);
   }
 
   private buildCssProps(attrs: ResolvedAttrs, sourceNode: SourceNode) {

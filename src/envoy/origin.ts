@@ -34,7 +34,7 @@
  * the wire can hold this module's store open.
  */
 
-import type { SourceNode, NodeAttrs, FileMeta, OriginDef, Tag, Reserved } from '../shared/parser.js';
+import type { SourceNode, NodeAttrs, FileMeta, OriginDef, Tag } from '../shared/parser.js';
 import {
   resolveSlugInFile, resolveAddress, resolveMediaAddress, addressToSlug, addressOrigin,
   parseTranscludeEntry, RVMARK_SEGMENT,
