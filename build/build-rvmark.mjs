@@ -85,7 +85,7 @@ await import('../out/client/types/table.js');
 const { parseCells } = await import('../out/client/types/tr-base.js');
 await import('../out/client/types/hr.js');
 await import('../out/client/types/gap.js');
-// exhibit.js is not needed at build time (no static rendering) — skip it.
+// sidepanel.js is not needed at build time (no static rendering) — skip it.
 
 // ── Custom-type / envoy emission ──────────────────────────────────────────────
 // Transpile every author custom-type module in `customTypesDir` into
@@ -644,13 +644,13 @@ function renderStaticNode(node, sourceFile, depth = 0) {
   ].filter(Boolean);
   const liClassAttr = ` class="${escHtml(liClasses.join(' '))}"`;
 
-  const exhibitVal = attrs.get('exhibit') ?? null;
-  let exhibitLinkHtml = '';
-  if (exhibitVal) {
-    const mediaAddr = resolveMediaAddress(exhibitVal, sourceFile.pageAddress);
+  const sidepanelVal = attrs.get('sidepanel') ?? null;
+  let sidepanelLinkHtml = '';
+  if (sidepanelVal) {
+    const mediaAddr = resolveMediaAddress(sidepanelVal, sourceFile.pageAddress);
     const href = mediaAddr ? addressToHref(mediaAddr) : null;
     if (href) {
-      exhibitLinkHtml = ` <a class="static-exhibit-link" href="${escHtml(href)}" title="Open exhibit (requires JavaScript for interactive view)">◧</a>`;
+      sidepanelLinkHtml = ` <a class="static-sidepanel-link" href="${escHtml(href)}" title="Open sidepanel (requires JavaScript for interactive view)">◧</a>`;
     }
   }
 
@@ -749,7 +749,7 @@ function renderStaticNode(node, sourceFile, depth = 0) {
   }
 
   // Text node: label + children
-  const lbl = `<span class="node-label">${tags}${staticLabel(node)}${exhibitLinkHtml}</span>`;
+  const lbl = `<span class="node-label">${tags}${staticLabel(node)}${sidepanelLinkHtml}</span>`;
   const rowHtml = row(lbl, isSummary, open);
   // A non-summary row must never go inside <details>: the element requires a
   // <summary> first child and synthesises a "Details" one when it is missing.
@@ -988,8 +988,8 @@ for (const [relPath, sourceFile] of sourceFiles) {
   // from it. Bundling the engine must not swallow author files.
   //
   // iframe-guest is an entry because framed pages load it by URL rather than
-  // importing it — exhibit.ts writes that <script src> itself, and an author's
-  // own exhibit page (euclid's viewer.html) does the same. Anything the engine
+  // importing it — sidepanel.ts writes that <script src> itself, and an author's
+  // own sidepanel page (euclid's viewer.html) does the same. Anything the engine
   // hands out as a URL is a served entry point, not an internal module.
   //
   // out/ itself stays unbundled — the CLI and package.json's ./parser,
