@@ -8,11 +8,15 @@
  * Optional: dark-mode: invert | background | none
  * Optional: align: left | center | right
  * Optional: width: CSS length (e.g. 50%, 300px) — constrains the image width
+ * Optional: height: CSS length — fixes the image height
+ * Optional: ratio: w/h (e.g. 4/3, 16:9) — reserves the box before load, so the
+ *   page does not shift when the image arrives. Ignored when height is set, as
+ *   in CSS, where a used height overrides aspect-ratio.
  */
 
 import type { NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { copyPermalink, treeNavKeydown, actionKeydown } from '../handler-utils.js';
+import { copyPermalink, treeNavKeydown, actionKeydown, resolveBox, applyBox } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { resolveMediaOn } from '../origin-host.js';
@@ -46,6 +50,7 @@ class ImageTypeHandler extends BaseTypeHandler {
     const alignClass = ALIGN_CLASSES[attrs.get('align') ?? ''] ?? '';
     const widthRaw   = attrs.get('width');
     const width      = widthRaw && WIDTH_RE.test(widthRaw.trim()) ? widthRaw.trim() : '';
+    const box        = resolveBox(attrs, 'image');
 
     const content = this.content;
     const li = renderNode.li;
@@ -64,7 +69,10 @@ class ImageTypeHandler extends BaseTypeHandler {
       img.src     = resolved;
       img.alt     = alt;
       img.loading = 'lazy';
+      // width keeps its own meaning here (an exact width, not a cap), so only
+      // height/ratio come from the shared box.
       if (width) img.style.width = width;
+      applyBox(img, { ...box, width: null });
       figure.appendChild(img);
 
       if (alt) {
@@ -156,9 +164,17 @@ const imageFactory: NodeTypeFactory = {
     const cls        = ['img-body', darkClass, alignClass].filter(Boolean).join(' ');
     const widthRaw   = node.attrs.get('width');
     const width      = widthRaw && WIDTH_RE.test(widthRaw.trim()) ? widthRaw.trim() : '';
-    const widthAttr  = width ? ` style="width:${esc(width)}"` : '';
+    const box        = resolveBox(node.attrs, 'image');
+    // Every part is allowlisted before it gets here, so the declarations are
+    // built from validated tokens rather than raw attribute text.
+    const decls      = [
+      width          ? `width:${width}`               : '',
+      box.height     ? `height:${box.height}`         : '',
+      box.ratio      ? `aspect-ratio:${box.ratio}`    : '',
+    ].filter(Boolean).join(';');
+    const styleAttr  = decls ? ` style="${esc(decls)}"` : '';
     const cap        = alt ? `<figcaption>${esc(alt)}</figcaption>` : '';
-    return `<figure class="${esc(cls)}"><img src="${esc(url)}" alt="${esc(alt)}" loading="lazy"${widthAttr}>${cap}</figure>`;
+    return `<figure class="${esc(cls)}"><img src="${esc(url)}" alt="${esc(alt)}" loading="lazy"${styleAttr}>${cap}</figure>`;
   },
 };
 

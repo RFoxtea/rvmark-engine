@@ -1557,6 +1557,12 @@ html.rvmark-sidepanel-guest footer { display: none; }
   outline: none;
 }
 
+.video-wrap--portrait {
+  padding-top: 0;
+  aspect-ratio: 9 / 16;
+  max-width: 20rem;
+}
+
 /* Letterbox bars on non-16:9 files render pitch black, not the page background. */
 .video-wrap video {
   background: #000;

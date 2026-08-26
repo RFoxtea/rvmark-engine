@@ -1,7 +1,7 @@
 /**
  * types/video.ts
  *
- * Embeds a video in the node body. Three sources are supported:
+ * Embeds a video in the node body. Four sources are supported:
  *
  *   1. YouTube videos and playlists (embedded via the IFrame Player API):
  *        {= video} https://www.youtube.com/watch?v=...
@@ -12,13 +12,17 @@
  *   2. Odysee videos (embedded via an iframe to odysee.com/$/embed/...):
  *        {= video} https://odysee.com/@channel:c/video-name:a
  *
- *   3. Direct video files (embedded via a native <video> element):
+ *   3. Instagram reels and posts (embedded via an iframe to instagram.com/…/embed):
+ *        {= video} https://www.instagram.com/reel/C8QltIDsWTG/
+ *
+ *   4. Direct video files (embedded via a native <video> element):
  *        {= video} ./clip.mp4
  *        {= video} https://example.com/clip.webm
  *        {type: video; src: ./clip.mp4}
  *
- * All three accept a start (and end) offset, so a node can cite one passage of a
- * long video. A timestamp already present in the source URL is honoured:
+ * YouTube, Odysee and direct files accept a start (and end) offset, so a node can
+ * cite one passage of a long video. A timestamp already present in the source URL
+ * is honoured:
  *
  *        {= video} https://www.youtube.com/watch?v=KtQ9nt2ZeGM&t=4216s
  *        {= video} https://odysee.com/@channel:c/video-name:a?t=90
@@ -33,10 +37,14 @@
  * Offsets are written as seconds (`4216`, `4216s`) or colon/unit clock time
  * (`1:10:16`, `1h10m16s`); anything unparseable is ignored rather than passed on.
  *
+ * Instagram takes no offset: its embed exposes no such parameter, so `start`/`end`
+ * are ignored on a reel and the clip always starts from the top.
+ *
  * For YouTube embeds the IFrame Player API (enablejsapi=1 + postMessage) is used
  * to toggle play/pause from the tree row via Enter or Space. For native files the
- * <video> element is toggled directly. Odysee exposes no documented player API,
- * so Enter/Space is a no-op there — use the embed's own native controls.
+ * <video> element is toggled directly. Neither Odysee nor Instagram exposes a
+ * documented player API, so Enter/Space is a no-op there — use the embed's own
+ * native controls.
  *
  * Player state constants (from YT IFrame API):
  *   -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 video cued
@@ -44,7 +52,7 @@
 
 import type { NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { treeNavKeydown, actionKeydown, copyPermalink } from '../handler-utils.js';
+import { treeNavKeydown, actionKeydown, copyPermalink, resolveBox, applyBox } from '../handler-utils.js';
 import { ToggleSet } from '../toggle-set.js';
 import { BaseTypeHandler } from '../base-handler.js';
 import { resolveMediaOn } from '../origin-host.js';
@@ -101,6 +109,10 @@ class VideoTypeHandler extends BaseTypeHandler {
     // carried by the source URL when `start` is absent.
     const clip = resolveClip(attrs, null);
 
+    // Author box overrides; each branch applies them to its own wrap, which the
+    // stylesheet has already given a default ratio.
+    const box = resolveBox(attrs, 'video');
+
     // Decide between a direct video file and a YouTube embed. Only the file
     // branch needs the origin — an embed URL names its own host — so the whole
     // body waits on one resolution rather than two paths racing.
@@ -113,6 +125,7 @@ class VideoTypeHandler extends BaseTypeHandler {
         this._canonicalHref = fileUrl;
         const wrap = document.createElement('div');
         wrap.className = 'video-wrap';
+        applyBox(wrap, box);
         const video = document.createElement('video');
         // `#t=` is honoured natively by the browser; no seek script needed.
         video.src = withMediaFragment(fileUrl, clip);
@@ -127,10 +140,12 @@ class VideoTypeHandler extends BaseTypeHandler {
       } else {
         const yt = rawUrl ? ytEmbed(rawUrl, clip) : null;
         const odysee = !yt && rawUrl ? odyseeEmbed(rawUrl, clip) : null;
-        this._canonicalHref = yt?.href ?? odysee?.href ?? null;
+        const insta = !yt && !odysee && rawUrl ? instagramEmbed(rawUrl) : null;
+        this._canonicalHref = yt?.href ?? odysee?.href ?? insta?.href ?? null;
         if (yt) {
           const wrap = document.createElement('div');
           wrap.className = 'video-wrap';
+          applyBox(wrap, box);
           wrap.innerHTML = `<iframe
             src="${yt.src}&enablejsapi=1"
             allowfullscreen
@@ -149,8 +164,20 @@ class VideoTypeHandler extends BaseTypeHandler {
         } else if (odysee) {
           const wrap = document.createElement('div');
           wrap.className = 'video-wrap';
+          applyBox(wrap, box);
           wrap.innerHTML = `<iframe
             src="${odysee.src}"
+            allowfullscreen
+            loading="lazy"
+          ></iframe>`;
+          content.appendChild(wrap);
+          this._iframe = wrap.querySelector('iframe')!;
+        } else if (insta) {
+          const wrap = document.createElement('div');
+          wrap.className = 'video-wrap video-wrap--portrait';
+          applyBox(wrap, box);
+          wrap.innerHTML = `<iframe
+            src="${insta.src}"
             allowfullscreen
             loading="lazy"
           ></iframe>`;
@@ -220,7 +247,7 @@ const videoFactory: NodeTypeFactory = {
       if (!url) return null;
       return `<video src="${esc(withMediaFragment(url, clip))}" controls preload="metadata" playsinline referrerpolicy="no-referrer"></video>`;
     }
-    const embed = ytEmbed(rawUrl, clip) ?? odyseeEmbed(rawUrl, clip);
+    const embed = ytEmbed(rawUrl, clip) ?? odyseeEmbed(rawUrl, clip) ?? instagramEmbed(rawUrl);
     if (!embed) return null;
     return `<p><a href="${esc(embed.href)}" target="_blank" rel="noopener noreferrer">${embed.label}</a></p>`;
   },
@@ -242,7 +269,7 @@ function safeMediaUrl(resolved: string): string | null {
 
 /** True when the source points at a direct video file rather than a YouTube/Odysee link. */
 function isFileSource(url: string): boolean {
-  if (/(?:youtube\.com|youtu\.be|odysee\.com)/i.test(url)) return false;
+  if (/(?:youtube\.com|youtu\.be|odysee\.com|instagram\.com)/i.test(url)) return false;
   return FILE_EXT_RE.test(url);
 }
 
@@ -421,5 +448,44 @@ function odyseeEmbed(url: string, clip: Clip = NO_CLIP): { src: string; href: st
     src:   `https://odysee.com/$/embed/${path}` + (start != null ? `?t=${start}` : ''),
     href:  url,
     label: 'Watch on Odysee',
+  };
+}
+
+/**
+ * Maps an instagram.com reel or post URL to its iframe embed URL.
+ *
+ * The rule is to append `embed/` to the canonical media path:
+ *   https://www.instagram.com/reel/C8QltIDsWTG/
+ *     → https://www.instagram.com/reel/C8QltIDsWTG/embed/
+ *
+ * `/reel/`, `/reels/`, `/p/` and `/tv/` all name the same kind of object and all
+ * embed the same way. A profile-scoped reel URL
+ * (`/username/reel/CODE/`) is accepted too; the leading segment carries no
+ * meaning for the embed and is dropped.
+ *
+ * An already-`/embed/` URL is accepted and normalised, so pasting the embed link
+ * works too. Any query tail is discarded — a shared reel arrives with a tracking
+ * `?igsh=` that the embed endpoint has no use for. We accept only absolute https URLs on
+ * instagram.com (or a subdomain), and require the shortcode to be a plain
+ * base64url token, so a crafted `src`/label can't point the iframe elsewhere.
+ *
+ * The embed takes no start offset — there is no documented parameter for one —
+ * so `start`/`end` do not apply here and no clip is threaded through.
+ */
+function instagramEmbed(url: string): { src: string; href: string; label: string } | null {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return null; }
+  if (parsed.protocol !== 'https:') return null;
+  if (!/^(?:[a-z0-9-]+\.)*instagram\.com$/i.test(parsed.hostname)) return null;
+
+  const m = parsed.pathname.match(/(?:^|\/)(reels?|p|tv)\/([A-Za-z0-9_-]+)(?:\/embed)?\/?$/);
+  if (!m) return null;
+  // `/reels/CODE/` is a valid share form but only `/reel/` embeds.
+  const kind = m[1] === 'reels' ? 'reel' : m[1];
+
+  return {
+    src:   `https://www.instagram.com/${kind}/${m[2]}/embed/`,
+    href:  `https://www.instagram.com/${kind}/${m[2]}/`,
+    label: 'Watch on Instagram',
   };
 }

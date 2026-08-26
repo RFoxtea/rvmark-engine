@@ -11,6 +11,10 @@
  *   - URL fetch: HTML fetched from a remote URL via iframe.src
  *       {= iframe} ./path/to/fragment.html
  *
+ * Optional: width / height: CSS length; ratio: w/h (e.g. 4/3, 16:9).
+ *   height wins over ratio, as in CSS. Setting either stops the guest's
+ *   self-reported height from resizing the frame.
+ *
  * staticRenderBody: inline block only (URL fetch not available at build time).
  *
  * Focus model: sandboxed iframes cannot receive programmatic focus. Enter/Space
@@ -43,11 +47,22 @@ import { resolveMediaOn } from '../origin-host.js';
 import { wireSelectThenAction } from '../interaction.js';
 import { StateRelay, buildStatePass } from '../state.js';
 import { postGuestMode, postPrerootSnapshot, wireRelay, registerThemeIframe, unregisterThemeIframe } from '../iframe-host.js';
-import { parsePass } from '../handler-utils.js';
+import { parsePass, resolveBox, applyBox } from '../handler-utils.js';
 
 // ── Per-iframe relay setup ─────────────────────────────────────────────────────
 
-function setupIframe(iframe: HTMLIFrameElement, content: HTMLElement): { activateRelay: () => void } {
+/**
+ * A guest-reported height is data from the framed page, which for a remote URL
+ * is not the author's. Bound it so a hostile or broken guest cannot claim a
+ * megapixel-tall box and push the rest of the document off screen.
+ */
+function isSaneHeight(h: unknown): h is number {
+  return typeof h === 'number' && Number.isFinite(h) && h > 0 && h <= 20000;
+}
+
+// `authorSized` suppresses the guest's self-reported height: an explicit height
+// or ratio is the author overriding the content, so auto-resize must not undo it.
+function setupIframe(iframe: HTMLIFrameElement, content: HTMLElement, authorSized = false): { activateRelay: () => void } {
   let relayActive = false;
   let hasSecondTabStop = false;
 
@@ -118,14 +133,15 @@ function setupIframe(iframe: HTMLIFrameElement, content: HTMLElement): { activat
     if (typeof e.data === 'string' && e.data.startsWith('[iFrameSizer]')) {
       const parts = e.data.slice(13).split(':');
       const height = parseInt(parts[1], 10);
-      if (!isNaN(height)) iframe.style.height = height + 'px';
+      if (!authorSized && isSaneHeight(height)) iframe.style.height = height + 'px';
       if (parts[3] === 'init')
         (e.source as Window).postMessage(
           `[iFrameSizer]${parts[0]}:0:false:false:0:false:true:0:bodyOffset:none:0:0:false:parent:scroll`, '*',
         );
       return;
     }
-    if (e.data?.type === 'rvmark-iframe-resize') iframe.style.height = e.data.height + 'px';
+    if (e.data?.type === 'rvmark-iframe-resize' && !authorSized && isSaneHeight(e.data.height))
+      iframe.style.height = e.data.height + 'px';
     if (e.data?.type === 'rvmark-iframe-focused') {
       content.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
       content.classList.add('node-content--iframe-focused');
@@ -175,7 +191,7 @@ class IframeTypeHandler extends BaseTypeHandler {
     const attrs = sourceNode.attrs;
 
     const rawUrl = attrs.get('src') ?? (sourceNode.label?.trim() || null);
-    const fixedHeight = attrs.get('height') ?? null;
+    const box = resolveBox(attrs, 'iframe');
 
     const content = this.content;
     content.classList.add('node-content--iframe');
@@ -204,7 +220,7 @@ class IframeTypeHandler extends BaseTypeHandler {
           catch { return false; }
         })();
         if (!isSameOrigin) iframe.setAttribute('sandbox', 'allow-scripts');
-        if (fixedHeight) iframe.style.height = fixedHeight;
+        applyBox(iframe, box);
 
         const iframePassRaw = attrs.get('iframe-pass') ?? null;
         const iframePassEntries = iframePassRaw ? parsePass(iframePassRaw) : [];
@@ -212,7 +228,7 @@ class IframeTypeHandler extends BaseTypeHandler {
           ? new StateRelay(buildStatePass(renderNode.state, iframePassEntries))
           : null;
 
-        const { activateRelay } = setupIframe(iframe, content);
+        const { activateRelay } = setupIframe(iframe, content, !!(box.height || box.ratio));
         this._activateRelay = activateRelay;
 
         if (relay) {

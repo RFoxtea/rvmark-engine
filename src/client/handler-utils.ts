@@ -708,3 +708,63 @@ export function treeNavKeydown(e: KeyboardEvent, content: HTMLElement, li: HTMLE
   return false;
 }
 
+
+// ── Box sizing ───────────────────────────────────────────────────────────────
+
+/**
+ * Length allowlist for `width`/`height`: a number and a known CSS unit,
+ * anchored. These values reach a style property, so the allowlist is what keeps
+ * arbitrary CSS out; `calc()` and bare numbers are refused deliberately.
+ */
+const LENGTH_RE = /^[0-9]+(\.[0-9]+)?(px|em|rem|%|vw|vh|ch|ex|cm|mm|in|pt|pc)$/;
+
+export function parseLength(raw: string | undefined): string | null {
+  const v = raw?.trim();
+  return v && LENGTH_RE.test(v) ? v : null;
+}
+
+/**
+ * Parses a `ratio` attribute ("9/16", "4:5", "1.91/1") into a CSS aspect-ratio.
+ *
+ * Nothing from the document is passed through: both sides are parsed as numbers
+ * and the string is rebuilt from them, so CSS injection is structurally
+ * impossible rather than merely filtered. Unparseable values, and zero/negative
+ * or absurdly lopsided ones that would collapse or explode the box, yield null.
+ */
+export function parseRatio(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const m = raw.trim().match(/^(\d+(?:\.\d+)?)\s*[/:]\s*(\d+(?:\.\d+)?)$/);
+  if (!m) return null;
+  const w = parseFloat(m[1]), h = parseFloat(m[2]);
+  if (!(w > 0 && h > 0) || !Number.isFinite(w / h)) return null;
+  if (w / h > 10 || h / w > 10) return null;
+  return `${w} / ${h}`;
+}
+
+export interface BoxSize { width: string | null; height: string | null; ratio: string | null }
+
+/**
+ * Resolves `width`/`height`/`ratio` for one node.
+ *
+ * Precedence follows CSS: an explicit `height` wins over `ratio`, since the used
+ * height is what `aspect-ratio` would otherwise have determined. CSS resolves
+ * that conflict silently, so we warn — an author who wrote both asked for two
+ * different boxes and should learn which one they got.
+ */
+export function resolveBox(attrs: { get(k: string): string | undefined }, nodeType: string): BoxSize {
+  const width  = parseLength(attrs.get('width'));
+  const height = parseLength(attrs.get('height'));
+  let   ratio  = parseRatio(attrs.get('ratio'));
+  if (height && ratio) {
+    console.warn(`rvmark: ${nodeType} node sets both height and ratio; height wins, ratio ignored`);
+    ratio = null;
+  }
+  return { width, height, ratio };
+}
+
+/** Applies a resolved box to an element, leaving unset dimensions to the stylesheet. */
+export function applyBox(el: HTMLElement, box: BoxSize): void {
+  if (box.width)  el.style.maxWidth    = box.width;
+  if (box.height) el.style.height      = box.height;
+  if (box.ratio)  el.style.aspectRatio = box.ratio;
+}
