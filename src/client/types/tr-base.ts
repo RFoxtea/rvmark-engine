@@ -11,12 +11,14 @@ import { ToggleSet } from '../toggle-set.js';
 import { wireSpanToggles } from '../span-toggle.js';
 import type { ResolvedAttrs } from '../../shared/served.js';
 import { BaseTypeHandler } from '../base-handler.js';
-import { mdInlineWithSpansContinued, clipboardHtml } from '../markdown.js';
+import { mdInlineWithSpansContinued, mdInlineWithSpansContinuedUsing, collectInlineRefs,
+         ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import { wireSpanVisibility } from '../span-visibility.js';
 import type { ListboxNav } from '../listbox.js';
 import { wireSelectThenAction, focusAndScroll } from '../interaction.js';
+import { resolveMediaAllOn } from '../origin-host.js';
 
 export const CELL_SEP = /\s*\|\s*/;
 
@@ -79,6 +81,17 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
     this._toggles = new ToggleSet(rn, attrs, { alwaysOpen: openVal === 'always' });
     const hasListbox = this.buildCells(sourceNode, attrs);
 
+    // A row's cells can be provisional for the same two reasons a text label
+    // can be (see types/text.ts): math needing KaTeX, and a span's `img:` ref
+    // needing the origin. One re-render settles both, so typesetting and
+    // resolved URLs never paint over each other.
+    const rawCells  = parseCells(sourceNode.label);
+    const needsKatex = rawCells.some(c => hasMath(c)) && !katexLoaded();
+    const imgRefs    = collectInlineRefs(rawCells);
+    if (needsKatex || imgRefs.length) {
+      rn.holdReady(this._settleCells(sourceNode, attrs, needsKatex, imgRefs));
+    }
+
     // The bullet expands when it can, and otherwise clears a listbox selection —
     // the same contract as a text node's bullet. Before this, a non-expandable
     // listbox row had no click wiring at all, so its options could only be
@@ -136,16 +149,49 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
     this._tog = tog;
   }
 
+  /**
+   * Wait for whatever the cells were missing, then re-render and re-wire them.
+   *
+   * Always settles: this promise gates the row's reveal, so a failed resolve
+   * leaves the first render standing rather than hanging the node.
+   */
+  private async _settleCells(
+    sourceNode: SourceNode,
+    attrs: ResolvedAttrs,
+    needsKatex: boolean,
+    imgRefs: string[],
+  ): Promise<void> {
+    try {
+      if (needsKatex) await ensureKatex();
+      const answers = imgRefs.length
+        ? await resolveMediaAllOn(sourceNode, imgRefs)
+        : [];
+      const resolved = new Map(imgRefs.map((ref, i) => [ref, answers[i] ?? null]));
+      this.buildCells(sourceNode, attrs, resolved);
+    } catch { /* the first render stands, and is what stays wired */ }
+  }
+
   /** Returns true if this row turned out to be a listbox. */
-  private buildCells(sourceNode: SourceNode, attrs: ResolvedAttrs): boolean {
+  private buildCells(
+    sourceNode: SourceNode,
+    attrs: ResolvedAttrs,
+    resolved: Map<string, string | null> | null = null,
+  ): boolean {
     const cells = parseCells(sourceNode.label);
     const spanMap = new Map<number, ParsedSpanAttrs>();
     let nextOrdinal = 0;
 
+    // Re-rendering replaces the row's cells, so clear what a first pass built.
+    for (const old of [...this.content.querySelectorAll(`.${this.cfg.cellClass}`)]) {
+      old.remove();
+    }
+
     for (const cell of cells) {
       const div = document.createElement('div');
       div.className = this.cfg.cellClass;
-      const { html, nextOrdinal: n } = mdInlineWithSpansContinued(cell, spanMap, nextOrdinal);
+      const { html, nextOrdinal: n } = resolved
+        ? mdInlineWithSpansContinuedUsing(cell, spanMap, nextOrdinal, resolved)
+        : mdInlineWithSpansContinued(cell, spanMap, nextOrdinal);
       div.innerHTML = html;
       nextOrdinal = n;
       this.content.appendChild(div);

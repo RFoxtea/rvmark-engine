@@ -1,6 +1,6 @@
 import type { NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { staticMdInline } from '../markdown.js';
+import { staticMdInlineResolved } from '../markdown.js';
 import { TrTypeHandlerBase, parseCells } from './tr-base.js';
 
 class TableTypeHandler extends TrTypeHandlerBase {
@@ -32,10 +32,11 @@ const tableFactory: NodeTypeFactory = {
   // build-rvmark.mjs, which supplies the surrounding li.table-node and toggle.
   //
   // --table-cols is set on the li by that caller, so it is not repeated here.
-  staticRenderBody(node) {
+  staticRenderBody(node, ctx) {
     const cells = parseCells(node.label);
     const headerCells = cells
-      .map(c => `<div class="tr-cell table-header-cell">${staticMdInline(c)}</div>`)
+      .map(c => `<div class="tr-cell table-header-cell">${
+        staticMdInlineResolved(c, refs => refs.map(r => ctx.resolveMedia(node, r)))}</div>`)
       .join('');
     return `<div class="node-content node-content--table">${headerCells}</div>`;
   },

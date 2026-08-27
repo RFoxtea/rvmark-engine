@@ -311,10 +311,17 @@ let _spanReserved: Set<string> | null = null;
 function spanReserved(): Set<string> {
   return _spanReserved ??= new Set([
     'option', 'selected', 'index', 'transclude', 'href', 'img', 'ruby',
-    'class', 'style', 'role', 'show-when', 'toggle',
+    'class', 'style', 'role', 'show-when', 'toggle', 'dark-mode',
     ...STATE_EVENT_ATTRS,
   ]);
 }
+
+// Same class names the image nodetype uses (types/image.ts), so one rule in
+// styles.css governs both an image node and an image span.
+const SPAN_DARK_MODE_CLASSES: Record<string, string> = {
+  invert:     'img-body--dark-invert',
+  background: 'img-body--dark-background',
+};
 
 function renderInlineSpan(token: any, label: string): string {
   const attrs        = parseInlineSpanParams(token.rawParams);
@@ -354,6 +361,14 @@ function renderInlineSpan(token: any, label: string): string {
   // live state (static build, sidepanel preview) simply stays hidden, matching how
   // an unmounted show-when node renders as absent.
   if (attrs.has('show-when')) classes.push('span-conditional-pending');
+  // `dark-mode: invert | background` on an image span, matching the image
+  // nodetype's attribute of the same name. The classes are the image node's, so
+  // both forms are governed by one rule in styles.css.
+  const darkMode = attrs.get('dark-mode');
+  if (darkMode) {
+    const darkClass = SPAN_DARK_MODE_CLASSES[darkMode];
+    if (darkClass) classes.push(darkClass);
+  }
   for (const c of attrs.getAll('class')) classes.push(...c.split(/\s+/).filter(Boolean));
 
   const reserved = spanReserved();
@@ -395,15 +410,50 @@ function renderInlineSpan(token: any, label: string): string {
   return `<span${roleAt}${cls}${styleAt}${dataStr}>${content}</span>`;
 }
 
+/**
+ * Match `[label]{params}` where the label may itself contain spans.
+ *
+ * A regex cannot do this: `[^\]]*` stops at the first `]`, which is the inner
+ * span's, so a nested span truncated the outer label and left its attribute
+ * block as literal text. Scanning with a depth counter instead lets brackets
+ * balance, so spans nest to any depth. Escaped brackets never affect depth.
+ *
+ * Returns the label, the raw params, and the full matched length, or null.
+ */
+function matchSpan(src: string): { label: string; params: string; len: number } | null {
+  if (src[0] !== '[') return null;
+  let depth = 0;
+  let i = 0;
+  for (; i < src.length; i++) {
+    const c = src[i];
+    if (c === '\\') { i++; continue; }
+    if (c === '[') depth++;
+    else if (c === ']') { depth--; if (depth === 0) break; }
+  }
+  if (depth !== 0 || src[i] !== ']' || src[i + 1] !== '{') return null;
+  const close = src.indexOf('}', i + 2);
+  if (close === -1) return null;
+  return {
+    label:  src.slice(1, i),
+    params: src.slice(i + 2, close),
+    len:    close + 1,
+  };
+}
+
 const rvmarkSpanExtension = {
   name: 'rvmarkSpan',
   level: 'inline' as const,
   start(src: string) { return src.indexOf('['); },
   tokenizer(this: any, src: string) {
-    const m = src.match(/^\[((?:[^\]\\]|\\[\s\S])*)\]\{([^}]*)\}/);
+    const m = matchSpan(src);
     if (m) {
-      const token: any = { type: 'rvmarkSpan', raw: m[0], rawParams: m[2], tokens: [] };
-      token.tokens = this.lexer.inlineTokens(m[1]);
+      const token: any = {
+        type: 'rvmarkSpan',
+        raw: src.slice(0, m.len),
+        rawParams: m.params,
+        tokens: [],
+      };
+      token.tokens = this.lexer.inlineTokens(m.label);
       return token;
     }
   },
@@ -568,6 +618,49 @@ export function mdToHtmlWithSpans(text: string): { html: string; spanMap: Map<nu
   return { html: result, spanMap };
 }
 
+/**
+ * The block counterpart to `mdInlineWithSpansResolved`.
+ *
+ * Same two-pass shape: collect the `img:` refs a first parse finds, ask the
+ * origin for their URLs, then parse again with the answers in hand. Without it
+ * a block body's `img:` ref rendered exactly as authored — a relative path that
+ * 404s, since the built asset lives under the origin's own layout — while the
+ * identical ref in a label resolved correctly.
+ */
+export async function mdToHtmlWithSpansResolved(
+  text: string,
+  resolveRefs: (refs: string[]) => Promise<(string | null)[]>,
+): Promise<{ html: string; spanMap: Map<number, ParsedSpanAttrs> }> {
+  const refs = collectSpanResourceRefs(mdToHtmlWithSpans(text).spanMap);
+  let answers: (string | null)[];
+  try { answers = await resolveRefs(refs); }
+  catch { answers = refs.map(() => null); }
+  const resolved = new Map(refs.map((ref, i) => [ref, answers[i] ?? null]));
+  const { result, spanMap } = withSpanMap(
+    () => sanitizeMd(getRuntimeMarked().parse(text)),
+    0,
+    (url) => resolved.get(url) ?? null,
+  );
+  return { html: result, spanMap };
+}
+
+/** Build-time block markdown with `img:` refs resolved. Synchronous, like `staticMdInlineResolved`. */
+export function staticMdToHtmlResolved(
+  text: string,
+  resolveRefs: (refs: string[]) => (string | null)[],
+): string {
+  const refs = collectSpanResourceRefs(
+    withSpanMap(() => getStaticMarked().parse(text)).spanMap,
+  );
+  const answers = resolveRefs(refs);
+  const resolved = new Map(refs.map((ref, i) => [ref, answers[i] ?? null] as const));
+  return withSpanMap(
+    () => getStaticMarked().parse(text),
+    0,
+    (url) => resolved.get(url) ?? null,
+  ).result;
+}
+
 export function staticMdToHtml(text: string): string {
   return withSpanMap(() => getStaticMarked().parse(text)).result;
 }
@@ -659,6 +752,40 @@ export function mdInlineWithSpansContinued(
   );
   for (const [k, v] of partial) spanMap.set(k, v);
   return { html: result, nextOrdinal: endOrdinal };
+}
+
+/**
+ * The resolved half of `mdInlineWithSpansContinued`, for a caller that already
+ * holds the answers.
+ *
+ * A table row renders every cell into one shared span map, so its refs are
+ * collected across the whole row and resolved once — see the two-pass shape in
+ * `mdInlineWithSpansResolved`. Without this a cell's `img:` rendered as
+ * authored and 404ed, while the same ref in a text label resolved.
+ */
+export function mdInlineWithSpansContinuedUsing(
+  text: string,
+  spanMap: Map<number, ParsedSpanAttrs>,
+  startOrdinal: number,
+  resolved: Map<string, string | null>,
+): { html: string; nextOrdinal: number } {
+  const { result, spanMap: partial, endOrdinal } = withSpanMap(
+    () => sanitizeMdInline(getRuntimeMarked().parseInline(text) as string),
+    startOrdinal,
+    (url) => resolved.get(url) ?? null,
+  );
+  for (const [k, v] of partial) spanMap.set(k, v);
+  return { html: result, nextOrdinal: endOrdinal };
+}
+
+/** The `img:` refs a set of inline sources carries, in first-seen order. */
+export function collectInlineRefs(texts: string[]): string[] {
+  const spanMap = new Map<number, ParsedSpanAttrs>();
+  let ordinal = 0;
+  for (const t of texts) {
+    ordinal = mdInlineWithSpansContinued(t, spanMap, ordinal).nextOrdinal;
+  }
+  return collectSpanResourceRefs(spanMap);
 }
 
 /**

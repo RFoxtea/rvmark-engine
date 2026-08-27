@@ -25,12 +25,12 @@ import { ToggleSet } from '../toggle-set.js';
 import { wireSpanToggles } from '../span-toggle.js';
 import type { ResolvedAttrs } from '../../shared/served.js';
 import { BaseTypeHandler } from '../base-handler.js';
-import { resolveMediaOn } from '../origin-host.js';
+import { resolveMediaOn, resolveMediaAllOn } from '../origin-host.js';
 import { wireListbox, isListbox } from '../listbox-utils.js';
 import { wireSpanVisibility } from '../span-visibility.js';
 import type { ListboxNav } from '../listbox.js';
 import { wireSelectThenAction } from '../interaction.js';
-import { mdToHtmlWithSpans, staticMdToHtml, ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../markdown.js';
+import { mdToHtmlWithSpansResolved, staticMdToHtmlResolved, ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../markdown.js';
 import type { ParsedSpanAttrs } from '../markdown.js';
 
 // ── Overflow fade ──────────────────────────────────────────────────────────────
@@ -196,8 +196,12 @@ class BlockTypeHandler extends BaseTypeHandler {
     // awaiting here rather than upgrading afterwards, which would flash the raw
     // source. The node declares managesReady, so it just does not mount until
     // this settles; MOUNT_SETTLE_MS hides a fast load entirely.
-    const renderInto = (src: string) => {
-      const { html, spanMap } = mdToHtmlWithSpans(src);
+    const renderInto = async (src: string) => {
+      // Resolved, like a label's: a span's `img:` ref names an asset on the
+      // origin, so it has to be asked for rather than emitted as authored.
+      const { html, spanMap } = await mdToHtmlWithSpansResolved(
+        src, (refs) => resolveMediaAllOn(sourceNode, refs),
+      );
       // Kept for Ctrl+C, which copies the block's markdown source — the same
       // text whether it was written inline or fetched from a file.
       this._src = src;
@@ -217,7 +221,7 @@ class BlockTypeHandler extends BaseTypeHandler {
       this.rn.ready();
     };
     const renderWhenMathReady = (src: string) => {
-      if (!hasMath(src) || katexLoaded()) { renderInto(src); return; }
+      if (!hasMath(src) || katexLoaded()) { void renderInto(src); return; }
       void ensureKatex().then(() => renderInto(src));
     };
 
@@ -368,10 +372,13 @@ const blockFactory: NodeTypeFactory = {
       let body: string;
       try { body = sectionSlug ? extractMdSection(text, sectionSlug) : text; }
       catch (e) { return wrap(`[${(e as Error).message}]`); }
-      return wrap(staticMdToHtml(body));
+      return wrap(staticMdToHtmlResolved(body, refs => refs.map(r => ctx.resolveMedia(node, r))));
     }
     if (!node.bodyLines?.length) return null;
-    return wrap(staticMdToHtml(node.bodyLines.join('\n')));
+    return wrap(staticMdToHtmlResolved(
+      node.bodyLines.join('\n'),
+      refs => refs.map(r => ctx.resolveMedia(node, r)),
+    ));
   },
 };
 

@@ -8,7 +8,7 @@
 
 import type { NodeTypeFactory, RenderNode } from '../render-node.js';
 import { factoryRegister } from '../render-node.js';
-import { staticMdInline } from '../markdown.js';
+import { staticMdInlineResolved } from '../markdown.js';
 import { TrTypeHandlerBase, parseCells } from './tr-base.js';
 
 class TrTypeHandler extends TrTypeHandlerBase {
@@ -33,9 +33,13 @@ const trFactory: NodeTypeFactory = {
   // Grid row, matching the handler's DOM — not a <tr>. The surrounding
   // li.tr-row and the toggle come from renderStaticTableNode in
   // build-rvmark.mjs, the same split as the table type above.
-  staticRenderBody(node) {
+  staticRenderBody(node, ctx) {
     const cells = parseCells(node.label);
-    const cellHtml = cells.map(c => `<div class="tr-cell">${staticMdInline(c)}</div>`).join('');
+    // Resolved like the hydrated path's: a cell's `img:` names an asset on the
+    // origin, so the fallback must ask for it too or it ships a dead path.
+    const cellHtml = cells.map(c =>
+      `<div class="tr-cell">${staticMdInlineResolved(c, refs => refs.map(r => ctx.resolveMedia(node, r)))}</div>`,
+    ).join('');
     return `<div class="node-content">${cellHtml}</div>`;
   },
 };
