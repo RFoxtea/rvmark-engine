@@ -143,7 +143,14 @@ export function wireSpanToggles(
     // area, so it is not a member of the toggle set and its meaning is whatever
     // state it sets. It has its own wiring — a disclosure's open/close is not
     // its on/off — so it is handed off rather than skipped.
-    if (!ref) { teardowns.push(wireSpanCheckbox(el, span, rn)); continue; }
+    //
+    // Only an explicit {toggle} qualifies. Targetlessness alone does not: a span
+    // carrying nothing but `show-when` or `class` is ordinary text, and wiring
+    // it as a checkbox gave a quotation a role, a tab stop and a marker.
+    if (!ref) {
+      if (span.has('toggle')) teardowns.push(wireSpanCheckbox(el, span, rn));
+      continue;
+    }
 
     el.classList.add(INTERACTIVE_SPAN_CLASSES.toggle);
     if (!el.hasAttribute('role')) el.setAttribute('role', 'button');
