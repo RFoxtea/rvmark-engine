@@ -10,7 +10,7 @@ import type { SourceNode } from './parser.js';
 // Reserved engine namespace: content source/media is published under this
 // underscore-prefixed segment so it can never collide with user content paths.
 // Build output mirrors this: _rvmark/ (content), _assets/ (CSS), _engine/ (JS),
-// _vendor/ (third-party libs). See build-rvmark.mjs.
+// _vendor/ (third-party libs). See build/site.ts.
 export const RVMARK_SEGMENT = '/_rvmark/';
 
 /**
@@ -51,7 +51,7 @@ export interface RvmarkPageContext {
 // Its origin determines what local-relative refs resolve against.
 //
 // Build-time addresses (path-only, no origin) are handled by separate logic in
-// build-rvmark.mjs — these helpers assume full URLs.
+// build/site.ts — these helpers assume full URLs.
 //
 // resolveAddress       — for transclusion refs pointing at rvmark nodes
 // resolveMediaAddress  — for asset refs (images, markdown files, html files)

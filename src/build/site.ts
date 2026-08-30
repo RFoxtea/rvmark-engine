@@ -1,5 +1,5 @@
 /**
- * build-rvmark.mjs — rvmark static site generator (library form)
+ * site.ts — rvmark static site generator (library form)
  *
  * Exposes `buildSite(config)`: for each .rvmark file under the content dir,
  * generates an HTML page with a flat static rendering (no-JS fallback) and
@@ -24,14 +24,16 @@
  */
 
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, cpSync, rmSync, existsSync, statSync } from 'fs';
-import { join, dirname, posix } from 'path';
+import { join, dirname } from 'path';
 import { createRequire } from 'module';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { fileToUrlStem, relativeUrl, resolveAddress, resolveMediaAddress, addressToFile, addressToSlug, addressToHref, parseTranscludeEntry } from '../out/shared/shared.js';
+import { fileToUrlStem, resolveAddress, resolveMediaAddress, addressToFile, addressToSlug, addressToHref, parseTranscludeEntry } from '../shared/shared.js';
+import type { SourceNode, NodeAttrs, ResolvedTag, TagDef, OriginDef } from '../shared/parser.js';
+import type { SourceFile as SourceFileT } from '../envoy/source-file.js';
 
-// Engine package root — this file lives at <ENGINE_ROOT>/build/build-rvmark.mjs.
-const ENGINE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const enginePath = (...p) => join(ENGINE_ROOT, ...p);
+// Engine package root — this file emits to <ENGINE_ROOT>/out/build/site.js.
+const ENGINE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const enginePath = (...p: string[]) => join(ENGINE_ROOT, ...p);
 const requireFromEngine = createRequire(join(ENGINE_ROOT, 'package.json'));
 
 // ── Inject marked into globalThis before importing type files ─────────────────
@@ -41,7 +43,7 @@ const requireFromEngine = createRequire(join(ENGINE_ROOT, 'package.json'));
 // package root then reach the bundle relative to it.
 
 const markedRoot = dirname(requireFromEngine.resolve('marked/package.json'));
-globalThis.marked = requireFromEngine(join(markedRoot, 'lib/marked.cjs'));
+(globalThis as any).marked = requireFromEngine(join(markedRoot, 'lib/marked.cjs'));
 
 // ── Stub browser globals used by type files at module init ────────────────────
 // Type files are now real ESM modules — they run in the actual Node environment.
@@ -50,41 +52,41 @@ globalThis.marked = requireFromEngine(join(markedRoot, 'lib/marked.cjs'));
 // during build-time static rendering.
 
 if (typeof globalThis.window === 'undefined') {
-  globalThis.window = { addEventListener() {} };
+  (globalThis as any).window = { addEventListener() {} };
 }
 if (typeof globalThis.document === 'undefined') {
-  globalThis.document = { createElement() { return {}; }, querySelector() { return null; }, addEventListener() {} };
+  (globalThis as any).document = { createElement() { return {}; }, querySelector() { return null; }, addEventListener() {} };
 }
-if (typeof globalThis.DOMPurify === 'undefined') {
-  globalThis.DOMPurify = { sanitize: s => s };
+if (typeof (globalThis as any).DOMPurify === 'undefined') {
+  (globalThis as any).DOMPurify = { sanitize: (s: string) => s };
 }
 
 // ── Import parser and type modules ────────────────────────────────────────────
 // Dynamic import ensures globalThis stubs are in place before module init runs.
 
-const { parse, resolveFile } = await import('../out/shared/parser.js');
-const { Multimap } = await import('../out/shared/multimap.js');
+const { parse, resolveFile } = await import('../shared/parser.js');
+const { Multimap } = await import('../shared/multimap.js');
 
-const { factoryGet } = await import('../out/client/render-node.js');
-const { SourceFile } = await import('../out/envoy/source-file.js');
+const { factoryGet } = await import('../client/render-node.js');
+const { SourceFile } = await import('../envoy/source-file.js');
 
 // Import type files for their side effects (they call RvmarkRegistry.register).
 // text.js also exports the static bullet helpers — bullets belong to the types
 // that draw them (text, and the tr/table family via tr-base), not to this
 // builder, which only asks for them and never knows how they are made.
-const { staticRenderBullet, staticBulletProps } = await import('../out/client/types/text.js');
-const { staticMdInline, staticMdInlineResolved, staticMdToHtml } = await import('../out/client/markdown.js');
-await import('../out/client/types/block.js');
-await import('../out/client/types/video.js');
-await import('../out/client/types/iframe.js');
-await import('../out/client/types/image.js');
-await import('../out/client/types/tr.js');
-await import('../out/client/types/table.js');
+const { staticRenderBullet, staticBulletProps } = await import('../client/types/text.js');
+const { staticMdInline, staticMdInlineResolved } = await import('../client/markdown.js');
+await import('../client/types/block.js');
+await import('../client/types/video.js');
+await import('../client/types/iframe.js');
+await import('../client/types/image.js');
+await import('../client/types/tr.js');
+await import('../client/types/table.js');
 // parseCells is the single definition of how a `a | b | c` label splits, shared
 // with the handlers so the static column count can never drift from theirs.
-const { parseCells } = await import('../out/client/types/tr-base.js');
-await import('../out/client/types/hr.js');
-await import('../out/client/types/gap.js');
+const { parseCells } = await import('../client/types/tr-base.js');
+await import('../client/types/hr.js');
+await import('../client/types/gap.js');
 // sidepanel.js is not needed at build time (no static rendering) — skip it.
 
 // ── Custom-type / envoy emission ──────────────────────────────────────────────
@@ -93,10 +95,9 @@ await import('../out/client/types/gap.js');
 // files are TypeScript that default-export a CustomType descriptor and import
 // only types from 'rvmark/envoy' (erased by transpile). We transpile (strip
 // types) rather than typecheck — fast, and isolatedModules-safe.
-async function emitEnvoy(customTypesDir, DIST_DIR) {
-  const srcFiles = (customTypesDir && existsSync(customTypesDir))
-    ? readdirSync(customTypesDir).filter(f => f.endsWith('.ts'))
-    : [];
+async function emitEnvoy(customTypesDir: string | null, DIST_DIR: string) {
+  const typesDir = customTypesDir && existsSync(customTypesDir) ? customTypesDir : null;
+  const srcFiles = typesDir ? readdirSync(typesDir).filter(f => f.endsWith('.ts')) : [];
   const modules = []; // emitted module basenames (e.g. 'mytype.js')
 
   // Only minted when there is something to put in it: a site with no custom
@@ -109,7 +110,7 @@ async function emitEnvoy(customTypesDir, DIST_DIR) {
 
   const outDir = join(DIST_DIR, '_custom-types');
   for (const f of srcFiles) {
-    const src = readFileSync(join(customTypesDir, f), 'utf8');
+    const src = readFileSync(join(typesDir!, f), 'utf8');
     const { outputText } = ts.transpileModule(src, {
       compilerOptions: {
         target: ts.ScriptTarget.ES2022,
@@ -155,7 +156,20 @@ async function emitEnvoy(customTypesDir, DIST_DIR) {
  * Build a site from rvmark content into a static HTML site.
  * See the config shape documented at the top of this file.
  */
-export async function buildSite(config) {
+export interface BuildSiteConfig {
+  contentDir: string;
+  outDir: string;
+  theme?: string | null;
+  head?: string | null;
+  template?: string | null;
+  templateHtml?: string | null;
+  assetsDir?: string | null;
+  customTypesDir?: string | null;
+  includeDrafts?: boolean;
+  mountPath?: string;
+}
+
+export async function buildSite(config: BuildSiteConfig) {
   const {
     contentDir,
     outDir,
@@ -181,7 +195,7 @@ export async function buildSite(config) {
   // since a built page has no origin yet. Mapping it back to a file on disk is
   // the origin's Node-side half doing what its browser half does with fetch.
   const buildCtx = {
-    readFile(url) {
+    readFile(url: string) {
       if (!url || !url.startsWith(mountPath)) return null;
       const relPath = url.slice(mountPath.length).split('#')[0];
       try { return readFileSync(join(RVMARK_DIR, relPath), 'utf8'); }
@@ -191,7 +205,7 @@ export async function buildSite(config) {
     // builder IS the origin's Node-side half: the store is in hand and there is
     // no wire between them. A node carries the document it came from, so a
     // transcluded foreign node still resolves against its own file.
-    resolveMedia(node, ref) {
+    resolveMedia(node: SourceNode, ref: string) {
       return resolveMediaAddress(ref, node.pageAddress) ?? ref;
     },
   };
@@ -199,7 +213,7 @@ export async function buildSite(config) {
   // A node's label, with any `img:` on a span resolved against the file that
   // node came from — the same rule the hydrated path follows, and the reason a
   // transcluded label is resolved against ITS node rather than the host's.
-  const staticLabel = (node, label) =>
+  const staticLabel = (node: SourceNode, label?: string) =>
     staticMdInlineResolved(label ?? node.label ?? '', (refs) => refs.map((ref) => buildCtx.resolveMedia(node, ref)));
   // `templateHtml` (raw contents) wins over `template` (path); both default to
   // the engine's template. Lets callers patch the template in-memory (e.g. the
@@ -216,7 +230,7 @@ export async function buildSite(config) {
     // These duplicate what the template already sets; the browser resolves the
     // clash on its own terms and the author gets no signal. Warn, don't block —
     // overriding may be deliberate.
-    for (const [re, what] of [[/<title[\s>]/i, '<title>'], [/<base[\s>]/i, '<base>'], [/http-equiv=/i, 'http-equiv meta']])
+    for (const [re, what] of [[/<title[\s>]/i, '<title>'], [/<base[\s>]/i, '<base>'], [/http-equiv=/i, 'http-equiv meta']] as const)
       if (re.test(SITE_HEAD)) console.warn(`  warning: head fragment contains ${what}; the template already sets one`);
   }
 
@@ -224,11 +238,11 @@ export async function buildSite(config) {
   const urlStemToFile = new Map();
   const rawFiles = new Map();    // first pass: RawFile per relPath
   const sourceFiles = new Map(); // second pass: resolved { head, roots, nodeMap, sourceFile }
-  const siteMap = {};
+  const siteMap: Record<string, { file: string }> = {};
 
   // ── Inherited head from ancestor index.rvmark files ──────────────────────────
 
-  function resolveInheritedHead(relPath) {
+  function resolveInheritedHead(relPath: string) {
   const parts = relPath.split('/');
   const chain = ['index.rvmark'];
   for (let i = 0; i < parts.length - 1; i++) {
@@ -236,24 +250,17 @@ export async function buildSite(config) {
   }
 
   const mergedMeta = new Multimap();
-  const mergedTagDefs = {};
+  const mergedTagDefs: Record<string, TagDef> = {};
+  const mergedOrigins: Record<string, OriginDef> = {};
   for (const indexPath of chain) {
     if (indexPath === relPath) continue;
     const p = rawFiles.get(indexPath);
     if (!p) continue;
     for (const [k, v] of p.head.meta.allEntries()) mergedMeta.append(k, v);
     Object.assign(mergedTagDefs, p.head.tagDefs);
+    Object.assign(mergedOrigins, p.head.origins);
   }
-  return { meta: mergedMeta, tagDefs: mergedTagDefs };
-}
-
-function resolveTag(name, sourceFile, inlineProps) {
-  const def = new Multimap();
-  const base = sourceFile.tagDefs?.[name];
-  if (base) for (const [k, v] of base.allEntries()) def.append(k, v);
-  if (inlineProps) for (const [k, v] of inlineProps.allEntries()) def.append(k, v);
-  if (name.startsWith('.') && !def.has('internal') && !def.has('label')) def.append('internal', '');
-  return def;
+  return { meta: mergedMeta, tagDefs: mergedTagDefs, origins: mergedOrigins };
 }
 
 // ── Reserved-namespace validation ─────────────────────────────────────────────
@@ -262,8 +269,8 @@ function resolveTag(name, sourceFile, inlineProps) {
 // that guarantee, the content tree may not contain underscore-prefixed directories
 // or underscore-prefixed .rvmark files — they would shadow or collide with reserved
 // paths once mirrored under _rvmark/. Collect every offender, then fail once.
-function collectReservedNameViolations(dir, base) {
-  const violations = [];
+function collectReservedNameViolations(dir: string, base: string): string[] {
+  const violations: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     const rel = base ? `${base}/${entry}` : entry;
@@ -288,8 +295,8 @@ if (reservedViolations.length) {
 
 // ── Scan rvmark files (recursive) ─────────────────────────────────────────────
 
-function walkRvmark(dir, base) {
-  const results = [];
+function walkRvmark(dir: string, base: string): string[] {
+  const results: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     const rel = base ? `${base}/${entry}` : entry;
@@ -324,7 +331,7 @@ const rvmarkFiles = allRvmarkFiles.filter(f => !shadowedSet.has(f));
  * Recursively remove nodes with {draft} from a node list.
  * Also removes them from nodeMap.
  */
-function pruneDraftNodes(nodes, nodeMap) {
+function pruneDraftNodes(nodes: SourceNode[], nodeMap: Record<string, SourceNode>) {
   const kept = [];
   for (const node of nodes) {
     if (node.attrs.has('draft')) {
@@ -338,7 +345,7 @@ function pruneDraftNodes(nodes, nodeMap) {
   return kept;
 }
 
-function removeFromNodeMap(node, nodeMap) {
+function removeFromNodeMap(node: SourceNode, nodeMap: Record<string, SourceNode>) {
   if (nodeMap[node.slug] === node) delete nodeMap[node.slug];
   for (const child of node.children) removeFromNodeMap(child, nodeMap);
 }
@@ -348,7 +355,7 @@ function removeFromNodeMap(node, nodeMap) {
  * A draft node line and all following lines at greater indentation are removed.
  * Also removes multiline body blocks ({/=} / {/media} delimited).
  */
-function stripDraftLines(src) {
+function stripDraftLines(src: string) {
   const lines = src.split('\n');
   const out = [];
   let skipIndent = null; // indent string of the draft node being skipped
@@ -395,7 +402,7 @@ function stripDraftLines(src) {
       // Check for {draft} in the attrs block
       const paramM = rest.match(/^\{([^}]*)\}/);
       if (paramM) {
-        const keys = paramM[1].split(';').map(s => s.trim());
+        const keys = paramM[1].split(';').map((s: string) => s.trim());
         if (keys.includes('draft')) {
           skipIndent = nodeM[1];
           continue;
@@ -438,13 +445,13 @@ for (const [relPath, raw] of rawFiles) {
 
 // ── Escape helper (used in static HTML tree renderer) ─────────────────────────
 
-function escHtml(s) {
+function escHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // ── Static HTML tree renderer ─────────────────────────────────────────────────
 
-function resolveTransclusion(val, sourceFile) {
+function resolveTransclusion(val: string, sourceFile: SourceFileT) {
   if (!val || typeof val !== 'string') return null;
   if (val.startsWith('https://') || val.startsWith('http://')) return null;
 
@@ -469,7 +476,7 @@ function resolveTransclusion(val, sourceFile) {
   return targetSf.roots.length ? { node: targetSf.roots[0], file: targetFile } : null;
 }
 
-function isInterpageRef(val, sourceFile) {
+function isInterpageRef(val: string, sourceFile: SourceFileT) {
   if (!val || typeof val !== 'string') return false;
   if (val.startsWith('#')) return false;
   if (val.startsWith('https://') || val.startsWith('http://')) return true;
@@ -480,7 +487,7 @@ function isInterpageRef(val, sourceFile) {
   return !!targetFile && targetFile !== sourceFile.address;
 }
 
-function transclusionHref(val, sourceFile) {
+function transclusionHref(val: string, sourceFile: SourceFileT) {
   if (!val || typeof val !== 'string') return null;
   if (val.startsWith('https://') || val.startsWith('http://')) return val;
 
@@ -504,10 +511,9 @@ function transclusionHref(val, sourceFile) {
 // String twin of buildTagChips (tags.ts). Same classes, same order, same
 // trailing space — the space is a real character there for clipboard reasons,
 // and matching it keeps copied text identical between the two renderings.
-function buildStaticTagChips(tags, sourceFile) {
+function buildStaticTagChips(tags: ResolvedTag[]) {
   return tags
-    .map(({ name, props }) => {
-      const def = resolveTag(name, sourceFile, props);
+    .map(({ name, def }: ResolvedTag) => {
       if (def.has('internal')) return '';
       const color = def.get('color');
       const tip   = def.get('tip');
@@ -526,10 +532,9 @@ function buildStaticTagChips(tags, sourceFile) {
 
 // Class list for .node-content, mirroring applyTagClasses (handler-utils.ts):
 // tag-defined classes first, then the node's own {class} attrs.
-function staticContentClasses(node, sourceFile, attrs) {
+function staticContentClasses(node: SourceNode, attrs: NodeAttrs) {
   const out = [];
-  for (const { name, props } of node.tags) {
-    const def = resolveTag(name, sourceFile, props);
+  for (const { def } of node.tags) {
     for (const cls of def.getAll('class')) out.push(...cls.split(/\s+/).filter(Boolean));
   }
   // `attrs` is the resolved view, so this picks up tag-supplied `node.class`
@@ -568,8 +573,8 @@ const ALWAYS_OPEN_TYPES = new Set(['block']);
 // cannot fail to load, so neither needs a second request per row to find out
 // whether the first one did.
 const bulletDataUriCache = new Map();
-function inlineBulletUrls(styles, RVMARK_DIR) {
-  return styles.map(decl => decl.replace(/url\("([^"]+)"\)/g, (whole, url) => {
+function inlineBulletUrls(styles: string[], RVMARK_DIR: string) {
+  return styles.map((decl: string) => decl.replace(/url\("([^"]+)"\)/g, (whole: string, url: string) => {
     if (!url.endsWith('.svg') || /^(data:|https?:)/.test(url)) return whole;
     if (bulletDataUriCache.has(url)) return bulletDataUriCache.get(url);
     // Strip the mount prefix, then read from the content tree it mirrors.
@@ -598,12 +603,12 @@ function inlineBulletUrls(styles, RVMARK_DIR) {
 // <details> when there are children, the row itself when there are not — so a
 // '#id' link lands on the node either way, and :target can reach the <details>
 // it needs to force open.
-function wrapDisclosure(rowHtml, childrenHtml, open, idAttr) {
+function wrapDisclosure(rowHtml: string, childrenHtml: string, open: boolean, idAttr: string) {
   if (!childrenHtml) return rowHtml.replace(/^<(summary|div)/, `<$1${idAttr}`);
   return `<details${open ? ' open' : ''}${idAttr}>${rowHtml}<div class="node-children">${childrenHtml}</div></details>`;
 }
 
-function renderStaticNode(node, sourceFile, depth = 0) {
+function renderStaticNode(node: SourceNode, sourceFile: SourceFileT, depth = 0) {
   // Merged view: tag-supplied `node.*` attrs (e.g. a {.book} tag defining
   // node.bullet) plus the node's own. The hydrated page reads exactly this via
   // resolveAttrs, so reading raw node.attrs here would silently drop every
@@ -617,7 +622,7 @@ function renderStaticNode(node, sourceFile, depth = 0) {
   // prefix is stripped here and the link is the same. Left on, it would reach
   // resolveAddress as a literal path segment and yield a dead href.
   const embedList  = transcludeRaw
-    ? transcludeRaw.split(',').map(s => parseTranscludeEntry(s).ref).filter(Boolean)
+    ? transcludeRaw.split(',').map((s: string) => parseTranscludeEntry(s).ref).filter(Boolean)
     : null;
   const hasLabel   = (node.label || '').trim() !== '';
   const isChildrenMode = transcludeRaw !== null && (
@@ -626,17 +631,17 @@ function renderStaticNode(node, sourceFile, depth = 0) {
   );
   const embedVal        = !isChildrenMode && embedList ? embedList[0] : null;
   const childrenLinkVal = isChildrenMode && embedList
-    ? (embedList.find(s => s !== '*') ?? null)
+    ? (embedList.find((s: string) => s !== '*') ?? null)
     : null;
   const id               = node.permalinkId;
   const idAttr           = ` id="${escHtml(id)}"`;
 
-  const tags = buildStaticTagChips(node.tags, sourceFile);
+  const tags = buildStaticTagChips(node.tags);
 
   // Tag/attr classes belong on .node-content, matching applyTagClasses. The
   // {hidden} marker stays on the li: it suppresses the whole row, children
   // included, and .node-content would only reach the row itself.
-  const contentClasses = staticContentClasses(node, sourceFile, attrs);
+  const contentClasses = staticContentClasses(node, attrs);
   const liClasses = [
     isHidden ? 'static-hidden' : '',
     'node',
@@ -690,7 +695,7 @@ function renderStaticNode(node, sourceFile, depth = 0) {
   // announces its own open/closed state natively — the attribute is here for
   // the CSS presence rules ([aria-expanded] draws a triangle rather than a
   // dot), not for assistive tech, which reads the disclosure instead.
-  const row = (innerHtml, isSummary, open = false, extraClasses = []) => {
+  const row = (innerHtml: string, isSummary: boolean, open = false, extraClasses: string[] = []) => {
     const cls = ['node-content', ...contentClasses, ...bulletClasses, ...extraClasses].join(' ');
     const expanded = isSummary ? ` aria-expanded="${open}"` : '';
     const tag = isSummary ? 'summary' : 'div';
@@ -710,8 +715,8 @@ function renderStaticNode(node, sourceFile, depth = 0) {
       if (resolved) {
         linkLabel = resolved.node.label || linkLabel || transcludeVal;
         const targetSourceFile = sourceFiles.get(resolved.file);
-        const targetTags = targetSourceFile ? buildStaticTagChips(resolved.node.tags, targetSourceFile) : '';
-        const lbl = `<span class="node-label">${tags}${targetTags}<a class="${refClass}" href="${escHtml(href)}">${staticLabel(resolved.node, linkLabel)}</a></span>`;
+        const targetTags = targetSourceFile ? buildStaticTagChips(resolved.node.tags) : '';
+        const lbl = `<span class="node-label">${tags}${targetTags}<a class="${refClass}" href="${escHtml(href ?? '')}">${staticLabel(resolved.node, linkLabel ?? undefined)}</a></span>`;
         return `<li${liClassAttr}>${row(lbl, false)}</li>\n`;
       }
     }
@@ -739,7 +744,7 @@ function renderStaticNode(node, sourceFile, depth = 0) {
   const typeName = attrs.get('type');
   if (typeName) {
     const factory = factoryGet(typeName);
-    const bodyHtml = (!factory?.isComposite ? factory?.staticRenderBody?.(node, buildCtx) : null) ?? null;
+    const bodyHtml = factory?.staticRenderBody?.(node, buildCtx) ?? null;
     const rowHtml = row(bodyHtml ?? '', isSummary, open);
     if (!isSummary) {
       const kids = childrenHtml ? `<div class="node-children">${childrenHtml}</div>` : '';
@@ -775,7 +780,7 @@ function renderStaticNode(node, sourceFile, depth = 0) {
 // IS the bullet element the grid already places — so the box tree is exactly
 // what the hydrated page builds, and :checked ~ .node-children drives the same
 // collapse aria-expanded drives there.
-function renderStaticTableNode(node, sourceFile, depth, typeName) {
+function renderStaticTableNode(node: SourceNode, sourceFile: SourceFileT, depth: number, typeName: string) {
   const attrs  = node.attrs;
   const isTable = typeName === 'table';
   const factory = factoryGet(typeName);
@@ -837,29 +842,15 @@ function renderStaticTableNode(node, sourceFile, depth, typeName) {
   return `<li class="${escHtml(liClasses.join(' '))}"${idAttr}${styleAttr}>${inputHtml}${toggleHtml}${rowHtml}${childrenHtml}</li>\n`;
 }
 
-function renderStaticNodes(nodes, sourceFile, depth = 0) {
+function renderStaticNodes(nodes: SourceNode[], sourceFile: SourceFileT, depth = 0) {
   if (!nodes.length) return '';
   let html = '<ul class="tree">\n';
   let i = 0;
   while (i < nodes.length) {
     const node = nodes[i];
     const typeName = node.attrs.get('type') ?? 'text';
-    const factory = factoryGet(typeName);
 
-    if (factory?.isComposite) {
-      const runStart = i;
-      while (i < nodes.length && (nodes[i].attrs.get('type') ?? 'text') === typeName) i++;
-      const run = nodes.slice(runStart, i);
-      html += '<li class="node">';
-      for (const rn of run) {
-        html += factory.staticRenderBody?.(rn, buildCtx) ?? '';
-      }
-      html += '</li>\n';
-      const firstWithChildren = run.find(rn => rn.children.length > 0);
-      if (firstWithChildren) {
-        html += `<li class="node">${renderStaticNodes(firstWithChildren.children, sourceFile, depth + 1)}</li>\n`;
-      }
-    } else if (typeName === 'table' || typeName === 'tr') {
+    if (typeName === 'table' || typeName === 'tr') {
       html += renderStaticTableNode(node, sourceFile, depth, typeName);
       i++;
     } else {
@@ -921,12 +912,12 @@ for (const [relPath, sourceFile] of sourceFiles) {
   // maps that stem to docs/navigating/index.html implicitly; file:// has no
   // server, so the literal filename has to be in the href, inserted before
   // any fragment.
-  const rebase = (html) => {
+  const rebase = (html: string) => {
     const rel = base + mountPath.replace(/^\//, '');
     return html
       .replaceAll(`"${mountPath}`, `"${rel}`)
       .replaceAll(`&quot;${mountPath}`, `&quot;${rel}`)
-      .replace(/href="\/(?!\/)([^"#]*)(#[^"]*)?"/g, (_, stem, frag) =>
+      .replace(/href="\/(?!\/)([^"#]*)(#[^"]*)?"/g, (_: string, stem: string, frag: string) =>
         `href="${base}${stem}${stem && !stem.endsWith('/') ? '/' : ''}index.html${frag ?? ''}"`);
   };
 
@@ -1072,7 +1063,7 @@ for (const [relPath, sourceFile] of sourceFiles) {
   }
 
   // Copy non-.rvmark files in the rvmark dir (e.g. docs.md, images).
-  function copyNonRvmark(dir, relBase) {
+  function copyNonRvmark(dir: string, relBase: string) {
     for (const entry of readdirSync(dir)) {
       const full = join(dir, entry);
       const rel  = relBase ? `${relBase}/${entry}` : entry;

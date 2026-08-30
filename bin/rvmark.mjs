@@ -23,7 +23,7 @@
  * Defaults: --content rvmark  --out dist  --port 8000
  */
 
-import { buildSite } from '../build/build-rvmark.mjs';
+import { buildSite } from '../out/build/site.js';
 import { watchPaths, serializeBuilds } from '../scripts/watch.mjs';
 import { startServer } from '../scripts/static-server.mjs';
 import { execSync } from 'child_process';

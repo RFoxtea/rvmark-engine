@@ -17,6 +17,7 @@ import { fileURLToPath } from 'url';
 const ENGINE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 
+execSync('npx tsc -p tsconfig.build.json', { stdio: 'inherit', cwd: ENGINE_ROOT });
 execSync('npx tsc', { stdio: 'inherit', cwd: ENGINE_ROOT });
 pruneOut(join(ENGINE_ROOT, 'src'), join(ENGINE_ROOT, 'out'));
 

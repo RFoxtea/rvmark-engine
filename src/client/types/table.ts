@@ -29,7 +29,7 @@ const tableFactory: NodeTypeFactory = {
   // Emits the same grid header row the handler builds — .node-content--table
   // with .tr-cell children — not a <table>. The fallback keeps the CSS grid so
   // cells stay aligned with the rows beneath them; see renderStaticTableNode in
-  // build-rvmark.mjs, which supplies the surrounding li.table-node and toggle.
+  // build/site.ts, which supplies the surrounding li.table-node and toggle.
   //
   // --table-cols is set on the li by that caller, so it is not repeated here.
   staticRenderBody(node, ctx) {

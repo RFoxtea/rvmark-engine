@@ -32,7 +32,7 @@ const trFactory: NodeTypeFactory = {
   },
   // Grid row, matching the handler's DOM — not a <tr>. The surrounding
   // li.tr-row and the toggle come from renderStaticTableNode in
-  // build-rvmark.mjs, the same split as the table type above.
+  // build/site.ts, the same split as the table type above.
   staticRenderBody(node, ctx) {
     const cells = parseCells(node.label);
     // Resolved like the hydrated path's: a cell's `img:` names an asset on the

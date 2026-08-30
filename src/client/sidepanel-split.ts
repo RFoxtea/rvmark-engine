@@ -24,7 +24,7 @@
  * Split.js is imported lazily rather than at the top of the file. It touches
  * `document` while its own module body runs, and this module is in the graph
  * the static builder loads under Node — where `document` is a stub whose
- * createElement returns a bare {} (build-rvmark.mjs). A top-level import
+ * createElement returns a bare {} (build/site.ts). A top-level import
  * therefore crashes the build. The dynamic import runs only from
  * sidepanelSplitAttach, which is reached only from a real page.
  */
