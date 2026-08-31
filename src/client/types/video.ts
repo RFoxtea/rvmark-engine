@@ -1,7 +1,7 @@
 /**
  * types/video.ts
  *
- * Embeds a video in the node body. Four sources are supported:
+ * Embeds a video in the node body. Five sources are supported:
  *
  *   1. YouTube videos and playlists (embedded via the IFrame Player API):
  *        {= video} https://www.youtube.com/watch?v=...
@@ -12,24 +12,32 @@
  *   2. Odysee videos (embedded via an iframe to odysee.com/$/embed/...):
  *        {= video} https://odysee.com/@channel:c/video-name:a
  *
- *   3. Instagram reels and posts (embedded via an iframe to instagram.com/…/embed):
+ *   3. Vimeo videos (embedded via an iframe to player.vimeo.com, driven by the
+ *      Player SDK's postMessage protocol):
+ *        {= video} https://vimeo.com/76979871
+ *        {= video} https://vimeo.com/76979871/abc123def4   (unlisted, private hash)
+ *
+ *   4. Instagram reels and posts (embedded via an iframe to instagram.com/…/embed):
  *        {= video} https://www.instagram.com/reel/C8QltIDsWTG/
  *
- *   4. Direct video files (embedded via a native <video> element):
+ *   5. Direct video files (embedded via a native <video> element):
  *        {= video} ./clip.mp4
  *        {= video} https://example.com/clip.webm
  *        {type: video; src: ./clip.mp4}
  *
- * YouTube, Odysee and direct files accept a start (and end) offset, so a node can
+ * YouTube, Odysee, Vimeo and direct files accept a start offset, so a node can
  * cite one passage of a long video. A timestamp already present in the source URL
  * is honoured:
  *
  *        {= video} https://www.youtube.com/watch?v=KtQ9nt2ZeGM&t=4216s
  *        {= video} https://odysee.com/@channel:c/video-name:a?t=90
+ *        {= video} https://vimeo.com/76979871#t=90s
  *        {= video} ./clip.mp4#t=30
  *
  * and `start` / `end` attributes override it — the only way to timestamp a bare
- * ID, and the only way to set an end cutoff (no watch-URL param expresses one):
+ * ID, and the only way to set an end cutoff (no watch-URL param expresses one).
+ * Only YouTube and direct files honour an end cutoff; Odysee and Vimeo express
+ * no such parameter, so `end` is ignored there:
  *
  *        {= video; start: 4216} KtQ9nt2ZeGM
  *        {= video; start: 1h10m16s; end: 4300} https://www.youtube.com/watch?v=...
@@ -41,10 +49,11 @@
  * are ignored on a reel and the clip always starts from the top.
  *
  * For YouTube embeds the IFrame Player API (enablejsapi=1 + postMessage) is used
- * to toggle play/pause from the tree row via Enter or Space. For native files the
- * <video> element is toggled directly. Neither Odysee nor Instagram exposes a
- * documented player API, so Enter/Space is a no-op there — use the embed's own
- * native controls.
+ * to toggle play/pause from the tree row via Enter or Space; Vimeo is toggled the
+ * same way over its own postMessage protocol. For native files the <video>
+ * element is toggled directly. Neither Odysee nor Instagram exposes a documented
+ * player API, so Enter/Space is a no-op there — use the embed's own native
+ * controls.
  *
  * Player state constants (from YT IFrame API):
  *   -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 video cued
@@ -59,19 +68,40 @@ import { resolveMediaOn } from '../origin-host.js';
 
 import { wireSelectThenAction } from '../interaction.js';
 
-// Tracks play state per YouTube iframe via onStateChange messages from the IFrame API.
-// May not work in Firefox due to storage partitioning; in that case
-// Enter/Space will always send playVideo (no toggle).
-const _ytPlaying = new WeakMap<HTMLIFrameElement, boolean>();
+/** Which player protocol an iframe speaks, if any. */
+type PlayerApi = 'yt' | 'vimeo';
+
+const YT_ORIGIN    = 'https://www.youtube-nocookie.com';
+const VIMEO_ORIGIN = 'https://player.vimeo.com';
+
+// Tracks play state per iframe from the player's own state messages: YouTube's
+// onStateChange over the IFrame API, Vimeo's play/pause/ended events over the
+// Player SDK protocol. May not work in Firefox due to storage partitioning; in
+// that case Enter/Space will always send play (no toggle).
+const _playing = new WeakMap<HTMLIFrameElement, boolean>();
 
 window.addEventListener('message', (e) => {
-  if (e.origin !== 'https://www.youtube-nocookie.com') return;
+  const api: PlayerApi | null =
+    e.origin === YT_ORIGIN    ? 'yt'    :
+    e.origin === VIMEO_ORIGIN ? 'vimeo' : null;
+  if (!api) return;
+
   let data: any;
-  try { data = JSON.parse(e.data); } catch { return; }
-  if (data.event !== 'infoDelivery' || data.info?.playerState == null) return;
+  try { data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch { return; }
+
+  let playing: boolean;
+  if (api === 'yt') {
+    if (data.event !== 'infoDelivery' || data.info?.playerState == null) return;
+    playing = data.info.playerState === 1 || data.info.playerState === 3;
+  } else {
+    // Vimeo reports each transition as its own event rather than a state code.
+    if (data.event !== 'play' && data.event !== 'pause' && data.event !== 'ended') return;
+    playing = data.event === 'play';
+  }
+
   for (const iframe of document.querySelectorAll<HTMLIFrameElement>('.video-wrap iframe')) {
     if (iframe.contentWindow === e.source) {
-      _ytPlaying.set(iframe, data.info.playerState === 1 || data.info.playerState === 3);
+      _playing.set(iframe, playing);
       break;
     }
   }
@@ -83,9 +113,9 @@ const FILE_EXT_RE = /\.(mp4|webm|ogv|ogg|mov|m4v)(?:[?#]|$)/i;
 class VideoTypeHandler extends BaseTypeHandler {
   private _canonicalHref:  string | null = null;
   private _iframe:                  HTMLIFrameElement | null = null;
-  // True when _iframe is a YouTube embed wired to the IFrame Player API.
-  // Odysee iframes have no player API, so their play/pause toggle is a no-op.
-  private _ytIframe:                boolean = false;
+  // Which player protocol _iframe speaks, or null when it speaks none.
+  // Odysee and Instagram iframes have no player API, so their toggle is a no-op.
+  private _api:                     PlayerApi | null = null;
   private _video:                   HTMLVideoElement | null = null;
 
   constructor(renderNode: RenderNode) {
@@ -140,8 +170,9 @@ class VideoTypeHandler extends BaseTypeHandler {
       } else {
         const yt = rawUrl ? ytEmbed(rawUrl, clip) : null;
         const odysee = !yt && rawUrl ? odyseeEmbed(rawUrl, clip) : null;
-        const insta = !yt && !odysee && rawUrl ? instagramEmbed(rawUrl) : null;
-        this._canonicalHref = yt?.href ?? odysee?.href ?? insta?.href ?? null;
+        const vimeo = !yt && !odysee && rawUrl ? vimeoEmbed(rawUrl, clip) : null;
+        const insta = !yt && !odysee && !vimeo && rawUrl ? instagramEmbed(rawUrl) : null;
+        this._canonicalHref = yt?.href ?? odysee?.href ?? vimeo?.href ?? insta?.href ?? null;
         if (yt) {
           const wrap = document.createElement('div');
           wrap.className = 'video-wrap';
@@ -154,11 +185,11 @@ class VideoTypeHandler extends BaseTypeHandler {
           content.appendChild(wrap);
 
           this._iframe = wrap.querySelector('iframe')!;
-          this._ytIframe = true;
+          this._api = 'yt';
           this._iframe.addEventListener('load', () => {
             this._iframe!.contentWindow!.postMessage(
               JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
-              'https://www.youtube-nocookie.com'
+              YT_ORIGIN
             );
           });
         } else if (odysee) {
@@ -172,6 +203,29 @@ class VideoTypeHandler extends BaseTypeHandler {
           ></iframe>`;
           content.appendChild(wrap);
           this._iframe = wrap.querySelector('iframe')!;
+        } else if (vimeo) {
+          const wrap = document.createElement('div');
+          wrap.className = 'video-wrap';
+          applyBox(wrap, box);
+          wrap.innerHTML = `<iframe
+            src="${vimeo.src}"
+            allowfullscreen
+            loading="lazy"
+          ></iframe>`;
+          content.appendChild(wrap);
+
+          this._iframe = wrap.querySelector('iframe')!;
+          this._api = 'vimeo';
+          // Unlike YouTube, Vimeo sends nothing until each event is subscribed to
+          // by name, so the toggle needs all three transitions requested here.
+          this._iframe.addEventListener('load', () => {
+            for (const value of ['play', 'pause', 'ended']) {
+              this._iframe!.contentWindow!.postMessage(
+                JSON.stringify({ method: 'addEventListener', value }),
+                VIMEO_ORIGIN
+              );
+            }
+          });
         } else if (insta) {
           const wrap = document.createElement('div');
           wrap.className = 'video-wrap video-wrap--portrait';
@@ -220,13 +274,13 @@ class VideoTypeHandler extends BaseTypeHandler {
       else this._video.pause();
       return;
     }
-    // Odysee embeds have no documented player API; only YouTube can be toggled.
-    if (!this._iframe || !this._ytIframe) return;
-    const playing = _ytPlaying.get(this._iframe) ?? false;
-    this._iframe.contentWindow!.postMessage(
-      JSON.stringify({ event: 'command', func: playing ? 'pauseVideo' : 'playVideo', args: [] }),
-      'https://www.youtube-nocookie.com'
-    );
+    // Odysee and Instagram embeds have no documented player API.
+    if (!this._iframe || !this._api) return;
+    const playing = _playing.get(this._iframe) ?? false;
+    const [msg, origin] = this._api === 'yt'
+      ? [{ event: 'command', func: playing ? 'pauseVideo' : 'playVideo', args: [] }, YT_ORIGIN]
+      : [{ method: playing ? 'pause' : 'play' }, VIMEO_ORIGIN];
+    this._iframe.contentWindow!.postMessage(JSON.stringify(msg), origin);
   }
 }
 
@@ -247,7 +301,8 @@ const videoFactory: NodeTypeFactory = {
       if (!url) return null;
       return `<video src="${esc(withMediaFragment(url, clip))}" controls preload="metadata" playsinline referrerpolicy="no-referrer"></video>`;
     }
-    const embed = ytEmbed(rawUrl, clip) ?? odyseeEmbed(rawUrl, clip) ?? instagramEmbed(rawUrl);
+    const embed = ytEmbed(rawUrl, clip) ?? odyseeEmbed(rawUrl, clip)
+      ?? vimeoEmbed(rawUrl, clip) ?? instagramEmbed(rawUrl);
     if (!embed) return null;
     return `<p><a href="${esc(embed.href)}" target="_blank" rel="noopener noreferrer">${embed.label}</a></p>`;
   },
@@ -269,7 +324,7 @@ function safeMediaUrl(resolved: string): string | null {
 
 /** True when the source points at a direct video file rather than a YouTube/Odysee link. */
 function isFileSource(url: string): boolean {
-  if (/(?:youtube\.com|youtu\.be|odysee\.com|instagram\.com)/i.test(url)) return false;
+  if (/(?:youtube\.com|youtu\.be|odysee\.com|vimeo\.com|instagram\.com)/i.test(url)) return false;
   return FILE_EXT_RE.test(url);
 }
 
@@ -448,6 +503,56 @@ function odyseeEmbed(url: string, clip: Clip = NO_CLIP): { src: string; href: st
     src:   `https://odysee.com/$/embed/${path}` + (start != null ? `?t=${start}` : ''),
     href:  url,
     label: 'Watch on Odysee',
+  };
+}
+
+/**
+ * Maps a vimeo.com video URL to its player embed URL.
+ *
+ * A public video is just its numeric ID:
+ *   https://vimeo.com/76979871
+ *     → https://player.vimeo.com/video/76979871
+ *
+ * An unlisted video carries a private hash as a second path segment, which the
+ * embed needs as `?h=` or it answers 403:
+ *   https://vimeo.com/76979871/abc123def4
+ *     → https://player.vimeo.com/video/76979871?h=abc123def4
+ *
+ * A `/channels/…/ID` or `/groups/…/videos/ID` URL names the same video by a
+ * longer route, and an already-`player.vimeo.com/video/ID` URL is accepted and
+ * normalised, so pasting the embed link works too. We accept only absolute https
+ * URLs on vimeo.com (or a subdomain), and require the ID to be numeric and the
+ * hash a plain hex-ish token, so a crafted `src`/label can't point the iframe
+ * elsewhere.
+ *
+ * The player takes a start offset as a `#t=` fragment (not a query param, unlike
+ * every other embed here), and exposes no end parameter — so `end` does not
+ * apply, as with Odysee.
+ */
+function vimeoEmbed(url: string, clip: Clip = NO_CLIP): { src: string; href: string; label: string } | null {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return null; }
+  if (parsed.protocol !== 'https:') return null;
+  if (!/^(?:[a-z0-9-]+\.)*vimeo\.com$/i.test(parsed.hostname)) return null;
+
+  // Accept only the routes that actually name a video: a bare ID at the root,
+  // the player's `/video/ID`, and the channel/group forms. Matching any trailing
+  // number instead would take `/groups/12345` — a group, not a video — and build
+  // a dead embed from it.
+  const m = parsed.pathname.match(
+    /^\/(?:video\/|channels\/[^/]+\/|groups\/[^/]+\/videos\/)?(\d+)(?:\/([A-Za-z0-9]+))?\/?$/
+  );
+  if (!m) return null;
+  const [, id, pathHash] = m;
+  const hash = pathHash ?? parsed.searchParams.get('h');
+
+  const start = clip.start ?? parseTimestamp(parsed.hash.replace(/^#t=/, ''));
+
+  const query = hash && /^[A-Za-z0-9]+$/.test(hash) ? `?h=${hash}` : '';
+  return {
+    src:   `https://player.vimeo.com/video/${id}${query}` + (start != null ? `#t=${start}s` : ''),
+    href:  `https://vimeo.com/${id}${hash ? '/' + hash : ''}` + (start != null ? `#t=${start}s` : ''),
+    label: 'Watch on Vimeo',
   };
 }
 
