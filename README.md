@@ -1,7 +1,6 @@
 # rvmark
 
-An tree-based hypertext framework for tree-shaped documents, 
-with a custom markup language and static site generator.
+An tree-based hypertext framework with a custom markup language and static site generator.
 Each `.rvmark` file compiles to a HTML page with graceful degradation.
 
 This repository is the **rvmark engine** -- the language, static site generator, and runtime.
