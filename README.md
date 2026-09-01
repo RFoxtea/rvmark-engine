@@ -6,7 +6,7 @@ Each `.rvmark` file compiles to a HTML page with graceful degradation.
 
 This repository is the **rvmark engine** -- the language, static site generator, and runtime.
 
-See <https://rv.rvmark.net/> for a demonstration and human-written documentation.
+See <https://rv.rvmark.net/> for a demonstration documentation.
 
 ## Installation
 
@@ -38,7 +38,7 @@ node bin/rvmark.mjs --content <dir> --out <dir> [--theme <file>] [--template <fi
 
 Defaults: `--content rvmark`, `--out dist`.
 
-The output in `--out` consists of pure static files (HTML, CSS, and browser-side JS). 
+The output in `--out` consists of pure static files (HTML, CSS, browser-side JS, and rvmark source files). 
 You can deploy its contents to any static host (GitHub Pages, Neocities, Netlify, etc.). 
 
 ## Development
