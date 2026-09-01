@@ -1,12 +1,11 @@
 # rvmark
 
-An tree-based hypertext framework for tree-shaped documents, 
-with a custom markup language and static site generator.
-Each `.rvmark` file compiles to a HTML page with graceful degradation.
+A tree-based hypertext framework with a human-maintainable
+markup language, static site generator, and federation protocol.
 
-This repository is the **rvmark engine** -- the language, static site generator, and runtime.
+This repository is the **rvmark engine**: the static site generator and runtime.
 
-See <https://rv.rvmark.net/> for a demonstration documentation.
+See <https://rv.rvmark.net/> for a demonstration and human-written documentation.
 
 ## Installation
 
@@ -14,7 +13,7 @@ rvmark is not yet published to npm. For now, clone the repository and build the 
 locally:
 
 ```sh
-git clone <repo-url> rvmark-engine
+git clone https://github.com/RFoxtea/rvmark-engine/ rvmark-engine
 cd rvmark-engine
 npm install
 npm run build
@@ -38,8 +37,8 @@ node bin/rvmark.mjs --content <dir> --out <dir> [--theme <file>] [--template <fi
 
 Defaults: `--content rvmark`, `--out dist`.
 
-The output in `--out` consists of pure static files (HTML, CSS, browser-side JS, and rvmark source files). 
-You can deploy its contents to any static host (GitHub Pages, Neocities, Netlify, etc.). 
+The output in `--out` consists of pure static files (HTML, CSS, browser-side JS, and rvmark source files).
+You can deploy its contents to any static host (GitHub Pages, Neocities, Netlify, etc.).
 
 ## Development
 
@@ -54,10 +53,10 @@ The first time you run the tests, install the browser:
 npx playwright install chromium
 ```
 
-## License
+## License and trademark
 
 rvmark is licensed under the **GNU Affero General Public License v3.0**
 ([AGPL-3.0-only](LICENSE)).
 
-The name "rvmark" is reserved by the lead of this project. 
+The maintainer of this project, Raf Vosté, reserves use of the name "rvmark" as an unregistered trademark. 
 Forks and services derived from it should identify themselves distinctly.
