@@ -70,7 +70,7 @@ const _sidepanelStrategies = new Map<string, SidepanelStrategy>();
 // the panel is blanked but stays open.
 let _panel:              HTMLElement | null = null;
 let _currentTriggerRn:   RenderNode | null = null;
-let _currentRefString:   string | null = null;
+let _currentRefKey:      string | null = null;
 let _currentCleanup:     (() => void) | null = null;
 // Cleanup for the current relay wiring. Promoted from _buildIframe's closure
 // so sidepanelOpen() can rewire to a new relay when the scope changes but the
@@ -141,7 +141,7 @@ function _blankPanel({ showHint = true }: { showHint?: boolean } = {}): void {
   _relayCleanup?.();
   _relayCleanup          = null;
   _currentTriggerRn      = null;
-  _currentRefString      = null;
+  _currentRefKey         = null;
   // Remove everything except the close button.
   for (const child of [..._panel.children]) {
     if (!child.classList.contains('sidepanel-close')) child.remove();
@@ -240,6 +240,18 @@ export function prerootDelete(key: string): void {
   broadcastPreroot(_sidepanelIframes(), prerootDeleteMsg(key));
 }
 
+// Cache key for "is this the same sidepanel target?". A ref is relative to the
+// file that declares it, so the pair is what identifies a target, not the ref
+// alone. Cheap and synchronous — the strategies do the real resolution when
+// they load, and a key that only ever compares equal to itself is harmless.
+function refKeyFor(rawRef: string, sourceFileAddress: string): string {
+  try {
+    return new URL(rawRef, `file:///${sourceFileAddress}`).pathname;
+  } catch {
+    return `${sourceFileAddress}\u0000${rawRef}`;
+  }
+}
+
 // `triggerRn` is the node the reader acted on — selected, clicked, or activated.
 // The selected node already determines WHICH sidepanel is shown; it determines the
 // state the sidepanel sees for the same reason. {sidepanel-pass} binds its variables
@@ -261,7 +273,13 @@ export async function sidepanelOpen(
 
   // Same sidepanel target, different node under the same scope — keep the iframe
   // in place and only rewire the state relay to that node's frame.
-  if (triggerRn && _currentRefString === rawRef && _panel) {
+  //
+  // Keyed on the ref resolved against its own source file, not on what the
+  // author typed: one viewer reached from two directories is "./viewer.html"
+  // from the index and "../viewer.html" from a subdirectory, and comparing the
+  // raw spellings rebuilds the iframe on every crossing — reloading the guest
+  // and flashing its idle state between two nodes that share a panel.
+  if (triggerRn && _currentRefKey === refKeyFor(rawRef, sourceFileAddress) && _panel) {
     const iframe = _panel.querySelector<HTMLIFrameElement>('.sidepanel-iframe');
     const win    = iframe?.contentWindow ?? null;
     const sidepanelPassRaw = attrs.get('sidepanel-pass') ?? null;
@@ -315,7 +333,7 @@ export async function sidepanelOpen(
   window.addEventListener('message', onMessage);
 
   _currentTriggerRn  = triggerRn;
-  _currentRefString  = rawRef;
+  _currentRefKey     = refKeyFor(rawRef, sourceFileAddress);
   _currentCleanup    = () => window.removeEventListener('message', onMessage);
 }
 
@@ -327,7 +345,7 @@ export function sidepanelClose(): void {
   _panel.remove();
   _panel             = null;
   _currentTriggerRn  = null;
-  _currentRefString  = null;
+  _currentRefKey     = null;
   _currentCleanup    = null;
   document.body.classList.remove('sidepanel-open');
 }
