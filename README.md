@@ -1,6 +1,6 @@
 # rvmark
 
-An tree-based hypertext framework with a custom markup language and static site generator.
+A tree-based hypertext framework with a custom markup language and static site generator.
 Each `.rvmark` file compiles to a HTML page with graceful degradation.
 
 This repository is the **rvmark engine**: the static site generator and runtime.
@@ -37,8 +37,8 @@ node bin/rvmark.mjs --content <dir> --out <dir> [--theme <file>] [--template <fi
 
 Defaults: `--content rvmark`, `--out dist`.
 
-The output in `--out` consists of pure static files (HTML, CSS, browser-side JS, and rvmark source files). 
-You can deploy its contents to any static host (GitHub Pages, Neocities, Netlify, etc.). 
+The output in `--out` consists of pure static files (HTML, CSS, browser-side JS, and rvmark source files).
+You can deploy its contents to any static host (GitHub Pages, Neocities, Netlify, etc.).
 
 ## Development
 
