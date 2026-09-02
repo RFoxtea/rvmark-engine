@@ -240,6 +240,24 @@ export async function buildSite(config: BuildSiteConfig) {
   const sourceFiles = new Map(); // second pass: resolved { head, roots, nodeMap, sourceFile }
   const siteMap: Record<string, { file: string }> = {};
 
+  // ── Path-valued meta keys ────────────────────────────────────────────────────
+  // Meta inherits down the index.rvmark chain, and the merge flattens each value
+  // into a key→value pair — the file it was written in is gone by the time
+  // anything reads it. A key holding an address must therefore be resolved while
+  // that provenance is still in hand, so `./card.png` in the root header means
+  // the root's directory even when it is read from a page three levels down.
+  //
+  // This is the one path where inheritance crosses a file. Node-level inherited
+  // properties do not — `sidepanel` (inherited.ts) can keep its ref raw and let
+  // the reader resolve it against its own sourceFile precisely because every
+  // node holding a scope is in the file that declared it. A head value is read
+  // from files its author never saw, so raw is not an option here.
+  //
+  // Adding a path-valued key is one registration here. Each value passes
+  // resolution exactly once — resolveMediaAddress is not idempotent
+  // ('/_rvmark/x' → '/_rvmark/_rvmark/x').
+  const PATH_VALUED_META = new Set(['card-img']);
+
   // ── Inherited head from ancestor index.rvmark files ──────────────────────────
 
   function resolveInheritedHead(relPath: string) {
@@ -256,7 +274,12 @@ export async function buildSite(config: BuildSiteConfig) {
     if (indexPath === relPath) continue;
     const p = rawFiles.get(indexPath);
     if (!p) continue;
-    for (const [k, v] of p.head.meta.allEntries()) mergedMeta.append(k, v);
+    // SourceFile.resolveMediaUrl is the method for this, but the ancestor's
+    // SourceFile is not built yet — the merge feeds the very pass that builds
+    // it. Same resolution against the same address it would use.
+    const ancestorAddress = mountPath + indexPath;
+    for (const [k, v] of p.head.meta.allEntries())
+      mergedMeta.append(k, PATH_VALUED_META.has(k) ? (resolveMediaAddress(v, ancestorAddress) ?? v) : v);
     Object.assign(mergedTagDefs, p.head.tagDefs);
     Object.assign(mergedOrigins, p.head.origins);
   }
@@ -440,6 +463,21 @@ for (const [relPath, raw] of rawFiles) {
   const resolved = resolveFile(raw, inheritedHead);
   if (!INCLUDE_DRAFTS) resolved.roots = pruneDraftNodes(resolved.roots, resolved.nodeMap);
   const sf = new SourceFile(resolved.nodeMap, resolved.roots, resolved.head, relPath, mountPath + relPath);
+  // A path-valued key written in this file's OWN header resolves against this
+  // file — sf.resolveMediaUrl is the same method a node's media goes through.
+  // The inherited copies of these keys arrived already resolved (against the
+  // ancestor that wrote them); this overwrites them with the local one, which
+  // is what nearest-wins means.
+  //
+  // Written to sf's head, never back to raw.head: rawFiles is what
+  // resolveInheritedHead reads for every later file, so rewriting a root header
+  // in place would leave descendants inheriting an already-resolved value and
+  // resolving it a second time — and resolveMediaAddress is not idempotent
+  // ('/_rvmark/x' → '/_rvmark/_rvmark/x').
+  for (const k of PATH_VALUED_META) {
+    const v = raw.head.meta.get(k);
+    if (v !== undefined) sf.head.meta.set(k, sf.resolveMediaUrl(v));
+  }
   sourceFiles.set(relPath, sf);
 }
 
@@ -862,6 +900,35 @@ function renderStaticNodes(nodes: SourceNode[], sourceFile: SourceFileT, depth =
   return html;
 }
 
+// ── Site-wide identity, from the root header ──────────────────────────────────
+
+// site-url is read off the root file's own header rather than through the
+// inheritance chain because it describes the site, not a page: every page's
+// absolute URL is built from the same origin, and a subtree that overrode it
+// would be claiming to live somewhere else. Trailing slash trimmed so
+// SITE_URL + '/' + stem never doubles it.
+const rootMeta = sourceFiles.get('index.rvmark')?.head?.meta;
+const SITE_URL = (rootMeta?.get('site-url') ?? '').replace(/\/+$/, '');
+if (SITE_URL && !/^https?:\/\//.test(SITE_URL))
+  throw new Error(`buildSite: site-url must be an absolute origin (got '${SITE_URL}')`);
+if (!SITE_URL)
+  console.warn('  warning: no {site-url} in the root header — omitting canonical, og:url and sitemap.xml');
+const siteName = rootMeta?.get('title') || 'rvmark';
+
+// robots takes a named value, the way `open: always|never` does. It cannot be
+// presence-only like {draft} or {hidden} because the default is ON: a bare
+// {robots} would have to mean "index", which is what omitting it already means.
+//
+// Exact match, and anything unrecognised throws rather than defaulting. The
+// failure this guards is silent and invisible in the output: a page that meant
+// to be excluded and is quietly indexed instead looks identical in dist/.
+const indexable = (m: { get(k: string): string | undefined } | undefined, where: string) => {
+  const v = m?.get('robots');
+  if (v === undefined || v === 'index') return true;
+  if (v === 'noindex') return false;
+  throw new Error(`${where}: robots must be 'index' or 'noindex' (got '${v}')`);
+};
+
 // ── Generate pages ────────────────────────────────────────────────────────────
 
 if (existsSync(DIST_DIR)) rmSync(DIST_DIR, { recursive: true });
@@ -885,6 +952,37 @@ for (const [relPath, sourceFile] of sourceFiles) {
   const license     = meta?.get('license') ?? '';
   const author      = meta?.get('author') ?? '';
   const footerLabel = meta?.get('footer-label') ?? 'rvmark';
+
+  // Absolute page URL. site-url is authored once, in the root header; without it
+  // there is no origin to build one from, and the tags that need an absolute URL
+  // (og:url, canonical, an absolute og:image) are simply omitted rather than
+  // emitted relative — a crawler reading a relative canonical against the wrong
+  // base is worse than no canonical.
+  const pageUrl  = SITE_URL ? SITE_URL + '/' + (urlStem ? urlStem + '/' : '') : '';
+  // card-img arrives already resolved to a root-absolute '/_rvmark/…' address
+  // (see PATH_VALUED_META). Scrapers do not follow relative image URLs, so an
+  // absolute origin is required for it too.
+  const cardImgRef = meta?.get('card-img') ?? '';
+  const cardImg    = !cardImgRef ? ''
+    : /^https?:\/\//.test(cardImgRef) ? cardImgRef
+    : SITE_URL ? SITE_URL + cardImgRef : '';
+
+  const socialMeta = [
+    ...(indexable(meta, relPath) ? [] : ['  <meta name="robots" content="noindex, follow">']),
+    `  <meta property="og:type" content="${isRoot ? 'website' : 'article'}">`,
+    `  <meta property="og:title" content="${escHtml(title)}">`,
+    `  <meta property="og:description" content="${escHtml(description)}">`,
+    `  <meta property="og:site_name" content="${escHtml(siteName)}">`,
+    ...(pageUrl ? [`  <meta property="og:url" content="${escHtml(pageUrl)}">`] : []),
+    ...(cardImg ? [`  <meta property="og:image" content="${escHtml(cardImg)}">`] : []),
+    // summary with no image still unfurls as title + description + domain, which
+    // is most of the benefit; summary_large_image with a missing image does not.
+    `  <meta name="twitter:card" content="${cardImg ? 'summary_large_image' : 'summary'}">`,
+    `  <meta name="twitter:title" content="${escHtml(title)}">`,
+    `  <meta name="twitter:description" content="${escHtml(description)}">`,
+    ...(cardImg ? [`  <meta name="twitter:image" content="${escHtml(cardImg)}">`] : []),
+    ...(pageUrl ? [`  <link rel="canonical" href="${escHtml(pageUrl)}">`] : []),
+  ].join('\n') + '\n';
 
   // Asset URLs come out of addressToHref root-absolute ('/_rvmark/…'), which a
   // server resolves correctly but a file:// reader does not — there '/' is the
@@ -926,6 +1024,7 @@ for (const [relPath, sourceFile] of sourceFiles) {
   let html = TEMPLATE;
   // Before {{BASE}}, so a fragment referencing {{BASE}}_assets/... resolves too.
   html = html.replaceAll('{{SITE_HEAD}}',     () => SITE_HEAD);
+  html = html.replaceAll('{{SOCIAL_META}}',   () => socialMeta);
   html = html.replaceAll('{{TITLE}}',         escHtml(title));
   html = html.replaceAll('{{DESCRIPTION}}',   escHtml(description));
   html = html.replaceAll('{{BASE}}',          base);
@@ -1077,6 +1176,44 @@ for (const [relPath, sourceFile] of sourceFiles) {
     }
   }
   copyNonRvmark(RVMARK_DIR, '');
+
+  // ── sitemap.xml + robots.txt ────────────────────────────────────────────────
+  //
+  // A sitemap usually earns little — crawlers follow links. rvmark is the case
+  // where it earns its keep: the crawlable markup lives in #static-content,
+  // which ships display:none, and the inter-page links live inside it. Hidden
+  // content is deprioritised, so the link graph between pages may never be
+  // walked and pages beyond the root may never be found. The sitemap asserts
+  // the URL set instead of depending on that traversal.
+  //
+  // The input is urlStemToFile — already shadow-filtered and draft-skipped,
+  // which is exactly the published page set. NOT allRvmarkFiles, which is
+  // deliberately unfiltered so shadowed files still get copied as source.
+  //
+  // robots.txt stays permissive and carries only the Sitemap: line. Disallowing
+  // would stop crawlers reading the pages, and therefore stop them seeing any
+  // noindex — the per-page mechanism is `robots: false`, not a disallow rule.
+  if (SITE_URL) {
+    const urls: string[] = [];
+    for (const [urlStem, relPath] of urlStemToFile) {
+      if (!indexable(sourceFiles.get(relPath)?.head?.meta, relPath)) continue;
+      const lastmod = statSync(join(RVMARK_DIR, relPath)).mtime.toISOString().slice(0, 10);
+      urls.push(
+        `  <url>\n` +
+        `    <loc>${escHtml(SITE_URL + '/' + (urlStem ? urlStem + '/' : ''))}</loc>\n` +
+        `    <lastmod>${lastmod}</lastmod>\n` +
+        `  </url>`
+      );
+    }
+    urls.sort();
+    writeFileSync(join(DIST_DIR, 'sitemap.xml'),
+      `<?xml version="1.0" encoding="UTF-8"?>\n` +
+      `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+      urls.join('\n') + `\n</urlset>\n`);
+    writeFileSync(join(DIST_DIR, 'robots.txt'),
+      `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`);
+    console.log(`  sitemap.xml (${urls.length} urls) + robots.txt`);
+  }
 
   console.log('\nBuild complete.');
 }
