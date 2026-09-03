@@ -119,6 +119,53 @@ export function resolveAddress(ref: string, sourceFileAddress: string): string |
 }
 
 /**
+ * Make a ref absolute against the file that WROTE it, without deciding what it
+ * ultimately addresses.
+ *
+ * Distinct from resolveAddress/resolveMediaAddress, which produce a canonical
+ * address — a fetchable URL under /_rvmark/. This produces a ref again, in the
+ * one form that no longer depends on where it is read from: root-absolute,
+ * meaning "from the content root". A value that has been through this can be
+ * carried to another file and resolved there, by either resolver, and give the
+ * same answer it would have given in the file it was written in.
+ *
+ * That is the whole point. A path written in a tag definition is applied to
+ * nodes in other files, and `./icons/x.svg` means different things in each of
+ * them. Made absolute where it was written, it means one thing everywhere.
+ *
+ * Idempotent, and not by coincidence: an already-absolute ref is exactly the
+ * case this returns untouched. External URLs and fragment-only refs are left
+ * alone — neither names a location within a site.
+ */
+export function absolutiseRef(ref: string, sourceFileAddress: string): string {
+  if (!ref) return ref;
+  if (ref.startsWith('/')) return ref;
+  if (ref.startsWith('#')) return ref;
+  if (ref.startsWith('https://') || ref.startsWith('http://')) return ref;
+
+  const origin    = addressOrigin(sourceFileAddress);
+  const localPart = sourceFileAddress.slice(origin.length);
+  // The content root is what /_rvmark/ publishes, so a path relative to the
+  // writing file becomes root-absolute by dropping that segment back off.
+  const withinRoot = localPart.startsWith(RVMARK_SEGMENT)
+    ? localPart.slice(RVMARK_SEGMENT.length)
+    : localPart.replace(/^\//, '');
+
+  const hashIdx  = ref.indexOf('#');
+  const pathPart = hashIdx === -1 ? ref : ref.slice(0, hashIdx);
+  const fragment = hashIdx === -1 ? '' : ref.slice(hashIdx);
+
+  const dir   = withinRoot.replace(/[^/]*$/, '');
+  const parts = (dir + pathPart).split('/');
+  const out: string[] = [];
+  for (const p of parts) {
+    if (p === '..') out.pop();
+    else if (p !== '.' && p !== '') out.push(p);
+  }
+  return '/' + out.join('/') + fragment;
+}
+
+/**
  * Resolve a media/asset ref string to a canonical address.
  * sourceFileAddress is the canonical address of the file that owns the ref.
  */

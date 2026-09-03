@@ -16,7 +16,7 @@
  */
 
 import { parse, resolveFile } from '../shared/parser.js';
-import type { RawFile, Head, OriginDef } from '../shared/parser.js';
+import type { RawFile, Head, OriginDef, TagDef } from '../shared/parser.js';
 import { Multimap } from '../shared/multimap.js';
 import { SourceFile } from './source-file.js';
 import { addressToFile, addressOrigin, RVMARK_SEGMENT } from '../shared/shared.js';
@@ -166,7 +166,7 @@ function resolveInheritedHead(address: string): Promise<Head> {
     }
 
     const mergedMeta = new Multimap();
-    const mergedTagDefs: Record<string, Multimap> = {};
+    const mergedTagDefs: Record<string, TagDef> = {};
     const mergedOrigins: Record<string, OriginDef> = {};
     for (const indexFile of chain) {
       if (indexFile === file) continue;
@@ -174,7 +174,11 @@ function resolveInheritedHead(address: string): Promise<Head> {
       try {
         const raw = await fetchRawFile(indexAddress);
         for (const [k, v] of raw.head.meta.allEntries()) mergedMeta.append(k, v);
-        Object.assign(mergedTagDefs, raw.head.tagDefs);
+        // withSource is the step this merge used to skip: a def carried out of
+        // the file that wrote it has to say so, or its relative addresses get
+        // read against whichever file happens to use the tag.
+        for (const [name, def] of Object.entries(raw.head.tagDefs))
+          mergedTagDefs[name] = def.withSource(indexAddress);
         Object.assign(mergedOrigins, raw.head.origins);
       } catch (_) { /* missing index — fine */ }
     }

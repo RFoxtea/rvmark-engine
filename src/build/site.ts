@@ -280,7 +280,11 @@ export async function buildSite(config: BuildSiteConfig) {
     const ancestorAddress = mountPath + indexPath;
     for (const [k, v] of p.head.meta.allEntries())
       mergedMeta.append(k, PATH_VALUED_META.has(k) ? (resolveMediaAddress(v, ancestorAddress) ?? v) : v);
-    Object.assign(mergedTagDefs, p.head.tagDefs);
+    // withSource is the step this merge used to skip: a def carried out of the
+    // file that wrote it has to say so, or its relative addresses get read
+    // against whichever file happens to use the tag.
+    for (const [name, def] of Object.entries(p.head.tagDefs))
+      mergedTagDefs[name] = def.withSource(ancestorAddress);
     Object.assign(mergedOrigins, p.head.origins);
   }
   return { meta: mergedMeta, tagDefs: mergedTagDefs, origins: mergedOrigins };

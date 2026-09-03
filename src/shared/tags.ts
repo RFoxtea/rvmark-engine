@@ -19,13 +19,30 @@
  *   mergeNodeAttrs  — tag-derived attrs + a node's own, in precedence order
  */
 
-import type { Tag, TagDef, NodeAttrs } from './parser.js';
+import type { Tag, TagDef, TagProps, NodeAttrs } from './parser.js';
 import { Multimap } from './multimap.js';
+import { isAddressAttr } from './attr-types.js';
+import { absolutiseRef } from './shared.js';
 
-export function resolveTagDef(name: string, inlineProps: TagDef, sourceTagDefs?: Record<string, TagDef>): TagDef {
+/**
+ * A tag's name and inline props → the props it renders with.
+ *
+ * Returns TagProps, not a TagDef: the result is a reading of a definition
+ * against one document, not a definition itself, and the file that declared it
+ * is spent by the time this returns.
+ */
+export function resolveTagDef(name: string, inlineProps: TagProps, sourceTagDefs?: Record<string, TagDef>): TagProps {
   const def = new Multimap();
   const base = sourceTagDefs?.[name];
-  if (base) for (const [k, v] of base.allEntries()) def.append(k, v);
+  // A def's own props are made absolute against the file that declared them —
+  // the same rule the node.* namespace follows in resolveShape, applied here
+  // because these props stay on the chip rather than moving to the node.
+  //
+  // Inline props are not: those are written at the use site, so `[Tag {href:
+  // ./x}]` means './x' relative to the file doing the using, and the reader
+  // resolves it against its own document as it always has.
+  if (base) for (const [k, v] of base.allEntries())
+    def.append(k, base.declaredIn && isAddressAttr(k) ? absolutiseRef(v, base.declaredIn) : v);
   for (const [k, v] of inlineProps.allEntries()) def.append(k, v);
   if (name.startsWith('.') && !def.has('internal') && !def.has('label')) def.append('internal', '');
   return def;

@@ -202,7 +202,40 @@ export function parseStateEntries(raw: string): StateEntry[] {
 
 export type TagProps = Multimap;
 export type NodeAttrs = Multimap;
-export type TagDef = Multimap;
+/**
+ * A tag definition: the attributes it declares, and the file that declared them.
+ *
+ * The file matters because tag defs INHERIT — a def written in a root
+ * index.rvmark is applied to nodes throughout the tree — and some of those
+ * attributes are addresses. `{node.bullet: ./icons/x.svg}` written in the root
+ * names the root's icons, in every file that uses the tag, and a def that has
+ * forgotten where it came from cannot say so.
+ *
+ * `declaredIn` is optional because a def read straight off the file that wrote
+ * it needs no record: that file is what a reader would use anyway. It is set by
+ * whoever merges defs down the index.rvmark chain — the step where the writing
+ * file would otherwise be lost.
+ */
+export class TagDef {
+  readonly props:      TagProps;
+  readonly declaredIn?: string;
+
+  constructor(props: TagProps, declaredIn?: string) {
+    this.props = props;
+    this.declaredIn = declaredIn;
+  }
+
+  /** The same def, recorded as having been declared in `address`. */
+  withSource(address: string): TagDef {
+    return new TagDef(this.props, address);
+  }
+
+  // Reading a def is reading its props; these save every call site an unwrap.
+  get(key: string):    string | undefined { return this.props.get(key); }
+  getAll(key: string): string[]           { return this.props.getAll(key); }
+  has(key: string):    boolean            { return this.props.has(key); }
+  allEntries():        Array<[string, string]> { return this.props.allEntries(); }
+}
 export type FileMeta = Multimap;
 
 export interface Tag {
@@ -293,9 +326,16 @@ export interface SourceNode {
 }
 
 /** One tag as it renders: props merged, dot-rule applied, definition resolved. */
+/**
+ * A tag as it reaches a reader: the name, and the props it resolved to.
+ *
+ * `def` is TagProps, not TagDef — a resolved tag has already been read against
+ * the document that holds it, so where the definition was written is spent and
+ * has no business crossing the wire.
+ */
 export interface ResolvedTag {
   name: string;
-  def:  TagDef;
+  def:  TagProps;
 }
 
 /**
@@ -318,17 +358,9 @@ export interface RawFile {
   nodeMap: Record<string, RawNode>;
 }
 
-// Every event attribute that carries state mutations. A bare `let`/`set`/`remove`
-// in an attr block is sugar for one of these; writing the attribute explicitly
-// (`on-expand: let &x = "1"`) is always available and means the same thing.
-export const STATE_EVENT_ATTRS = new Set([
-  'on-spawn', 'on-select', 'on-deselect', 'on-focus', 'on-blur',
-  'on-action', 'on-expand', 'on-collapse', 'on-no-option-select',
-  // A checkbox span's two transitions (§6). It is neither expanded nor
-  // selected, so it needs its own pair: `set` cannot express "flip" — the
-  // grammar assigns literals only — and one event could not clear what it set.
-  'on-on', 'on-off',
-]);
+// The state-event attribute names live in attr-types.ts, with the rest of the
+// attribute vocabulary; re-exported here where the grammar that reads them is.
+export { STATE_EVENT_ATTRS } from './attr-types.js';
 
 // Parse a `;`-separated attribute block body (the part inside `{…}`).
 // Sigils normalize to canonical keys:
@@ -412,7 +444,7 @@ export function parse(src: string): RawFile {
     if (tl === '') { i++; continue; }
     const tagDefM = tl.match(/^\[([^\]{]*)\{([^}]*)\}\s*\]$/);
     if (tagDefM) {
-      tagDefs[tagDefM[1].trim()] = parseAttrBlock(tagDefM[2]);
+      tagDefs[tagDefM[1].trim()] = new TagDef(parseAttrBlock(tagDefM[2]));
       i++;
       continue;
     }

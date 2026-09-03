@@ -13,8 +13,10 @@
  */
 
 import type { SourceNode, Tag, TagDef, Head, FileMeta, NodeAttrs, Reserved } from '../shared/parser.js';
-import { resolveMediaAddress } from '../shared/shared.js';
+import { resolveMediaAddress, absolutiseRef } from '../shared/shared.js';
 import { tagsNodeAttrs, mergeNodeAttrs, resolveTagDef } from '../shared/tags.js';
+import { isAddressAttr } from '../shared/attr-types.js';
+import { Multimap } from '../shared/multimap.js';
 import { addressOrigin } from '../shared/shared.js';
 
 export type { Head, FileMeta };
@@ -100,9 +102,10 @@ export class SourceFile {
   resolveShape(attrs: NodeAttrs, tags: Tag[], permalinkId: string): Reserved {
     const baseUrl = addressOrigin(this.pageAddress);
     const local   = this.pageAddress.slice(baseUrl.length).split('#')[0];
+    const merged  = mergeNodeAttrs(tagsNodeAttrs(tags, this.head.tagDefs), attrs);
     return {
       address:     { baseUrl, key: permalinkId ? `${local}#${permalinkId}` : local },
-      attrs:       mergeNodeAttrs(tagsNodeAttrs(tags, this.head.tagDefs), attrs),
+      attrs:       this.absolutiseAddressAttrs(merged, tags),
       tags:        tags.map(({ name, props }) => ({
                      name,
                      def: resolveTagDef(name, props, this.head.tagDefs),
@@ -110,5 +113,47 @@ export class SourceFile {
       pageAddress: this.pageAddress,
       stateScope:  this.pageAddress,
     };
+  }
+
+  /**
+   * Second pass over the merged attrs: every address-typed value made absolute
+   * against the file that wrote it.
+   *
+   * Two passes rather than one because the node's `type` is itself an attribute,
+   * and may arrive from a tag — so which attributes are address-typed is not
+   * known until the merge has happened. The first pass merges; this one reads
+   * `type` off the result and asks the registry.
+   *
+   * Which file wrote a value depends on where it came from. A value the node
+   * authored was written in this file. A value a tag contributed was written
+   * wherever that tag was defined, which is the whole reason this exists: a
+   * `{node.bullet: ./icons/x.svg}` in a root header is applied to nodes in other
+   * directories, and means the root's icons in every one of them.
+   *
+   * Runs again on a transformed node, since reserveWire re-resolves a
+   * transform's output. That is harmless: an already-absolute ref is what
+   * absolutiseRef returns untouched.
+   */
+  private absolutiseAddressAttrs(merged: NodeAttrs, tags: Tag[]): NodeAttrs {
+    const typeName = merged.get('type');
+
+    // Where a tag-contributed value was written, by attr name. A def with no
+    // declaredIn was written in this file, which is already the default.
+    const fromTag = new Map<string, string>();
+    for (const { name } of tags) {
+      const def = this.head.tagDefs[name];
+      if (!def?.declaredIn) continue;
+      for (const [k] of def.allEntries()) {
+        if (k.startsWith('node.')) fromTag.set(k.slice(5), def.declaredIn);
+      }
+    }
+
+    const out: NodeAttrs = new Multimap();
+    for (const [k, v] of merged.allEntries()) {
+      out.append(k, isAddressAttr(k, typeName)
+        ? absolutiseRef(v, fromTag.get(k) ?? this.pageAddress)
+        : v);
+    }
+    return out;
   }
 }
