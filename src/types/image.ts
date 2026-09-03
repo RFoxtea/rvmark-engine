@@ -14,12 +14,12 @@
  *   in CSS, where a used height overrides aspect-ratio.
  */
 
-import type { NodeTypeFactory, RenderNode } from '../render-node.js';
-import { factoryRegister } from '../render-node.js';
-import { copyPermalink, treeNavKeydown, actionKeydown, resolveBox, applyBox } from '../handler-utils.js';
-import { ToggleSet } from '../toggle-set.js';
-import { BaseTypeHandler } from '../base-handler.js';
-import { resolveMediaOn } from '../origin-host.js';
+import type { NodeTypeFactory, RenderNode } from '../client/render-node.js';
+import { factoryRegister } from '../client/render-node.js';
+import { copyPermalink, treeNavKeydown, actionKeydown, resolveBox, applyBox } from '../client/handler-utils.js';
+import { ToggleSet } from '../client/toggle-set.js';
+import { BaseTypeHandler } from '../client/base-handler.js';
+import { resolveMediaOn } from '../client/origin-host.js';
 
 const DARK_MODE_CLASSES: Record<string, string> = {
   invert:     'img-body--dark-invert',

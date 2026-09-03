@@ -8,9 +8,9 @@
  *   1. {= hr}
  */
 
-import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
-import { factoryRegister } from '../render-node.js';
-import { applyTagClasses } from '../handler-utils.js';
+import type { TypeHandler, NodeTypeFactory, RenderNode } from '../client/render-node.js';
+import { factoryRegister } from '../client/render-node.js';
+import { applyTagClasses } from '../client/handler-utils.js';
 
 class HrTypeHandler implements TypeHandler {
   readonly content:    HTMLElement;

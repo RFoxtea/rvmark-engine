@@ -59,14 +59,14 @@
  *   -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 video cued
  */
 
-import type { NodeTypeFactory, RenderNode } from '../render-node.js';
-import { factoryRegister } from '../render-node.js';
-import { treeNavKeydown, actionKeydown, copyPermalink, resolveBox, applyBox } from '../handler-utils.js';
-import { ToggleSet } from '../toggle-set.js';
-import { BaseTypeHandler } from '../base-handler.js';
-import { resolveMediaOn } from '../origin-host.js';
+import type { NodeTypeFactory, RenderNode } from '../client/render-node.js';
+import { factoryRegister } from '../client/render-node.js';
+import { treeNavKeydown, actionKeydown, copyPermalink, resolveBox, applyBox } from '../client/handler-utils.js';
+import { ToggleSet } from '../client/toggle-set.js';
+import { BaseTypeHandler } from '../client/base-handler.js';
+import { resolveMediaOn } from '../client/origin-host.js';
 
-import { wireSelectThenAction } from '../interaction.js';
+import { wireSelectThenAction } from '../client/interaction.js';
 
 /** Which player protocol an iframe speaks, if any. */
 type PlayerApi = 'yt' | 'vimeo';

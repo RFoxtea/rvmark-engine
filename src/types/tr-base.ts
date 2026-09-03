@@ -5,20 +5,20 @@
  * Subclasses pass a TrConfig describing their differences.
  */
 
-import type { RenderNode, SourceNode } from '../render-node.js';
-import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, sidepanelOpenFromNode, makeToggleBadge, applyBulletProps, applyBulletAlt, applyListItemProps, wireBulletActions } from '../handler-utils.js';
-import { ToggleSet } from '../toggle-set.js';
-import { wireSpanToggles } from '../span-toggle.js';
-import type { ResolvedAttrs } from '../../shared/served.js';
-import { BaseTypeHandler } from '../base-handler.js';
+import type { RenderNode, SourceNode } from '../client/render-node.js';
+import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, sidepanelOpenFromNode, makeToggleBadge, applyBulletProps, applyBulletAlt, applyListItemProps, wireBulletActions } from '../client/handler-utils.js';
+import { ToggleSet } from '../client/toggle-set.js';
+import { wireSpanToggles } from '../client/span-toggle.js';
+import type { ResolvedAttrs } from '../shared/served.js';
+import { BaseTypeHandler } from '../client/base-handler.js';
 import { mdInlineWithSpansContinued, mdInlineWithSpansContinuedUsing, collectInlineRefs,
-         ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../markdown.js';
-import type { ParsedSpanAttrs } from '../markdown.js';
-import { wireListbox, isListbox } from '../listbox-utils.js';
-import { wireSpanVisibility } from '../span-visibility.js';
-import type { ListboxNav } from '../listbox.js';
-import { wireSelectThenAction, focusAndScroll } from '../interaction.js';
-import { resolveMediaAllOn } from '../origin-host.js';
+         ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../client/markdown.js';
+import type { ParsedSpanAttrs } from '../client/markdown.js';
+import { wireListbox, isListbox } from '../client/listbox-utils.js';
+import { wireSpanVisibility } from '../client/span-visibility.js';
+import type { ListboxNav } from '../client/listbox.js';
+import { wireSelectThenAction, focusAndScroll } from '../client/interaction.js';
+import { resolveMediaAllOn } from '../client/origin-host.js';
 
 export const CELL_SEP = /\s*\|\s*/;
 

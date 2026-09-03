@@ -5,23 +5,23 @@
  * Also serves as the fallback when an unrecognised type is encountered.
  */
 
-import type { NodeTypeFactory, SourceNode, ResolvedAttrs, StaticBuildContext } from '../render-node.js';
-import { factoryRegister, RenderNode } from '../render-node.js';
+import type { NodeTypeFactory, SourceNode, ResolvedAttrs, StaticBuildContext } from '../client/render-node.js';
+import { factoryRegister, RenderNode } from '../client/render-node.js';
 
-import { buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyOnAction, sidepanelOpenFromNode, makeToggleBadge, applyBulletProps, applyBulletAlt, applyListItemProps, wireBulletActions } from '../handler-utils.js';
-import { ToggleSet } from '../toggle-set.js';
-import { wireSpanToggles } from '../span-toggle.js';
-import { BaseTypeHandler } from '../base-handler.js';
-import { wireListbox, isListbox } from '../listbox-utils.js';
-import { wireSpanVisibility } from '../span-visibility.js';
-import type { ListboxNav } from '../listbox.js';
-import { buildTagChips } from '../tag-chips.js';
-import { scrollRowIntoMiddle } from '../scroll.js';
-import { mdInlineWithSpans, mdInlineWithSpansResolved, ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../markdown.js';
-import type { ParsedSpanAttrs } from '../markdown.js';
-import { resolveTransclusionConfig } from '../transclusion.js';
-import { wireSelectThenAction } from '../interaction.js';
-import { resolveMediaAllOn } from '../origin-host.js';
+import { buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyOnAction, sidepanelOpenFromNode, makeToggleBadge, applyBulletProps, applyBulletAlt, applyListItemProps, wireBulletActions } from '../client/handler-utils.js';
+import { ToggleSet } from '../client/toggle-set.js';
+import { wireSpanToggles } from '../client/span-toggle.js';
+import { BaseTypeHandler } from '../client/base-handler.js';
+import { wireListbox, isListbox } from '../client/listbox-utils.js';
+import { wireSpanVisibility } from '../client/span-visibility.js';
+import type { ListboxNav } from '../client/listbox.js';
+import { buildTagChips } from '../client/tag-chips.js';
+import { scrollRowIntoMiddle } from '../client/scroll.js';
+import { mdInlineWithSpans, mdInlineWithSpansResolved, ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../client/markdown.js';
+import type { ParsedSpanAttrs } from '../client/markdown.js';
+import { resolveTransclusionConfig } from '../client/transclusion.js';
+import { wireSelectThenAction } from '../client/interaction.js';
+import { resolveMediaAllOn } from '../client/origin-host.js';
 
 type LabelRender = { html: string; spanMap: Map<number, ParsedSpanAttrs> };
 

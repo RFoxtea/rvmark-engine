@@ -10,8 +10,8 @@
  *   1. {= gap}
  */
 
-import type { TypeHandler, NodeTypeFactory, RenderNode } from '../render-node.js';
-import { factoryRegister } from '../render-node.js';
+import type { TypeHandler, NodeTypeFactory, RenderNode } from '../client/render-node.js';
+import { factoryRegister } from '../client/render-node.js';
 
 class GapTypeHandler implements TypeHandler {
   readonly content:    HTMLElement;

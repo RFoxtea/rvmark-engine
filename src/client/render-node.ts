@@ -24,7 +24,7 @@ import { isOrContainsPermalink } from './transclusion.js';
 import { sidepanelNotifySelection } from './sidepanel.js';
 import { applyEventAttr } from './handler-utils.js';
 import { scrollRowIntoMiddle } from './scroll.js';
-import { blastocyteFactory } from './types/blastocyte.js';
+import { blastocyteFactory } from '../types/blastocyte.js';
 import { MOUNT_SETTLE_MS } from './constants.js';
 import { childrenOf } from './origin-host.js';
 export type { StateFrame as StateView };

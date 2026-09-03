@@ -37,17 +37,17 @@
  *   child → parent: { type: 'rvmark-has-second-tab-stop', value: boolean }
  */
 
-import type { NodeTypeFactory, RenderNode } from '../render-node.js';
-import { factoryRegister } from '../render-node.js';
-import { treeNavKeydown, actionKeydown, copyPermalink } from '../handler-utils.js';
-import { ToggleSet } from '../toggle-set.js';
-import { BaseTypeHandler } from '../base-handler.js';
-import { resolveMediaOn } from '../origin-host.js';
+import type { NodeTypeFactory, RenderNode } from '../client/render-node.js';
+import { factoryRegister } from '../client/render-node.js';
+import { treeNavKeydown, actionKeydown, copyPermalink } from '../client/handler-utils.js';
+import { ToggleSet } from '../client/toggle-set.js';
+import { BaseTypeHandler } from '../client/base-handler.js';
+import { resolveMediaOn } from '../client/origin-host.js';
 
-import { wireSelectThenAction } from '../interaction.js';
-import { StateRelay, buildStatePass } from '../state.js';
-import { postGuestMode, postPrerootSnapshot, wireRelay, registerThemeIframe, unregisterThemeIframe } from '../iframe-host.js';
-import { parsePass, resolveBox, applyBox } from '../handler-utils.js';
+import { wireSelectThenAction } from '../client/interaction.js';
+import { StateRelay, buildStatePass } from '../client/state.js';
+import { postGuestMode, postPrerootSnapshot, wireRelay, registerThemeIframe, unregisterThemeIframe } from '../client/iframe-host.js';
+import { parsePass, resolveBox, applyBox } from '../client/handler-utils.js';
 
 // ── Per-iframe relay setup ─────────────────────────────────────────────────────
 

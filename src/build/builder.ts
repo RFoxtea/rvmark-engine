@@ -26,7 +26,8 @@
 
 import { Multimap } from '../shared/multimap.js';
 import { assignOrdinals } from '../shared/parser.js';
-import type { RawNode, RawFile, Head, Tag, TagDef, OriginDef } from '../shared/parser.js';
+import type { RawNode, RawFile, Head, Tag, OriginDef } from '../shared/parser.js';
+import { TagDef } from '../shared/parser.js';
 
 // ── attrs / tags input coercion ─────────────────────────────────────────────
 
@@ -130,7 +131,7 @@ export interface FileSpec {
 export function buildFile(spec: FileSpec): RawFile {
   const tagDefs: Record<string, TagDef> = {};
   for (const [name, def] of Object.entries(spec.head?.tagDefs ?? {})) {
-    tagDefs[name] = toMultimap(def);
+    tagDefs[name] = new TagDef(toMultimap(def));
   }
   const head: Head = {
     meta:    toMultimap(spec.head?.meta),

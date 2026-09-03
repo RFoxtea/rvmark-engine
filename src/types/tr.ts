@@ -6,9 +6,9 @@
  *     1. optional child nodes rendered as an expansion panel below the row
  */
 
-import type { NodeTypeFactory, RenderNode } from '../render-node.js';
-import { factoryRegister } from '../render-node.js';
-import { staticMdInlineResolved } from '../markdown.js';
+import type { NodeTypeFactory, RenderNode } from '../client/render-node.js';
+import { factoryRegister } from '../client/render-node.js';
+import { staticMdInlineResolved } from '../client/markdown.js';
 import { TrTypeHandlerBase, parseCells } from './tr-base.js';
 
 class TrTypeHandler extends TrTypeHandlerBase {

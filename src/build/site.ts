@@ -28,7 +28,7 @@ import { join, dirname } from 'path';
 import { createRequire } from 'module';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { fileToUrlStem, resolveAddress, resolveMediaAddress, addressToFile, addressToSlug, addressToHref, parseTranscludeEntry } from '../shared/shared.js';
-import type { SourceNode, NodeAttrs, ResolvedTag, TagDef, OriginDef } from '../shared/parser.js';
+import type { SourceNode, NodeAttrs, ResolvedTag, TagDef, OriginDef, RawFile } from '../shared/parser.js';
 import type { SourceFile as SourceFileT } from '../envoy/source-file.js';
 
 // Engine package root — this file emits to <ENGINE_ROOT>/out/build/site.js.
@@ -74,19 +74,19 @@ const { SourceFile } = await import('../envoy/source-file.js');
 // text.js also exports the static bullet helpers — bullets belong to the types
 // that draw them (text, and the tr/table family via tr-base), not to this
 // builder, which only asks for them and never knows how they are made.
-const { staticRenderBullet, staticBulletProps } = await import('../client/types/text.js');
+const { staticRenderBullet, staticBulletProps } = await import('../types/text.js');
 const { staticMdInline, staticMdInlineResolved } = await import('../client/markdown.js');
-await import('../client/types/block.js');
-await import('../client/types/video.js');
-await import('../client/types/iframe.js');
-await import('../client/types/image.js');
-await import('../client/types/tr.js');
-await import('../client/types/table.js');
+await import('../types/block.js');
+await import('../types/video.js');
+await import('../types/iframe.js');
+await import('../types/image.js');
+await import('../types/tr.js');
+await import('../types/table.js');
 // parseCells is the single definition of how a `a | b | c` label splits, shared
 // with the handlers so the static column count can never drift from theirs.
-const { parseCells } = await import('../client/types/tr-base.js');
-await import('../client/types/hr.js');
-await import('../client/types/gap.js');
+const { parseCells } = await import('../types/tr-base.js');
+await import('../types/hr.js');
+await import('../types/gap.js');
 // sidepanel.js is not needed at build time (no static rendering) — skip it.
 
 // ── Custom-type / envoy emission ──────────────────────────────────────────────
@@ -236,7 +236,7 @@ export async function buildSite(config: BuildSiteConfig) {
 
   // Per-build state (was module-level in the monorepo script).
   const urlStemToFile = new Map();
-  const rawFiles = new Map();    // first pass: RawFile per relPath
+  const rawFiles = new Map<string, RawFile>();  // first pass, per relPath
   const sourceFiles = new Map(); // second pass: resolved { head, roots, nodeMap, sourceFile }
   const siteMap: Record<string, { file: string }> = {};
 

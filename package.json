@@ -44,7 +44,7 @@
     "src/styles.css",
     "src/favicon.svg",
     "src/favicon-expanded.svg",
-    "src/client/types/*.css"
+    "src/types/*.css"
   ],
   "scripts": {
     "build": "node build/build.mjs",

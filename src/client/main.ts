@@ -22,16 +22,16 @@ import { keymapInstallShortcut } from './keymap.js';
 import { initPrerootListeners } from './iframe-guest.js';
 import { scrollBehavior } from './scroll.js';
 // Side-effect imports: register all built-in types via factoryRegister
-import './types/text.js';
+import '../types/text.js';
 import './markdown.js';
-import './types/block.js';
-import './types/video.js';
-import './types/iframe.js';
-import './types/image.js';
-import './types/tr.js';
-import './types/table.js';
-import './types/hr.js';
-import './types/gap.js';
+import '../types/block.js';
+import '../types/video.js';
+import '../types/iframe.js';
+import '../types/image.js';
+import '../types/tr.js';
+import '../types/table.js';
+import '../types/hr.js';
+import '../types/gap.js';
 
 import type { RvmarkPageContext } from '../shared/shared.js';
 

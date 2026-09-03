@@ -18,20 +18,20 @@
  *   1. {= block} ./docs/page.md#Introduction
  */
 
-import type { NodeTypeFactory, SourceNode, RenderNode } from '../render-node.js';
-import { factoryRegister } from '../render-node.js';
-import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, sidepanelOpenFromNode, wireBulletActions } from '../handler-utils.js';
-import { ToggleSet } from '../toggle-set.js';
-import { wireSpanToggles } from '../span-toggle.js';
-import type { ResolvedAttrs } from '../../shared/served.js';
-import { BaseTypeHandler } from '../base-handler.js';
-import { resolveMediaOn, resolveMediaAllOn } from '../origin-host.js';
-import { wireListbox, isListbox } from '../listbox-utils.js';
-import { wireSpanVisibility } from '../span-visibility.js';
-import type { ListboxNav } from '../listbox.js';
-import { wireSelectThenAction } from '../interaction.js';
-import { mdToHtmlWithSpansResolved, staticMdToHtmlResolved, ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../markdown.js';
-import type { ParsedSpanAttrs } from '../markdown.js';
+import type { NodeTypeFactory, SourceNode, RenderNode } from '../client/render-node.js';
+import { factoryRegister } from '../client/render-node.js';
+import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, sidepanelOpenFromNode, wireBulletActions } from '../client/handler-utils.js';
+import { ToggleSet } from '../client/toggle-set.js';
+import { wireSpanToggles } from '../client/span-toggle.js';
+import type { ResolvedAttrs } from '../shared/served.js';
+import { BaseTypeHandler } from '../client/base-handler.js';
+import { resolveMediaOn, resolveMediaAllOn } from '../client/origin-host.js';
+import { wireListbox, isListbox } from '../client/listbox-utils.js';
+import { wireSpanVisibility } from '../client/span-visibility.js';
+import type { ListboxNav } from '../client/listbox.js';
+import { wireSelectThenAction } from '../client/interaction.js';
+import { mdToHtmlWithSpansResolved, staticMdToHtmlResolved, ensureKatex, hasMath, katexLoaded, clipboardHtml } from '../client/markdown.js';
+import type { ParsedSpanAttrs } from '../client/markdown.js';
 
 // ── Overflow fade ──────────────────────────────────────────────────────────────
 
