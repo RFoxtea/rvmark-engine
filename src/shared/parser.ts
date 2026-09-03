@@ -418,6 +418,42 @@ export function parseAttrBlock(raw: string): Multimap {
   return out;
 }
 
+/**
+ * Join a head construct that wraps across lines, starting at `lines[i]`.
+ *
+ * The head's three constructs — the meta block, a tag def, an origin def — are
+ * each one `{…}` and were each matched against a single line. A root header
+ * accumulates every inherited key, so it outgrows one line; this lets it wrap.
+ *
+ * Returns the joined text and the index just past it, or null if `lines[i]` does
+ * not open a brace at all (which is how the caller tells "not this construct"
+ * from "this construct, spanning lines").
+ *
+ * Braces are counted rather than stopped at the first `}`, so a value containing
+ * one survives. An unclosed brace runs to EOF and throws there: a `{` that never
+ * closes is never valid, and silently dropping the header is how this went
+ * unnoticed — the lines simply fell through to the node collector, which did not
+ * match them either.
+ */
+function joinBraced(lines: string[], i: number): { text: string; next: number } | null {
+  if (!lines[i].trimStart().startsWith('{') && !/^\s*(?:\[|@)/.test(lines[i])) return null;
+  let depth = 0;
+  let seen = false;
+  const parts: string[] = [];
+  for (let j = i; j < lines.length; j++) {
+    for (const ch of lines[j]) {
+      if (ch === '{') { depth++; seen = true; }
+      else if (ch === '}') depth--;
+    }
+    parts.push(lines[j].trim());
+    if (seen && depth <= 0) return { text: parts.join(' '), next: j + 1 };
+  }
+  if (seen) {
+    throw new Error(`rvmark: unclosed '{' in document head, opened on line ${i + 1}: ${lines[i].trim()}`);
+  }
+  return null;
+}
+
 export function parse(src: string): RawFile {
   const lines = src.replace(/\r\n/g, '\n').split('\n');
   let meta: FileMeta = new Multimap();
@@ -427,10 +463,11 @@ export function parse(src: string): RawFile {
   // ── 1. Document metadata and tag definitions at top ───────────────────────
   while (i < lines.length && lines[i].trim() === '') i++;
   if (i < lines.length) {
-    const metaM = lines[i].trim().match(/^\{([^}]*)\}$/);
-    if (metaM) {
+    const joined = joinBraced(lines, i);
+    const metaM = joined?.text.match(/^\{(.*)\}$/s);
+    if (joined && metaM) {
       meta = parseAttrBlock(metaM[1]);
-      i++;
+      i = joined.next;
     }
   }
 
@@ -440,15 +477,17 @@ export function parse(src: string): RawFile {
   const tagDefs: Record<string, TagDef> = {};
   const origins: Record<string, OriginDef> = {};
   while (i < lines.length) {
-    const tl = lines[i].trim();
-    if (tl === '') { i++; continue; }
-    const tagDefM = tl.match(/^\[([^\]{]*)\{([^}]*)\}\s*\]$/);
+    if (lines[i].trim() === '') { i++; continue; }
+    const joined = joinBraced(lines, i);
+    if (!joined) break;
+    const tl = joined.text;
+    const tagDefM = tl.match(/^\[([^\]{]*)\{(.*)\}\s*\]$/s);
     if (tagDefM) {
       tagDefs[tagDefM[1].trim()] = new TagDef(parseAttrBlock(tagDefM[2]));
-      i++;
+      i = joined.next;
       continue;
     }
-    const originM = tl.match(/^(@[^\s{]+)\s*\{([^}]*)\}\s*$/);
+    const originM = tl.match(/^(@[^\s{]+)\s*\{(.*)\}\s*$/s);
     if (originM) {
       const name = originM[1];
       if (!SIGIL_NAME_RE.test(name)) {
@@ -459,7 +498,7 @@ export function parse(src: string): RawFile {
       if (!url) throw new Error(`rvmark: origin '${name}' is missing required 'url' field`);
       const fallback = attrs.get('fallback') ?? undefined;
       origins[name] = { url, ...(fallback ? { fallback } : {}) };
-      i++;
+      i = joined.next;
       continue;
     }
     break;
