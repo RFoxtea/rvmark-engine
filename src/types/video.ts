@@ -59,6 +59,7 @@
  *   -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 video cued
  */
 
+import './video.declare.js';
 import type { NodeTypeFactory, RenderNode } from '../client/render-node.js';
 import { factoryRegister } from '../client/render-node.js';
 import { treeNavKeydown, actionKeydown, copyPermalink, resolveBox, applyBox } from '../client/handler-utils.js';

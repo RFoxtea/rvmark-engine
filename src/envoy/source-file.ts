@@ -15,7 +15,8 @@
 import type { SourceNode, Tag, TagDef, Head, FileMeta, NodeAttrs, Reserved } from '../shared/parser.js';
 import { resolveMediaAddress, absolutiseRef } from '../shared/shared.js';
 import { tagsNodeAttrs, mergeNodeAttrs, resolveTagDef } from '../shared/tags.js';
-import { isAddressAttr } from '../shared/attr-types.js';
+import { isAddressAttr } from '../shared/node-types.js';
+import '../types/declare.js';
 import { Multimap } from '../shared/multimap.js';
 import { addressOrigin } from '../shared/shared.js';
 

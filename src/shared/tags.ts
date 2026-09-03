@@ -21,7 +21,7 @@
 
 import type { Tag, TagDef, TagProps, NodeAttrs } from './parser.js';
 import { Multimap } from './multimap.js';
-import { isAddressAttr } from './attr-types.js';
+import { isAddressAttr } from './node-types.js';
 import { absolutiseRef } from './shared.js';
 
 /**

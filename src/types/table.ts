@@ -1,3 +1,4 @@
+import './table.declare.js';
 import type { NodeTypeFactory, RenderNode } from '../client/render-node.js';
 import { factoryRegister } from '../client/render-node.js';
 import { staticMdInlineResolved } from '../client/markdown.js';

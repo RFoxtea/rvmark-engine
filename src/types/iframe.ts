@@ -37,6 +37,7 @@
  *   child → parent: { type: 'rvmark-has-second-tab-stop', value: boolean }
  */
 
+import './iframe.declare.js';
 import type { NodeTypeFactory, RenderNode } from '../client/render-node.js';
 import { factoryRegister } from '../client/render-node.js';
 import { treeNavKeydown, actionKeydown, copyPermalink } from '../client/handler-utils.js';

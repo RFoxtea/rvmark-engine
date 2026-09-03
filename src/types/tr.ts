@@ -6,6 +6,7 @@
  *     1. optional child nodes rendered as an expansion panel below the row
  */
 
+import './tr.declare.js';
 import type { NodeTypeFactory, RenderNode } from '../client/render-node.js';
 import { factoryRegister } from '../client/render-node.js';
 import { staticMdInlineResolved } from '../client/markdown.js';

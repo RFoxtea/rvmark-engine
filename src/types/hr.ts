@@ -8,6 +8,7 @@
  *   1. {= hr}
  */
 
+import './hr.declare.js';
 import type { TypeHandler, NodeTypeFactory, RenderNode } from '../client/render-node.js';
 import { factoryRegister } from '../client/render-node.js';
 import { applyTagClasses } from '../client/handler-utils.js';

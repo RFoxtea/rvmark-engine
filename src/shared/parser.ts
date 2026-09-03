@@ -358,9 +358,9 @@ export interface RawFile {
   nodeMap: Record<string, RawNode>;
 }
 
-// The state-event attribute names live in attr-types.ts, with the rest of the
+// The state-event attribute names live in node-types.ts, with the rest of the
 // attribute vocabulary; re-exported here where the grammar that reads them is.
-export { STATE_EVENT_ATTRS } from './attr-types.js';
+export { STATE_EVENT_ATTRS } from './node-types.js';
 
 // Parse a `;`-separated attribute block body (the part inside `{…}`).
 // Sigils normalize to canonical keys:

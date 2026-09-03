@@ -18,6 +18,7 @@
  *   1. {= block} ./docs/page.md#Introduction
  */
 
+import './block.declare.js';
 import type { NodeTypeFactory, SourceNode, RenderNode } from '../client/render-node.js';
 import { factoryRegister } from '../client/render-node.js';
 import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, sidepanelOpenFromNode, wireBulletActions } from '../client/handler-utils.js';

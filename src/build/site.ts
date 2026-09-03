@@ -28,6 +28,7 @@ import { join, dirname } from 'path';
 import { createRequire } from 'module';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { fileToUrlStem, resolveAddress, resolveMediaAddress, addressToFile, addressToSlug, addressToHref, parseTranscludeEntry } from '../shared/shared.js';
+import { defaultTypeName } from '../shared/node-types.js';
 import type { SourceNode, NodeAttrs, ResolvedTag, TagDef, OriginDef, RawFile } from '../shared/parser.js';
 import type { SourceFile as SourceFileT } from '../envoy/source-file.js';
 
@@ -701,7 +702,7 @@ function renderStaticNode(node: SourceNode, sourceFile: SourceFileT, depth = 0) 
     }
   }
 
-  const nodeType   = attrs.get('type') ?? 'text';
+  const nodeType   = attrs.get('type') ?? defaultTypeName();
   const hasBullet  = BULLET_TYPES.has(nodeType);
 
   // The `open` attribute, read exactly as text.ts/toggle-set.ts read it:
@@ -890,7 +891,7 @@ function renderStaticNodes(nodes: SourceNode[], sourceFile: SourceFileT, depth =
   let i = 0;
   while (i < nodes.length) {
     const node = nodes[i];
-    const typeName = node.attrs.get('type') ?? 'text';
+    const typeName = node.attrs.get('type') ?? defaultTypeName();
 
     if (typeName === 'table' || typeName === 'tr') {
       html += renderStaticTableNode(node, sourceFile, depth, typeName);

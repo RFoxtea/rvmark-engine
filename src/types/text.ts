@@ -5,6 +5,7 @@
  * Also serves as the fallback when an unrecognised type is encountered.
  */
 
+import './text.declare.js';
 import type { NodeTypeFactory, SourceNode, ResolvedAttrs, StaticBuildContext } from '../client/render-node.js';
 import { factoryRegister, RenderNode } from '../client/render-node.js';
 

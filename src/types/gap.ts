@@ -10,6 +10,7 @@
  *   1. {= gap}
  */
 
+import './gap.declare.js';
 import type { TypeHandler, NodeTypeFactory, RenderNode } from '../client/render-node.js';
 import { factoryRegister } from '../client/render-node.js';
 

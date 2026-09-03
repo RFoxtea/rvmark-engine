@@ -14,6 +14,7 @@
  *   in CSS, where a used height overrides aspect-ratio.
  */
 
+import './image.declare.js';
 import type { NodeTypeFactory, RenderNode } from '../client/render-node.js';
 import { factoryRegister } from '../client/render-node.js';
 import { copyPermalink, treeNavKeydown, actionKeydown, resolveBox, applyBox } from '../client/handler-utils.js';

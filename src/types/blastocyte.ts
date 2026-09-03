@@ -1,3 +1,5 @@
+import './blastocyte.declare.js';
+import { defaultTypeName } from '../shared/node-types.js';
 import type { TypeHandler, NodeTypeFactory, RenderNode } from '../client/render-node.js';
 import { factoryGet, factoryRegister } from '../client/type-registry.js';
 import { resolveTransclusionConfig } from '../client/transclusion.js';
@@ -9,14 +11,14 @@ import { Multimap } from '../shared/multimap.js';
 function differentiate(rn: RenderNode): TypeHandler {
   const node     = rn.sourceNode;
   const attrs    = node.attrs;
-  const typeName = attrs.get('type') ?? 'text';
+  const typeName = attrs.get('type') ?? defaultTypeName();
   const factory  = factoryGet(typeName);
 
   // An unrenderable type is not reached here: the wire boundary rejects a node
   // whose type this side cannot draw, and an origin's nodetypes are its own
   // business — whatever it serves has already been through them. What is left
   // is the ordinary fallback for a node with no type at all.
-  const handler = (factory ?? factoryGet('text')!).create(rn);
+  const handler = (factory ?? factoryGet(defaultTypeName())!).create(rn);
   rn.attachHandler(handler);
   return handler;
 }
