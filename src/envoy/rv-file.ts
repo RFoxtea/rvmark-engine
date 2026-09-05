@@ -14,7 +14,7 @@
  */
 
 import type { RvNode, Tag, TagDef, Head, FileMeta, NodeAttrs, Reserved } from '../shared/parser.js';
-import { resolveMediaAddress, absolutiseRef } from '../shared/shared.js';
+import { resolveMediaAddress, absolutiseRef, absolutiseTranscludeList } from '../shared/shared.js';
 import { tagsNodeAttrs, mergeNodeAttrs, resolveTagDef } from '../shared/tags.js';
 import { isAddressAttr } from '../shared/node-types.js';
 import '../types/declare.js';
@@ -152,9 +152,11 @@ export class RvFile {
 
     const out: NodeAttrs = new Multimap();
     for (const [k, v] of merged.allEntries()) {
-      out.append(k, isAddressAttr(k, typeName)
-        ? absolutiseRef(v, fromTag.get(k) ?? this.pageAddress)
-        : v);
+      const writtenIn = fromTag.get(k) ?? this.pageAddress;
+      out.append(k, !isAddressAttr(k, typeName) ? v
+        // transclude is a list, not one ref, and its grammar has non-address tokens.
+        : k === 'transclude' ? absolutiseTranscludeList(v, writtenIn)
+        : absolutiseRef(v, writtenIn));
     }
     return out;
   }

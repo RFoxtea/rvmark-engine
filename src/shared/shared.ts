@@ -285,6 +285,29 @@ export function parseTranscludeEntry(entry: string): { ref: string; wholeNode: b
     : { ref: trimmed, wholeNode: false };
 }
 
+/**
+ * `absolutiseRef` for a `transclude` value, which is a comma-separated LIST and
+ * whose grammar has two tokens that are not addresses: `*` (the node's own
+ * children) and `^` (the target as a row). Absolutising the value whole made
+ * `*, #other` into `/dir/*, #other` — the client's `entry === '*'` test then
+ * failed and the star silently contributed nothing.
+ *
+ * `^` is re-prefixed rather than left in place: absolutising through it embeds
+ * the caret mid-string, where parseTranscludeEntry's leading-only strip cannot
+ * see it.
+ */
+export function absolutiseTranscludeList(raw: string, sourceFileAddress: string): string {
+  if (!raw) return raw;
+  return raw.split(',').map(part => {
+    const entry = part.trim();
+    if (!entry) return '';
+    const { ref, wholeNode } = parseTranscludeEntry(entry);
+    if (ref === '*') return entry;
+    const abs = absolutiseRef(ref, sourceFileAddress);
+    return wholeNode ? WHOLE_NODE_PREFIX + abs : abs;
+  }).filter(Boolean).join(', ');
+}
+
 // ── Slug resolution ────────────────────────────────────────────────────────────
 
 // Internal to resolveSlugInFile. Stage 1 took its client callers away — a
