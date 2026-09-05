@@ -63,7 +63,7 @@ import { isSearchable, RenderNode } from './render-node.js';
 import { scrollRowIntoMiddle } from './scroll.js';
 import { mountSearchRoot } from './shell.js';
 import { originFor } from './origin-host.js';
-import { nodeTextMatches } from '../shared/served.js';
+import { nodeTextMatches } from '../shared/search-match.js';
 
 interface SearchMatch {
   node:    SourceNode;

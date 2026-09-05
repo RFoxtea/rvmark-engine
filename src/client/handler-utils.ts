@@ -13,12 +13,11 @@
 
 import { addressToHref } from '../shared/shared.js';
 import { scrollRowIntoMiddle } from './scroll.js';
-import type { SourceNode } from '../shared/parser.js';
+import type { SourceNode, ResolvedAttrs } from '../shared/parser.js';
 import type { FetchedResource } from '../shared/portable-node.js';
 import { parseStateEntries } from '../shared/parser.js';
 import { Multimap } from '../shared/multimap.js';
 import { bagOf } from '../shared/inherited.js';
-import type { ResolvedAttrs } from '../shared/served.js';
 import { RenderNode } from './render-node.js';
 import { resolveEffectiveChildren, resolveTransclusionConfig } from './transclusion.js';
 import { resolveRefOn, fetchMediaAllOn, childrenOf } from './origin-host.js';

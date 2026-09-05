@@ -202,6 +202,8 @@ export function parseStateEntries(raw: string): StateEntry[] {
 
 export type TagProps = Multimap;
 export type NodeAttrs = Multimap;
+/** A node's attrs with its tags' `node.*` overrides already merged in. */
+export type ResolvedAttrs = NodeAttrs;
 /**
  * A tag definition: the attributes it declares, and the file that declared them.
  *

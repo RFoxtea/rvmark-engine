@@ -13,7 +13,7 @@
  */
 
 import { mdInline } from './markdown.js';
-import type { ResolvedTag } from '../shared/served.js';
+import type { ResolvedTag } from '../shared/parser.js';
 
 export function buildTagChips(tags: ResolvedTag[]): DocumentFragment {
   const frag = document.createDocumentFragment();

@@ -41,7 +41,7 @@ import {
 } from '../shared/shared.js';
 import { loadRvmarkFile, invalidateLoaderCaches } from './loader.js';
 import type { SourceFile } from './source-file.js';
-import { nodeTextMatches } from '../shared/served.js';
+import { nodeTextMatches } from '../shared/search-match.js';
 import { Multimap } from '../shared/multimap.js';
 import type { FetchedResource } from '../shared/portable-node.js';
 

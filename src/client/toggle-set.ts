@@ -14,7 +14,7 @@
  */
 
 import type { RenderNode } from './render-node.js';
-import type { ResolvedAttrs } from '../shared/served.js';
+import type { ResolvedAttrs } from '../shared/parser.js';
 import { expandNode, applyEventAttr } from './handler-utils.js';
 import { resolveTransclusionConfig } from './transclusion.js';
 import { childrenOf } from './origin-host.js';

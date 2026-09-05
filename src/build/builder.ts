@@ -1,20 +1,15 @@
 /**
  * builder.ts
  *
- * Construction-side helpers for scripts that generate `.rvmark` by building a
- * RawNode/RawFile tree and handing it to stringify() (stringify.ts), rather than
- * concatenating source text by hand.
+ * Helpers for scripts that generate `.rvmark` source files, so they can manipulate
+ * rvmark abstract syntax trees (RawNode/RawFile objects) rather than concatenate 
+ * text.
  *
- * This is the inverse-direction companion to parser.ts:
- *   parse()   text → tree      (assigns ordinals as its last step)
- *   build*()  fields → tree     (this module; you call assignOrdinals to finalise)
+ * Pairs well with other modules:
+ * 
+ *   parse()   text → tree
+ *   build*()  fields → tree
  *   stringify text ← tree
- *
- * The design rule is that a built tree is indistinguishable from a parsed one:
- * buildNode() produces a real RawNode with the plumbing fields stubbed, and
- * finalising goes through the *same* exported assignOrdinals() that parse() uses,
- * so numbering/slug/permalinkId come out identically. Nothing downstream (render,
- * transclusion, sidepanel, stringify) can tell a built node from a parsed one.
  *
  * Exports:
  *   buildNode(spec)            → a RawNode (ordinals stubbed; call assignOrdinals)
