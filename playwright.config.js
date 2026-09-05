@@ -6,6 +6,11 @@ const dir = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   testDir: join(dir, 'tests'),
+  // Browser specs only. tests/*.test.mjs are node:test files: Playwright
+  // would import them as specs, which runs them a second time — in 8
+  // parallel workers racing each other's temp-dir builds — and then finds
+  // no Playwright tests in them anyway.
+  testMatch: '**/*.spec.js',
   workers: 8,
   fullyParallel: true,
   timeout: 10000,
