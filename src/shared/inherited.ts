@@ -26,7 +26,7 @@
  * seed and derive itself. Adding an inherited property is one registration here.
  */
 
-import type { Head, NodeAttrs, RawNode, TagDef } from './parser.js';
+import type { Head, NodeAttrs, SourceNode, TagDef } from './parser.js';
 import { tagsNodeAttrs, mergeNodeAttrs } from './tags.js';
 import { Multimap } from './multimap.js';
 
@@ -51,7 +51,7 @@ export interface InheritedProp<T = unknown> {
   name:      string;
   empty:     T;
   seed:      (head: Head) => T;
-  derive:    (parentValue: T, raw: RawNode, tagDefs: Record<string, TagDef>) => T;
+  derive:    (parentValue: T, raw: SourceNode, tagDefs: Record<string, TagDef>) => T;
   toWire?:   (value: T) => unknown;
   fromWire?: (wire: unknown) => T;
 }
@@ -68,7 +68,7 @@ export interface SidepanelScope {
 /**
  * The resolved values for one node, keyed by property name.
  *
- * Typed as the statically-known set so a bag can be spread into a SourceNode
+ * Typed as the statically-known set so a bag can be spread into an RvNode
  * without a cast. The registry itself is dynamic — this interface is the one
  * place a newly registered property must also be declared, and the compiler
  * will point at every construction site if it is missing.
@@ -99,7 +99,7 @@ export function seedBag(head: Head): InheritedBag {
 /** Derive a child's bag from its parent's. */
 export function deriveBag(
   parent:  InheritedBag,
-  raw:     RawNode,
+  raw:     SourceNode,
   tagDefs: Record<string, TagDef>,
 ): InheritedBag {
   const src = parent as unknown as Record<string, unknown>;
@@ -216,7 +216,7 @@ registerInherited<Record<string, unknown>>({
  * Carried as the raw ref plus the declaring node's attrs (the panel reads
  * `sidepanel-pass` off them). The ref stays raw: inheritance never
  * crosses a file, so every node holding a scope is in the file that declared it,
- * and the reader resolves the ref against its own `sourceFile`.
+ * and the reader resolves the ref against its own `rvFile`.
  */
 registerInherited<SidepanelScope | null>({
   name:  'sidepanel',

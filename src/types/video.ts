@@ -121,9 +121,9 @@ class VideoTypeHandler extends BaseTypeHandler {
 
   constructor(renderNode: RenderNode) {
     super(renderNode, 'iframe, video');
-    const sourceNode = renderNode.sourceNode;
-    const attrs = sourceNode.attrs;
-    const rawUrl = attrs.get('src') ?? (sourceNode.label || null);
+    const rvNode = renderNode.rvNode;
+    const attrs = rvNode.attrs;
+    const rawUrl = attrs.get('src') ?? (rvNode.label || null);
 
     const content = this.content;
     content.classList.add('node-content--video');
@@ -149,7 +149,7 @@ class VideoTypeHandler extends BaseTypeHandler {
     // body waits on one resolution rather than two paths racing.
     void (async () => {
       const fileUrl = rawUrl && isFileSource(rawUrl)
-        ? safeMediaUrl(await resolveMediaOn(sourceNode, rawUrl) ?? '')
+        ? safeMediaUrl(await resolveMediaOn(rvNode, rawUrl) ?? '')
         : null;
 
       if (fileUrl) {

@@ -15,7 +15,7 @@
  *   nodeTextMatches
  */
 
-import type { ResolvedTag, SourceNode } from './parser.js';
+import type { ResolvedTag, RvNode } from './parser.js';
 
 /** The text a tag puts on screen, or null when it renders no chip. */
 function tagText(tag: ResolvedTag): string | null {
@@ -23,7 +23,7 @@ function tagText(tag: ResolvedTag): string | null {
   return tag.def.get('label') ?? tag.name;
 }
 
-export function nodeTextMatches(node: SourceNode, needle: string): boolean {
+export function nodeTextMatches(node: RvNode, needle: string): boolean {
   if (node.label && node.label.toLowerCase().includes(needle)) return true;
   if (node.tags.some(tag => tagText(tag)?.toLowerCase().includes(needle))) return true;
   return node.bodyLines.some(line => line.toLowerCase().includes(needle));

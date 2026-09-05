@@ -28,7 +28,7 @@
  *
  * Scope is a property of the source tree, not of the DOM: {searchable} is
  * inherited to descendants at parse time (markSearchable in parser.ts, next to
- * meta), and isSearchable is a plain lookup on the SourceNode. Deriving scope
+ * meta), and isSearchable is a plain lookup on the RvNode. Deriving scope
  * from rendered ancestors instead is wrong in the common case — the node
  * carrying the attribute is usually a root, and a root is not itself a row on
  * the page, so nothing would ever be in scope and no dot could ever appear.
@@ -58,7 +58,7 @@
  * Clearing the query text is what hides the widget again.
  */
 
-import type { SourceNode } from '../shared/parser.js';
+import type { RvNode } from '../shared/parser.js';
 import { isSearchable, RenderNode } from './render-node.js';
 import { scrollRowIntoMiddle } from './scroll.js';
 import { mountSearchRoot } from './shell.js';
@@ -66,18 +66,18 @@ import { originFor } from './origin-host.js';
 import { nodeTextMatches } from '../shared/search-match.js';
 
 interface SearchMatch {
-  node:    SourceNode;
-  li:      HTMLElement | null; // the mounted <li class="node"> for this SourceNode, if any
+  node:    RvNode;
+  li:      HTMLElement | null; // the mounted <li class="node"> for this RvNode, if any
 }
 
 // ── Matching ──────────────────────────────────────────────────────────────────
 
-// Map every currently-mounted SourceNode to its <li>, in one DOM pass.
-function mountedNodes(): Map<SourceNode, HTMLElement> {
-  const map = new Map<SourceNode, HTMLElement>();
+// Map every currently-mounted RvNode to its <li>, in one DOM pass.
+function mountedNodes(): Map<RvNode, HTMLElement> {
+  const map = new Map<RvNode, HTMLElement>();
   for (const li of document.querySelectorAll<HTMLElement>('li.node')) {
     const rn = (li as any)._renderNode;
-    if (rn?.sourceNode) map.set(rn.sourceNode, li);
+    if (rn?.rvNode) map.set(rn.rvNode, li);
   }
   return map;
 }
@@ -98,15 +98,15 @@ function searchTree(query: string): SearchMatch[] {
   if (!needle) return [];
   const mounted = mountedNodes();
   const out: SearchMatch[] = [];
-  const seen = new Set<SourceNode>();
+  const seen = new Set<RvNode>();
 
-  const record = (node: SourceNode) => {
+  const record = (node: RvNode) => {
     if (seen.has(node)) return;
     seen.add(node);
     if (nodeTextMatches(node, needle)) out.push({ node, li: mounted.get(node) ?? null });
   };
 
-  const walkHeld = (node: SourceNode) => {
+  const walkHeld = (node: RvNode) => {
     record(node);
     for (const child of node.children) walkHeld(child);
   };
@@ -211,15 +211,15 @@ function askOrigins(query: string): void {
 // half. Shared by redrawIndicators (which draws the dot) and stepTargets (which
 // also treats these as stepping stops, in document order alongside real
 // .search-marks — see stepTargets).
-function nodesWithHiddenMatch(results: SearchMatch[]): Map<SourceNode, HTMLElement> {
+function nodesWithHiddenMatch(results: SearchMatch[]): Map<RvNode, HTMLElement> {
   const mounted = mountedNodes();
-  const out = new Map<SourceNode, HTMLElement>();
+  const out = new Map<RvNode, HTMLElement>();
 
   // Matched nodes that are not themselves mounted — the ones a reader cannot
   // see. Anything mounted is already visible (and marked), so it needs no dot.
   const hiddenMatches = new Set(results.filter(r => !r.li).map(r => r.node));
 
-  const containsHidden = (node: SourceNode): boolean =>
+  const containsHidden = (node: RvNode): boolean =>
     node.children.some(c => hiddenMatches.has(c) || containsHidden(c));
 
   for (const [node, li] of mounted) {

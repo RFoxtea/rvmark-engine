@@ -34,7 +34,7 @@
  *     cannot hand us something we will mis-render.
  */
 
-import type { SourceNode, FileMeta } from '../shared/parser.js';
+import type { RvNode, FileMeta } from '../shared/parser.js';
 import type { PortableNode, FetchedResource } from '../shared/portable-node.js';
 import { deserializeNode } from '../shared/portable-node.js';
 import { Multimap } from '../shared/multimap.js';
@@ -161,7 +161,7 @@ function check(w: PortableNode): void {
 // so. Classed for styling, and keeping the original's identity fields where they
 // were legible at all — it stands in the failed node's place, so it takes its
 // place in the numbering too.
-function rejected(w: PortableNode, baseUrl: string, message: string): SourceNode {
+function rejected(w: PortableNode, baseUrl: string, message: string): RvNode {
   const attrs = new Multimap();
   attrs.set('type', 'text');
   attrs.append('class', 'node--wire-error');
@@ -174,7 +174,7 @@ function rejected(w: PortableNode, baseUrl: string, message: string): SourceNode
     address:     { baseUrl, key: str(w?.key) },
     pageAddress: str(w?.pageAddress),
     stateScope:  str(w?.stateScope),
-  } as SourceNode;
+  } as RvNode;
 }
 
 // ── One envoy per baseUrl ─────────────────────────────────────────────────────
@@ -300,8 +300,8 @@ function envoyFor(baseUrl: string): OriginEnvoy {
 // others it chooses to answer.
 
 export interface Origin {
-  node(key: string):                             Promise<SourceNode | null>;
-  childrenOf(key: string):                       Promise<SourceNode[]>;
+  node(key: string):                             Promise<RvNode | null>;
+  childrenOf(key: string):                       Promise<RvNode[]>;
   resolve(key: string, refs: string[]):          Promise<Address[][]>;
   hasMatchBelow(keys: string[], q: string):      Promise<boolean[]>;
   resolveResources(key: string, refs: string[]): Promise<(string | null)[]>;
@@ -319,7 +319,7 @@ class RemoteOrigin implements Origin {
   // A node's baseUrl is the envoy that answered, never a field on the payload.
   // That is what makes an origin unable to claim another's content: it can put
   // whatever it likes on the wire and still only ever answers for itself.
-  private live(wire: PortableNode | null): SourceNode | null {
+  private live(wire: PortableNode | null): RvNode | null {
     if (!wire) return null;
     return this.accept(wire);
   }
@@ -327,7 +327,7 @@ class RemoteOrigin implements Origin {
   // One node past the boundary. What fails the check comes back as an error row
   // standing in its place: it keeps the node's identity, so permalinks and
   // positioning stay coherent, and says plainly what went wrong.
-  private accept(wire: PortableNode): SourceNode {
+  private accept(wire: PortableNode): RvNode {
     try {
       check(wire);
       return deserializeNode(wire, this.baseUrl);
@@ -336,11 +336,11 @@ class RemoteOrigin implements Origin {
     }
   }
 
-  async node(key: string): Promise<SourceNode | null> {
+  async node(key: string): Promise<RvNode | null> {
     return this.live(await this.ask<PortableNode | null>('node', [key]));
   }
 
-  async childrenOf(key: string): Promise<SourceNode[]> {
+  async childrenOf(key: string): Promise<RvNode[]> {
     const wire = await this.ask<PortableNode[]>('childrenOf', [key]);
     if (!Array.isArray(wire)) throw new Error('childrenOf did not answer with a list');
     return wire.map(w => this.accept(w));
@@ -428,7 +428,7 @@ function currentBaseUrl(): string {
  * Accepts an entry with or without its '^' prefix — the prefix selects what the
  * caller does with the result, and never changes which node is resolved.
  */
-export async function resolveRefAt(from: Address, rawRef: string | null | undefined): Promise<SourceNode | null> {
+export async function resolveRefAt(from: Address, rawRef: string | null | undefined): Promise<RvNode | null> {
   if (!rawRef) return null;
   try {
     const candidates = (await originFor(from.baseUrl).resolve(from.key, [rawRef]))[0] ?? [];
@@ -441,7 +441,7 @@ export async function resolveRefAt(from: Address, rawRef: string | null | undefi
 }
 
 /** `resolveRefAt` for a ref written on a node the caller holds. */
-export function resolveRefOn(node: SourceNode, rawRef: string | null | undefined): Promise<SourceNode | null> {
+export function resolveRefOn(node: RvNode, rawRef: string | null | undefined): Promise<RvNode | null> {
   return resolveRefAt(node.address, rawRef);
 }
 
@@ -453,7 +453,7 @@ export function resolveRefOn(node: SourceNode, rawRef: string | null | undefined
  * transcluded foreign node gets its own origin's assets — the same rule
  * markdown media and transclusion refs already follow.
  */
-export async function resolveMediaOn(node: SourceNode, ref: string | null | undefined): Promise<string | null> {
+export async function resolveMediaOn(node: RvNode, ref: string | null | undefined): Promise<string | null> {
   return (await resolveMediaAllOn(node, [ref]))[0];
 }
 
@@ -463,7 +463,7 @@ export async function resolveMediaOn(node: SourceNode, ref: string | null | unde
  * carries one message per caller rather than one per ref.
  */
 export async function resolveMediaAllOn(
-  node: SourceNode,
+  node: RvNode,
   refs: (string | null | undefined)[],
 ): Promise<(string | null)[]> {
   // Keyed off pageAddress, not the node's own key: a client-minted stand-in (a
@@ -483,7 +483,7 @@ export async function resolveMediaAllOn(
  * A null is the ref failing, known before anything is built from it.
  */
 export async function fetchMediaAllOn(
-  node: SourceNode,
+  node: RvNode,
   refs: (string | null | undefined)[],
 ): Promise<(FetchedResource | null)[]> {
   const { baseUrl } = node.address;
@@ -524,7 +524,7 @@ export async function fetchMediaAllAt(
  * a subtree therefore costs a round trip again, which is the price of the
  * client's heap not growing with everything it has ever looked at.
  */
-export async function childrenOf(node: SourceNode): Promise<SourceNode[]> {
+export async function childrenOf(node: RvNode): Promise<RvNode[]> {
   if (!node.hasChildren) return [];
   // A stand-in has no key, so there is no one to ask. It never has children
   // either, but a caller should not have to know that to be safe here.

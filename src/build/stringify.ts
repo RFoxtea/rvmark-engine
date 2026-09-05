@@ -1,7 +1,7 @@
 /**
  * stringify.ts
  *
- * Inverse of parse() (parser.ts): renders a RawFile / RawNode tree back to
+ * Inverse of parse() (parser.ts): renders a SourceFile / SourceNode tree back to
  * `.rvmark` source text, for scripts that want to parse → mutate the tree →
  * write, instead of regexing source text directly.
  *
@@ -21,7 +21,7 @@
  *   stringifyNode(node, depth) → a single node's lines (used recursively)
  */
 
-import type { RawFile, RawNode, Head, TagDef } from '../shared/parser.js';
+import type { SourceFile, SourceNode, Head, TagDef } from '../shared/parser.js';
 import type { Multimap } from '../shared/multimap.js';
 
 const INDENT = 2;
@@ -73,7 +73,7 @@ function pickFence(bodyLines: string[]): string {
   return backtickFence.length <= tildeFence.length ? backtickFence : tildeFence;
 }
 
-function stringifyTags(tags: RawNode['tags']): string {
+function stringifyTags(tags: SourceNode['tags']): string {
   return tags.map(t => {
     const props = t.props.allEntries();
     return props.length
@@ -111,7 +111,7 @@ function stringifyTagDef(name: string, def: TagDef): string {
 }
 
 // ── nodes ──────────────────────────────────────────────────────────────────
-export function stringifyNode(node: RawNode, depth: number): string {
+export function stringifyNode(node: SourceNode, depth: number): string {
   const indent = ' '.repeat(depth * INDENT);
   const marker = node.auto ? '-' : `${node.numbering}.`;
 
@@ -144,7 +144,7 @@ export function stringifyNode(node: RawNode, depth: number): string {
 }
 
 // ── file ───────────────────────────────────────────────────────────────────
-export function stringifyFile(file: RawFile): string {
+export function stringifyFile(file: SourceFile): string {
   const headStr = stringifyHead(file.head);
   const bodyStr = file.roots.map(r => stringifyNode(r, 0)).join('\n');
   return headStr + bodyStr + '\n';

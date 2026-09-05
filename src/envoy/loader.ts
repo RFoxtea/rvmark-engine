@@ -12,13 +12,13 @@
  *
  * Exports:
  *   invalidateLoaderCaches(baseUrl)  — drop everything cached for one origin
- *   loadRvmarkFile(address)         — resolve a canonical address → SourceFile | null
+ *   loadRvmarkFile(address)         — resolve a canonical address → RvFile | null
  */
 
 import { parse, resolveFile } from '../shared/parser.js';
-import type { RawFile, Head, OriginDef, TagDef } from '../shared/parser.js';
+import type { SourceFile, Head, OriginDef, TagDef } from '../shared/parser.js';
 import { Multimap } from '../shared/multimap.js';
-import { SourceFile } from './source-file.js';
+import { RvFile } from './rv-file.js';
 import { addressToFile, addressOrigin, RVMARK_SEGMENT } from '../shared/shared.js';
 
 // ── Source acquisition ────────────────────────────────────────────────────────
@@ -76,7 +76,7 @@ async function getRvmarkSource(address: string): Promise<RvmarkSourceResult> {
   // Content-type guard. A missing .rvmark can come back as HTTP 200 when the
   // server rewrites unknown paths to an HTML fallback (SPA catch-all, custom
   // 200 error page). Without this check the HTML would be parse()d as rvmark,
-  // yielding a corrupt SourceFile instead of a clean miss — which silently
+  // yielding a corrupt RvFile instead of a clean miss — which silently
   // defeats the caller's /index.rvmark fallback (see loadRvmarkFile). Treat an
   // HTML response as not-found so the fallback fires. We check both the
   // declared content-type and the body's leading bytes, because a server may
@@ -113,9 +113,9 @@ function addressToFetchUrl(address: string): string {
 // ── Raw file cache (first pass) ───────────────────────────────────────────────
 // Keyed by canonical address (no fragment).
 
-const rawCache = new Map<string, Promise<RawFile>>();
+const rawCache = new Map<string, Promise<SourceFile>>();
 
-function fetchRawFile(address: string): Promise<RawFile> {
+function fetchRawFile(address: string): Promise<SourceFile> {
   const key = stripFragment(address);
   if (rawCache.has(key)) return rawCache.get(key)!;
   const p = getRvmarkSource(key)
@@ -189,27 +189,27 @@ function resolveInheritedHead(address: string): Promise<Head> {
   return p;
 }
 
-// ── SourceFile cache ─────────────────────────────────────────────────────────
+// ── RvFile cache ─────────────────────────────────────────────────────────
 // Keyed by canonical address (no fragment).
 
-const sourceFileCache = new Map<string, Promise<SourceFile>>();
+const rvFileCache = new Map<string, Promise<RvFile>>();
 
-function loadResolvedFile(address: string): Promise<SourceFile> {
+function loadResolvedFile(address: string): Promise<RvFile> {
   const key = stripFragment(address);
-  if (sourceFileCache.has(key)) return sourceFileCache.get(key)!;
+  if (rvFileCache.has(key)) return rvFileCache.get(key)!;
 
-  const p = (async (): Promise<SourceFile> => {
+  const p = (async (): Promise<RvFile> => {
     const [raw, inheritedHead] = await Promise.all([
       fetchRawFile(key),
       resolveInheritedHead(key),
     ]);
     const resolved = resolveFile(raw, inheritedHead);
     const file = addressToFile(key) ?? '';
-    return new SourceFile(resolved.nodeMap, resolved.roots, resolved.head, file, key);
+    return new RvFile(resolved.nodeMap, resolved.roots, resolved.head, file, key);
   })();
 
-  sourceFileCache.set(key, p);
-  p.catch(() => sourceFileCache.delete(key));
+  rvFileCache.set(key, p);
+  p.catch(() => rvFileCache.delete(key));
   return p;
 }
 
@@ -218,7 +218,7 @@ function loadResolvedFile(address: string): Promise<SourceFile> {
 // so this is reached only through `Origin.invalidate` (origin.ts) — the loader
 // is not something a caller outside gets to poke.
 export function invalidateLoaderCaches(baseUrl: string): void {
-  for (const cache of [rawCache, sourceFileCache] as Map<string, unknown>[]) {
+  for (const cache of [rawCache, rvFileCache] as Map<string, unknown>[]) {
     for (const key of [...cache.keys()]) if (key.startsWith(baseUrl)) cache.delete(key);
   }
   for (const key of [...inheritedHeadCache.keys()]) {
@@ -227,8 +227,8 @@ export function invalidateLoaderCaches(baseUrl: string): void {
 }
 
 // ── loadRvmarkFile ────────────────────────────────────────────────────────────
-// Resolve a canonical address → SourceFile. Tries <file>/index.rvmark fallback.
-export async function loadRvmarkFile(address: string): Promise<SourceFile | null> {
+// Resolve a canonical address → RvFile. Tries <file>/index.rvmark fallback.
+export async function loadRvmarkFile(address: string): Promise<RvFile | null> {
   const key = stripFragment(address);
   const file = addressToFile(key);
   if (!file) return null;

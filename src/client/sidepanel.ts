@@ -37,7 +37,7 @@ import { prerootFrame, StateRelay, buildStatePass } from './state.js';
 import { postGuestMode, broadcastPreroot, prerootDeclareMsg, prerootSetMsg, prerootDeleteMsg, wireRelay, registerThemeIframe, unregisterThemeIframe } from './iframe-host.js';
 import { RenderNode } from './render-node.js';
 import { sidepanelSplitAttach, sidepanelSplitDetach } from './sidepanel-split.js';
-import type { NodeAttrs, SourceNode } from '../shared/parser.js';
+import type { NodeAttrs, RvNode } from '../shared/parser.js';
 
 export interface SidepanelConfig {
   rawRef:            string;
@@ -364,16 +364,16 @@ export function sidepanelCurrentTrigger(): RenderNode | null {
 // A node's sidepanel is the one its own document declared over it. The DOM walk
 // this replaced derived scope from where a subtree landed instead, so content
 // transcluded into a page picked up that page's sidepanel rather than its own.
-// Exported for tests: it reads only `sourceNode`, so it is exercisable without
+// Exported for tests: it reads only `rvNode`, so it is exercisable without
 // a DOM. Callers in this module pass a real RenderNode.
-export function sidepanelConfigOf(rn: { sourceNode: SourceNode }): SidepanelConfig | null {
-  const scope = rn.sourceNode.sidepanel;
+export function sidepanelConfigOf(rn: { rvNode: RvNode }): SidepanelConfig | null {
+  const scope = rn.rvNode.sidepanel;
   if (!scope) return null;
   return {
     rawRef:            scope.rawRef,
     // Inheritance never crosses a file, so this node's file is the one that
     // declared the scope — which is what the ref resolves against.
-    sourceFileAddress: rn.sourceNode.pageAddress,
+    sourceFileAddress: rn.rvNode.pageAddress,
     attrs:             scope.attrs,
   };
 }

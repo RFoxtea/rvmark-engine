@@ -13,7 +13,7 @@
 
 import { addressToHref } from '../shared/shared.js';
 import { scrollRowIntoMiddle } from './scroll.js';
-import type { SourceNode, ResolvedAttrs } from '../shared/parser.js';
+import type { RvNode, ResolvedAttrs } from '../shared/parser.js';
 import type { FetchedResource } from '../shared/portable-node.js';
 import { parseStateEntries } from '../shared/parser.js';
 import { Multimap } from '../shared/multimap.js';
@@ -80,9 +80,9 @@ export function parsePass(raw: string): PassEntry[] {
 // ── Transclusion expand ────────────────────────────────────────────────────
 
 export async function expandNode(rn: RenderNode, transcludeRef?: string): Promise<void> {
-  const sourceNode = rn.sourceNode;
-  const attrs = sourceNode.attrs;
-  const { embedVal, childrenList: _childrenList } = resolveTransclusionConfig(sourceNode, attrs);
+  const rvNode = rn.rvNode;
+  const attrs = rvNode.attrs;
+  const { embedVal, childrenList: _childrenList } = resolveTransclusionConfig(rvNode, attrs);
   // A caller-supplied ref (listbox option) or a link-mode embedVal is just a
   // single-ref children list. Route both through the list path below so the
   // target's own transclude chain is followed (resolveEffectiveChildren) — the
@@ -99,7 +99,7 @@ export async function expandNode(rn: RenderNode, transcludeRef?: string): Promis
     // the setChildren mount race (MOUNT_SETTLE_MS), so a fast resolve supersedes it
     // before it ever paints — no flash — while a slow one reveals it.
     if (needsResolve) {
-      rn.setChildren([makeLoadingNode(sourceNode)], null, passChildrenEntries);
+      rn.setChildren([makeLoadingNode(rvNode)], null, passChildrenEntries);
     }
 
     // Phase 2: race every ref against one shared deadline. A ref still unresolved
@@ -109,36 +109,36 @@ export async function expandNode(rn: RenderNode, transcludeRef?: string): Promis
     const TIMED_OUT = Symbol('timed-out');
     const deadline = new Promise<typeof TIMED_OUT>(res => setTimeout(() => res(TIMED_OUT), TRANSCLUDE_DEADLINE_MS));
     const outcomes = await Promise.all(childrenList.map(async (rawRef) => {
-      if (rawRef === '*') return { rawRef, star: true, wholeNode: false, node: null as SourceNode | null, timedOut: false };
+      if (rawRef === '*') return { rawRef, star: true, wholeNode: false, node: null as RvNode | null, timedOut: false };
       const { wholeNode } = parseTranscludeEntry(rawRef);
-      const node = await Promise.race([resolveRefOn(sourceNode, rawRef), deadline]);
+      const node = await Promise.race([resolveRefOn(rvNode, rawRef), deadline]);
       if (node === TIMED_OUT) return { rawRef, star: false, wholeNode, node: null, timedOut: true };
-      return { rawRef, star: false, wholeNode, node: node as SourceNode | null, timedOut: false };
+      return { rawRef, star: false, wholeNode, node: node as RvNode | null, timedOut: false };
     }));
 
-    const allNodes: SourceNode[] = [];
+    const allNodes: RvNode[] = [];
     for (const o of outcomes) {
       if (o.star) {
-        allNodes.push(...await childrenOf(sourceNode));
+        allNodes.push(...await childrenOf(rvNode));
       } else if (o.node) {
         // '^' asks for the target as a row rather than for what is under it —
         // so it is pushed whole, subtree and all, and the unwrap is skipped.
         if (o.wholeNode) allNodes.push(o.node);
         else allNodes.push(...await resolveEffectiveChildren(o.node, new Set([o.rawRef])));
       } else {
-        allNodes.push(makeErrorNode(sourceNode, o.rawRef, o.timedOut ? 'timeout' : 'error'));
+        allNodes.push(makeErrorNode(rvNode, o.rawRef, o.timedOut ? 'timeout' : 'error'));
       }
     }
     await rn.setChildren(allNodes, null, passChildrenEntries);
-  } else if (sourceNode.hasChildren) {
+  } else if (rvNode.hasChildren) {
     // The node crossed the wire promising children (that promise is what drew
     // its toggle), so an empty answer is a contradiction, not an empty subtree:
     // the origin could not resolve the key — a broken permalink. Say so. Left
     // silent, the row draws an expandable bullet and does nothing when clicked,
     // which reads as a dead UI rather than as the authoring error it is.
-    const kids = await childrenOf(sourceNode);
+    const kids = await childrenOf(rvNode);
     await rn.setChildren(
-      kids.length ? kids : [makeErrorNode(sourceNode, sourceNode.permalinkId, 'error')],
+      kids.length ? kids : [makeErrorNode(rvNode, rvNode.permalinkId, 'error')],
       null,
       passChildrenEntries,
     );
@@ -152,7 +152,7 @@ export async function expandNode(rn: RenderNode, transcludeRef?: string): Promis
 // do not have is an identity: nothing served them, so their key is empty and
 // asking an origin about it would be asking about a node that does not exist.
 
-function syntheticChild(host: SourceNode, attrs: Multimap, label: string): SourceNode {
+function syntheticChild(host: RvNode, attrs: Multimap, label: string): RvNode {
   return {
     slug: '', permalinkId: '', numbering: '',
     attrs, tags: [], label, bodyLines: [],
@@ -164,11 +164,11 @@ function syntheticChild(host: SourceNode, attrs: Multimap, label: string): Sourc
     stateScope:  host.stateScope,
     // Stands in for the host, so it inherits exactly what the host has.
     ...bagOf(host),
-  } as SourceNode;
+  } as RvNode;
 }
 
 // The single "resolving…" marker (loading type → animated placeholder).
-function makeLoadingNode(host: SourceNode): SourceNode {
+function makeLoadingNode(host: RvNode): RvNode {
   const attrs = new Multimap();
   attrs.set('type', 'loading');
   return syntheticChild(host, attrs, '');
@@ -178,7 +178,7 @@ function makeLoadingNode(host: SourceNode): SourceNode {
 // so it renders exactly like any other row (bullet + label). Exported so the
 // link-mode transclusion path (blastocyte) produces an identical error row — the
 // broken link-mode and children-mode cases must look the same.
-export function makeErrorNode(host: SourceNode, ref: string, reason: 'error' | 'timeout'): SourceNode {
+export function makeErrorNode(host: RvNode, ref: string, reason: 'error' | 'timeout'): RvNode {
   const attrs = new Multimap();
   attrs.set('type', 'text');
   // Distinct error marker + muted row; both drawn from CSS on this class, so the
@@ -237,7 +237,7 @@ export function listboxKeydown(
 //
 // Recognized actions: 'sidepanel', 'link', 'none'.
 export function actionKeydown(e: KeyboardEvent, rn: RenderNode): boolean {
-  const actionVal = rn.sourceNode.attrs.get('action');
+  const actionVal = rn.rvNode.attrs.get('action');
   if (actionVal === undefined) return false;
   const content = rn.content;
 
@@ -319,13 +319,13 @@ export function applyEventAttr(attrVal: string | undefined, rn: RenderNode): voi
 // this, or a bare `{set &x = "1"}` would work for only one kind of user. Call it
 // from every doAction callback and every keyboard action path.
 export function applyOnAction(rn: RenderNode): void {
-  for (const v of rn.sourceNode.attrs.getAll('on-action')) applyEventAttr(v, rn);
+  for (const v of rn.rvNode.attrs.getAll('on-action')) applyEventAttr(v, rn);
 }
 
 // ── Tag class application ──────────────────────────────────────────────────
 
-export function applyTagClasses(content: HTMLElement, sourceNode: SourceNode, attrs: ResolvedAttrs): void {
-  for (const { def } of sourceNode.tags) {
+export function applyTagClasses(content: HTMLElement, rvNode: RvNode, attrs: ResolvedAttrs): void {
+  for (const { def } of rvNode.tags) {
     for (const cls of def.getAll('class')) {
       content.classList.add(...cls.split(/\s+/).filter(Boolean));
     }
@@ -446,7 +446,7 @@ export function wireBulletActions(
 // at the mercy of the HOST's fonts. An image ref has neither problem: it is
 // addressed, so it resolves against the origin that wrote it, and it costs one
 // small lazy fetch instead of a font.
-export function applyBulletProps(content: HTMLElement, attrs: ResolvedAttrs, sourceNode?: SourceNode): void {
+export function applyBulletProps(content: HTMLElement, attrs: ResolvedAttrs, rvNode?: RvNode): void {
   // The non-media props are applied synchronously, before the icon is asked for.
   // They are what a node looks like without its bullet image, and holding them
   // back behind a resolution they do not need would make every decorated row
@@ -460,12 +460,12 @@ export function applyBulletProps(content: HTMLElement, attrs: ResolvedAttrs, sou
   const alt = attrs.get('bullet-alt');
   if (alt) content.dataset.bulletAlt = alt;
 
-  void applyBulletImages(content, attrs, sourceNode);
+  void applyBulletImages(content, attrs, rvNode);
 }
 
-async function applyBulletImages(content: HTMLElement, attrs: ResolvedAttrs, sourceNode?: SourceNode): Promise<void> {
+async function applyBulletImages(content: HTMLElement, attrs: ResolvedAttrs, rvNode?: RvNode): Promise<void> {
   const bullet = attrs.get('bullet');
-  if (bullet !== undefined && sourceNode) {
+  if (bullet !== undefined && rvNode) {
     // Relative refs resolve against the file the node came FROM — so a
     // transcluded foreign node gets its OWN origin's icons, the same rule
     // markdown media and transclusion refs already follow.
@@ -473,7 +473,7 @@ async function applyBulletImages(content: HTMLElement, attrs: ResolvedAttrs, sou
     // Both icons in one query: they are held together, so they are asked for
     // together — one message rather than two once the origin is behind a wire.
     const open = attrs.get('bullet-open');
-    const [res, openRes] = await fetchMediaAllOn(sourceNode, [bullet, open]);
+    const [res, openRes] = await fetchMediaAllOn(rvNode, [bullet, open]);
     const url     = res     ? bulletDataUri(res)     : null;
     const openUrl = openRes ? bulletDataUri(openRes) : null;
     if (url) {
@@ -563,7 +563,7 @@ export function applyListItemProps(content: HTMLElement, attrs: ResolvedAttrs): 
 // Converts to a navigable href via addressToHref.
 export function buildPermalinkHref(rn: RenderNode): string {
   const state    = rn.state.serialize();
-  const basePath = rn.sourceNode ? addressToHref(rn.sourceNode.pageAddress ?? '') : '';
+  const basePath = rn.rvNode ? addressToHref(rn.rvNode.pageAddress ?? '') : '';
   return basePath + (state ? '?' + state : '') + (rn.permalinkId ? '#' + rn.permalinkId : '');
 }
 

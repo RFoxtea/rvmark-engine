@@ -1,7 +1,8 @@
 /**
- * source-file.ts
+ * rv-file.ts
  *
- * SourceFile — the parsed representation of a single .rvmark source file.
+ * RvFile — a single .rvmark file as the origin holds it: its nodes resolved,
+ * and addressed against where the file lives.
  *
  * This is origin-side storage, not a client-side handle. It is the `.rvmark`
  * origin's answer to "what did I parse", and it exists only inside origin.ts's
@@ -9,10 +10,10 @@
  * fields are already resolved — the answers, not the means to compute them.
  *
  * Exports:
- *   SourceFile
+ *   RvFile
  */
 
-import type { SourceNode, Tag, TagDef, Head, FileMeta, NodeAttrs, Reserved } from '../shared/parser.js';
+import type { RvNode, Tag, TagDef, Head, FileMeta, NodeAttrs, Reserved } from '../shared/parser.js';
 import { resolveMediaAddress, absolutiseRef } from '../shared/shared.js';
 import { tagsNodeAttrs, mergeNodeAttrs, resolveTagDef } from '../shared/tags.js';
 import { isAddressAttr } from '../shared/node-types.js';
@@ -23,16 +24,16 @@ import { addressOrigin } from '../shared/shared.js';
 export type { Head, FileMeta };
 
 
-export class SourceFile {
-  readonly nodeMap:     Record<string, SourceNode>;
-  readonly roots:       SourceNode[];
+export class RvFile {
+  readonly nodeMap:     Record<string, RvNode>;
+  readonly roots:       RvNode[];
   readonly head:        Head;
   readonly address:     string;   // e.g. 'logic/nd.rvmark' or 'https://...'
   readonly pageAddress: string;   // canonical address: '/_rvmark/logic/nd.rvmark'
 
   constructor(
-    nodeMap:     Record<string, SourceNode>,
-    roots:       SourceNode[],
+    nodeMap:     Record<string, RvNode>,
+    roots:       RvNode[],
     head:        Head,
     address:     string,
     pageAddress: string,
@@ -42,7 +43,7 @@ export class SourceFile {
     this.head        = head;
     this.address     = address;
     this.pageAddress = pageAddress;
-    const stamp = (node: SourceNode) => {
+    const stamp = (node: RvNode) => {
       this.serve(node);
       node.children.forEach(stamp);
     };
@@ -62,17 +63,17 @@ export class SourceFile {
    * The authored `attrs` and `tags` are overwritten rather than kept alongside
    * the resolved ones. Nothing downstream of here has a use for the authored
    * form: rendering wants the resolved values, and the one caller that needs
-   * what the author typed — stringify, in the build tier — works from a RawFile
+   * what the author typed — stringify, in the build tier — works from a SourceFile
    * that never came through here.
    *
    * Eager rather than lazy: every field is wanted by the first handler that
    * touches the node, and computing them together is what makes the wire form
    * a serialization of the node rather than a second, differently-shaped answer.
    */
-  private serve(node: SourceNode): void {
+  private serve(node: RvNode): void {
     // Authored on the way in, resolved on the way out — the same field, narrowed
-    // in place. `resolveFile` hands over a tree that is structurally a RawNode
-    // one; this is the step that makes the SourceNode type true of it.
+    // in place. `resolveFile` hands over a tree whose nodes are still shaped as
+    // SourceNodes; this is the step that makes the RvNode type true of them.
     const authoredTags = node.tags as unknown as Tag[];
     Object.assign(node, this.resolveShape(node.attrs, authoredTags, node.permalinkId));
   }

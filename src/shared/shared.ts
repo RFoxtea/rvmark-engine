@@ -5,7 +5,7 @@
  * No DOM, no imports, no side effects.
  */
 
-import type { SourceNode } from './parser.js';
+import type { RvNode } from './parser.js';
 
 // Reserved engine namespace: content source/media is published under this
 // underscore-prefixed segment so it can never collide with user content paths.
@@ -301,8 +301,8 @@ export function parseTranscludeEntry(entry: string): { ref: string; wholeNode: b
 // on nothing having claimed the empty key.
 function resolveCompoundSlug(
   slug: string,
-  nodeMap: Record<string, SourceNode>,
-): { node: SourceNode; path: string[] } | null {
+  nodeMap: Record<string, RvNode>,
+): { node: RvNode; path: string[] } | null {
   if (slug.startsWith('.')) return null;
   const parts = slug.split('.');
   const named = nodeMap[parts[0]];
@@ -310,9 +310,9 @@ function resolveCompoundSlug(
 }
 
 export function resolveSlugInFile(
-  { nodeMap, roots }: { nodeMap: Record<string, SourceNode>; roots: SourceNode[] },
+  { nodeMap, roots }: { nodeMap: Record<string, RvNode>; roots: RvNode[] },
   slug: string | null | undefined,
-): { node: SourceNode } | null {
+): { node: RvNode } | null {
   if (!slug) return null;
   const anchored = resolveCompoundSlug(slug, nodeMap);
   if (anchored) {

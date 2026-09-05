@@ -12,8 +12,8 @@ class TableTypeHandler extends TrTypeHandlerBase {
       cellClass:         'tr-cell table-header-cell',
       contentClass:      'node-content--table',
       focusableSelector: '.tr-cell a[href]',
-      onSetup({ li, attrs, sourceNode }) {
-        const cells     = parseCells(sourceNode.label);
+      onSetup({ li, attrs, rvNode }) {
+        const cells     = parseCells(rvNode.label);
         const cols      = cells.length || 1;
         const colsParam = attrs.get('cols') ?? null;
         li.style.setProperty('--table-cols', colsParam ?? `repeat(${cols}, 1fr)`);

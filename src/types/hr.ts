@@ -18,18 +18,18 @@ class HrTypeHandler implements TypeHandler {
   readonly selectable: boolean = false;
 
   constructor(renderNode: RenderNode) {
-    const sourceNode = renderNode.sourceNode;
-    const attrs = sourceNode.attrs;
+    const rvNode = renderNode.rvNode;
+    const attrs = rvNode.attrs;
 
     const content = document.createElement('div');
     this.content = content;
 
     // ── Classes ──────────────────────────────────────────────────────────────
     content.classList.add('node-content--hr');
-    applyTagClasses(content, sourceNode, attrs);
+    applyTagClasses(content, rvNode, attrs);
 
     renderNode.selectable = false;
-    renderNode.meta = sourceNode.meta;
+    renderNode.meta = rvNode.meta;
 
     // ── Sidepanel scope ────────────────────────────────────────────────────────
 

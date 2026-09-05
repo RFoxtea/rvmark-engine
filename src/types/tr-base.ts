@@ -5,7 +5,7 @@
  * Subclasses pass a TrConfig describing their differences.
  */
 
-import type { RenderNode, SourceNode } from '../client/render-node.js';
+import type { RenderNode, RvNode } from '../client/render-node.js';
 import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, sidepanelOpenFromNode, makeToggleBadge, applyBulletProps, applyBulletAlt, applyListItemProps, wireBulletActions } from '../client/handler-utils.js';
 import { ToggleSet } from '../client/toggle-set.js';
 import { wireSpanToggles } from '../client/span-toggle.js';
@@ -35,7 +35,7 @@ export interface TrConfig {
   withSidepanel?:      boolean;
   withBullet?:       boolean;
   /** Hook called after li/content setup, before toggle/cells. */
-  onSetup?: (ctx: { content: HTMLElement; li: HTMLElement; attrs: ResolvedAttrs; sourceNode: SourceNode }) => void;
+  onSetup?: (ctx: { content: HTMLElement; li: HTMLElement; attrs: ResolvedAttrs; rvNode: RvNode }) => void;
 }
 
 export abstract class TrTypeHandlerBase extends BaseTypeHandler {
@@ -53,15 +53,15 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
   constructor(rn: RenderNode, cfg: TrConfig) {
     super(rn, cfg.focusableSelector);
     this.cfg = cfg;
-    const sourceNode = rn.sourceNode;
-    const attrs = sourceNode.attrs;
+    const rvNode = rn.rvNode;
+    const attrs = rvNode.attrs;
     applyOnSpawn(attrs, rn);
 
     const { content } = this;
     content.classList.add(cfg.contentClass);
 
     if (cfg.withBullet) {
-      applyBulletProps(content, attrs, sourceNode);
+      applyBulletProps(content, attrs, rvNode);
       applyListItemProps(content, attrs);
     }
 
@@ -69,7 +69,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
     this._li = li;
     li.classList.add(cfg.liClass);
 
-    cfg.onSetup?.({ content, li, attrs, sourceNode });
+    cfg.onSetup?.({ content, li, attrs, rvNode });
 
     this._actionVal = cfg.withSidepanel ? (attrs.get('action') ?? null) : null;
 
@@ -79,17 +79,17 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
 
     this.buildToggle();
     this._toggles = new ToggleSet(rn, attrs, { alwaysOpen: openVal === 'always' });
-    const hasListbox = this.buildCells(sourceNode, attrs);
+    const hasListbox = this.buildCells(rvNode, attrs);
 
     // A row's cells can be provisional for the same two reasons a text label
     // can be (see types/text.ts): math needing KaTeX, and a span's `img:` ref
     // needing the origin. One re-render settles both, so typesetting and
     // resolved URLs never paint over each other.
-    const rawCells  = parseCells(sourceNode.label);
+    const rawCells  = parseCells(rvNode.label);
     const needsKatex = rawCells.some(c => hasMath(c)) && !katexLoaded();
     const imgRefs    = collectInlineRefs(rawCells);
     if (needsKatex || imgRefs.length) {
-      rn.holdReady(this._settleCells(sourceNode, attrs, needsKatex, imgRefs));
+      rn.holdReady(this._settleCells(rvNode, attrs, needsKatex, imgRefs));
     }
 
     // The bullet expands when it can, and otherwise clears a listbox selection —
@@ -156,7 +156,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
    * leaves the first render standing rather than hanging the node.
    */
   private async _settleCells(
-    sourceNode: SourceNode,
+    rvNode: RvNode,
     attrs: ResolvedAttrs,
     needsKatex: boolean,
     imgRefs: string[],
@@ -164,20 +164,20 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
     try {
       if (needsKatex) await ensureKatex();
       const answers = imgRefs.length
-        ? await resolveMediaAllOn(sourceNode, imgRefs)
+        ? await resolveMediaAllOn(rvNode, imgRefs)
         : [];
       const resolved = new Map(imgRefs.map((ref, i) => [ref, answers[i] ?? null]));
-      this.buildCells(sourceNode, attrs, resolved);
+      this.buildCells(rvNode, attrs, resolved);
     } catch { /* the first render stands, and is what stays wired */ }
   }
 
   /** Returns true if this row turned out to be a listbox. */
   private buildCells(
-    sourceNode: SourceNode,
+    rvNode: RvNode,
     attrs: ResolvedAttrs,
     resolved: Map<string, string | null> | null = null,
   ): boolean {
-    const cells = parseCells(sourceNode.label);
+    const cells = parseCells(rvNode.label);
     const spanMap = new Map<number, ParsedSpanAttrs>();
     let nextOrdinal = 0;
 
@@ -218,7 +218,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
       optionContainer: content,
       spanMap,
       rn,
-      sourceNode,
+      rvNode,
       scrollOnSelect:  false,
       volatile:        attrs.has('listbox-volatile'),
       nonempty:        attrs.has('listbox-nonempty'),
@@ -267,7 +267,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
               // Plain text is the row as it is written on the site: cells
               // joined by '|', normalised through the same parse the cells
               // themselves came from.
-              const text = parseCells(rn.sourceNode.label).join(' | ');
+              const text = parseCells(rn.rvNode.label).join(' | ');
               const html = [...content.querySelectorAll<HTMLElement>(`.${this.cfg.cellClass}`)]
                 .map(c => clipboardHtml(c)).join(' | ');
               navigator.clipboard.write([

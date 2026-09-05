@@ -81,7 +81,7 @@ test.describe('custom nodetypes via OriginEnvoy', () => {
     expect(await page.evaluate(() => {
       const rn = window._rvmarkFindNodes('envoy-echo-a')[0];
       const kid = rn.li.querySelector(':scope > .node-children > ul > li.node');
-      return kid?._renderNode?.sourceNode?.attrs?.get?.('id') ?? null;
+      return kid?._renderNode?.rvNode?.attrs?.get?.('id') ?? null;
     })).toBe('envoy-echo-a-child');
   });
 

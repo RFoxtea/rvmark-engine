@@ -1,10 +1,10 @@
 /**
  * portable-node.ts
  *
- * PortableNode — the postMessage-safe projection of a SourceNode, and the only
+ * PortableNode — the postMessage-safe projection of an RvNode, and the only
  * shape a node has while it is crossing between an origin and a client.
  *
- * A SourceNode cannot cross a postMessage boundary as-is: its `attrs` and its
+ * A RvNode cannot cross a postMessage boundary as-is: its `attrs` and its
  * tags' defs are `Multimap` instances, and methods do not survive structured
  * clone (multimap.ts).
  *
@@ -30,7 +30,7 @@
  */
 
 import { Multimap } from './multimap.js';
-import type { SourceNode } from './parser.js';
+import type { RvNode } from './parser.js';
 import { bagToWire, bagFromWire, type WireBag } from './inherited.js';
 
 type Entries = Array<[string, string]>;
@@ -66,9 +66,9 @@ export interface PortableNode {
 }
 
 // ── serialize (origin → wire) ─────────────────────────────────────────────────
-// Flatten one SourceNode. Its subtree is NOT included: what a caller can ask for
+// Flatten one RvNode. Its subtree is NOT included: what a caller can ask for
 // separately, it asks for separately.
-export function serializeNode(node: SourceNode): PortableNode {
+export function serializeNode(node: RvNode): PortableNode {
   return {
     key:         node.address.key,
     slug:        node.slug,
@@ -90,13 +90,13 @@ export function serializeNode(node: SourceNode): PortableNode {
 }
 
 // ── deserialize (wire → client) ───────────────────────────────────────────────
-// Rebuild a live SourceNode from what arrived. `address` is stamped from the
+// Rebuild a live RvNode from what arrived. `address` is stamped from the
 // baseUrl the reply came through and the key the node carries — the client's own
 // record of who answered, never anything read out of the payload.
 //
 // `children` starts empty and stays empty until `childrenOf` is asked. A node's
 // subtree is not part of it.
-export function deserializeNode(node: PortableNode, baseUrl: string): SourceNode {
+export function deserializeNode(node: PortableNode, baseUrl: string): RvNode {
   return {
     slug:        node.slug,
     permalinkId: node.permalinkId,
@@ -111,7 +111,7 @@ export function deserializeNode(node: PortableNode, baseUrl: string): SourceNode
     stateScope:  node.stateScope,
     hasChildren: node.hasChildren,
     ...bagFromWire(node.inherited),
-  } as SourceNode;
+  } as RvNode;
 }
 
 // ── Fetched resources ─────────────────────────────────────────────────────────

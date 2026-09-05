@@ -47,12 +47,12 @@
  *
  * Nodes cross as PortableNodes (plain data — see portable-node.ts). Author
  * transforms receive and return that plain shape; they never see a live
- * SourceNode or this origin's store.
+ * RvNode or this origin's store.
  */
 
 import type { PortableNode } from '../shared/portable-node.js';
 import { serializeNode } from '../shared/portable-node.js';
-import type { SourceNode } from '../shared/parser.js';
+import type { RvNode } from '../shared/parser.js';
 import { originFor, type Address } from './origin.js';
 
 export type Transform = (node: PortableNode) => PortableNode | Promise<PortableNode>;
@@ -82,7 +82,7 @@ export interface CustomType {
  * own nodes.
  */
 interface Registration {
-  claims:    (node: SourceNode) => boolean;
+  claims:    (node: RvNode) => boolean;
   transform: Transform;
 }
 
@@ -104,14 +104,14 @@ export function registerTransform(descriptor: CustomType): void {
 // ── Serving ───────────────────────────────────────────────────────────────────
 
 // The one thing the core asks about a registration: does it claim this node.
-function claimant(node: SourceNode): Registration | undefined {
+function claimant(node: RvNode): Registration | undefined {
   return _registrations.find(r => r.claims(node));
 }
 
 // Serve one node: serialize it, and if something claims it, run that and resolve
 // the result against the document the input came from. Bound before the call, so
 // nothing the transform returns gets a say in which document interprets it.
-async function serve(node: SourceNode): Promise<PortableNode> {
+async function serve(node: RvNode): Promise<PortableNode> {
   const wire = serializeNode(node);
   const claim = claimant(node);
   if (!claim) return wire;
@@ -124,7 +124,7 @@ async function serve(node: SourceNode): Promise<PortableNode> {
 // attrs and tags it came back with are claims; what they MEAN is the origin's
 // reading, so they are resolved afresh rather than trusted. Identity fields come
 // from the input: a transform rewrites what a node is, never which node it is.
-async function reserveWire(from: SourceNode, out: PortableNode): Promise<PortableNode> {
+async function reserveWire(from: RvNode, out: PortableNode): Promise<PortableNode> {
   const origin = originFor(from.address.baseUrl);
   const reserved = await origin.reserveWire(from.address.key, out);
   return {

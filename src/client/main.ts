@@ -188,7 +188,7 @@ export function findNodes(query: string): RenderNode[] {
   for (const li of document.querySelectorAll<HTMLElement>('li.node')) {
     const rn: RenderNode | undefined = (li as any)._renderNode;
     if (!rn) continue;
-    const sn = rn.sourceNode;
+    const sn = rn.rvNode;
     if (
       sn.slug === query ||
       sn.attrs?.get('id') === query ||

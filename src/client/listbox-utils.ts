@@ -17,7 +17,7 @@ import { Multimap } from '../shared/multimap.js';
 import type { ListboxNav } from './listbox.js';
 import type { ParsedSpanAttrs } from './markdown.js';
 import { BARE_MUTATION_KEY } from './markdown.js';
-import type { RenderNode, SourceNode } from './render-node.js';
+import type { RenderNode, RvNode } from './render-node.js';
 import type { ToggleSet } from './toggle-set.js';
 import { expandNode, applyEventAttr } from './handler-utils.js';
 import { childrenOf } from './origin-host.js';
@@ -36,7 +36,7 @@ export interface ListboxConfig {
   /** The RenderNode owning this listbox. */
   rn: RenderNode;
   /** Source node, used to restore children on reset. */
-  sourceNode: SourceNode;
+  rvNode: RvNode;
   /** If true, scroll the selected option to the centre of optionContainer on select. */
   scrollOnSelect?: boolean;
   /** If true, reset the listbox to its resting state when the owning node is
@@ -55,7 +55,7 @@ export interface ListboxConfig {
 }
 
 export function wireListbox(cfg: ListboxConfig): ListboxNav {
-  const { optionContainer, navRoot, spanMap, rn, sourceNode, scrollOnSelect, volatile, nonempty, toggles } = cfg;
+  const { optionContainer, navRoot, spanMap, rn, rvNode, scrollOnSelect, volatile, nonempty, toggles } = cfg;
 
   // Annotate DOM elements with their parsed span attrs
   for (const el of optionContainer.querySelectorAll<HTMLElement>('[data-rvmark-span]')) {
@@ -160,7 +160,7 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
         // about selection, not about the children area, and Euclid relies on it
         // to clear the diagram highlight.
         if (heldHill || !toggles || toggles.hillIsFree()) {
-          void childrenOf(sourceNode).then(kids => rn.setChildren(kids, null));
+          void childrenOf(rvNode).then(kids => rn.setChildren(kids, null));
         }
         for (const v of rn.attrs.getAll('on-no-option-select')) applyEventAttr(v, rn);
       },

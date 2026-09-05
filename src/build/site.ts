@@ -29,8 +29,8 @@ import { createRequire } from 'module';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { fileToUrlStem, resolveAddress, resolveMediaAddress, addressToFile, addressToSlug, addressToHref, parseTranscludeEntry } from '../shared/shared.js';
 import { defaultTypeName } from '../shared/node-types.js';
-import type { SourceNode, NodeAttrs, ResolvedTag, TagDef, OriginDef, RawFile } from '../shared/parser.js';
-import type { SourceFile as SourceFileT } from '../envoy/source-file.js';
+import type { RvNode, NodeAttrs, ResolvedTag, TagDef, OriginDef, SourceFile } from '../shared/parser.js';
+import type { RvFile as RvFileT } from '../envoy/rv-file.js';
 
 // Engine package root — this file emits to <ENGINE_ROOT>/out/build/site.js.
 const ENGINE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -69,7 +69,7 @@ const { parse, resolveFile } = await import('../shared/parser.js');
 const { Multimap } = await import('../shared/multimap.js');
 
 const { factoryGet } = await import('../client/render-node.js');
-const { SourceFile } = await import('../envoy/source-file.js');
+const { RvFile } = await import('../envoy/rv-file.js');
 
 // Import type files for their side effects (they call RvmarkRegistry.register).
 // text.js also exports the static bullet helpers — bullets belong to the types
@@ -206,7 +206,7 @@ export async function buildSite(config: BuildSiteConfig) {
     // builder IS the origin's Node-side half: the store is in hand and there is
     // no wire between them. A node carries the document it came from, so a
     // transcluded foreign node still resolves against its own file.
-    resolveMedia(node: SourceNode, ref: string) {
+    resolveMedia(node: RvNode, ref: string) {
       return resolveMediaAddress(ref, node.pageAddress) ?? ref;
     },
   };
@@ -214,7 +214,7 @@ export async function buildSite(config: BuildSiteConfig) {
   // A node's label, with any `img:` on a span resolved against the file that
   // node came from — the same rule the hydrated path follows, and the reason a
   // transcluded label is resolved against ITS node rather than the host's.
-  const staticLabel = (node: SourceNode, label?: string) =>
+  const staticLabel = (node: RvNode, label?: string) =>
     staticMdInlineResolved(label ?? node.label ?? '', (refs) => refs.map((ref) => buildCtx.resolveMedia(node, ref)));
   // `templateHtml` (raw contents) wins over `template` (path); both default to
   // the engine's template. Lets callers patch the template in-memory (e.g. the
@@ -237,8 +237,8 @@ export async function buildSite(config: BuildSiteConfig) {
 
   // Per-build state (was module-level in the monorepo script).
   const urlStemToFile = new Map();
-  const rawFiles = new Map<string, RawFile>();  // first pass, per relPath
-  const sourceFiles = new Map(); // second pass: resolved { head, roots, nodeMap, sourceFile }
+  const sourceFiles = new Map<string, SourceFile>();  // first pass, per relPath
+  const rvFiles = new Map(); // second pass: resolved { head, roots, nodeMap, rvFile }
   const siteMap: Record<string, { file: string }> = {};
 
   // ── Path-valued meta keys ────────────────────────────────────────────────────
@@ -250,7 +250,7 @@ export async function buildSite(config: BuildSiteConfig) {
   //
   // This is the one path where inheritance crosses a file. Node-level inherited
   // properties do not — `sidepanel` (inherited.ts) can keep its ref raw and let
-  // the reader resolve it against its own sourceFile precisely because every
+  // the reader resolve it against its own rvFile precisely because every
   // node holding a scope is in the file that declared it. A head value is read
   // from files its author never saw, so raw is not an option here.
   //
@@ -273,10 +273,10 @@ export async function buildSite(config: BuildSiteConfig) {
   const mergedOrigins: Record<string, OriginDef> = {};
   for (const indexPath of chain) {
     if (indexPath === relPath) continue;
-    const p = rawFiles.get(indexPath);
+    const p = sourceFiles.get(indexPath);
     if (!p) continue;
-    // SourceFile.resolveMediaUrl is the method for this, but the ancestor's
-    // SourceFile is not built yet — the merge feeds the very pass that builds
+    // RvFile.resolveMediaUrl is the method for this, but the ancestor's
+    // RvFile is not built yet — the merge feeds the very pass that builds
     // it. Same resolution against the same address it would use.
     const ancestorAddress = mountPath + indexPath;
     for (const [k, v] of p.head.meta.allEntries())
@@ -359,7 +359,7 @@ const rvmarkFiles = allRvmarkFiles.filter(f => !shadowedSet.has(f));
  * Recursively remove nodes with {draft} from a node list.
  * Also removes them from nodeMap.
  */
-function pruneDraftNodes(nodes: SourceNode[], nodeMap: Record<string, SourceNode>) {
+function pruneDraftNodes(nodes: RvNode[], nodeMap: Record<string, RvNode>) {
   const kept = [];
   for (const node of nodes) {
     if (node.attrs.has('draft')) {
@@ -373,7 +373,7 @@ function pruneDraftNodes(nodes: SourceNode[], nodeMap: Record<string, SourceNode
   return kept;
 }
 
-function removeFromNodeMap(node: SourceNode, nodeMap: Record<string, SourceNode>) {
+function removeFromNodeMap(node: RvNode, nodeMap: Record<string, RvNode>) {
   if (nodeMap[node.slug] === node) delete nodeMap[node.slug];
   for (const child of node.children) removeFromNodeMap(child, nodeMap);
 }
@@ -455,7 +455,7 @@ for (const relPath of rvmarkFiles) {
     continue;
   }
 
-  rawFiles.set(relPath, raw);
+  sourceFiles.set(relPath, raw);
 
   const urlStem = fileToUrlStem(relPath);
   urlStemToFile.set(urlStem, relPath);
@@ -463,18 +463,18 @@ for (const relPath of rvmarkFiles) {
 }
 
 // Second pass: resolve each file with its inherited head.
-for (const [relPath, raw] of rawFiles) {
+for (const [relPath, raw] of sourceFiles) {
   const inheritedHead = resolveInheritedHead(relPath);
   const resolved = resolveFile(raw, inheritedHead);
   if (!INCLUDE_DRAFTS) resolved.roots = pruneDraftNodes(resolved.roots, resolved.nodeMap);
-  const sf = new SourceFile(resolved.nodeMap, resolved.roots, resolved.head, relPath, mountPath + relPath);
+  const sf = new RvFile(resolved.nodeMap, resolved.roots, resolved.head, relPath, mountPath + relPath);
   // A path-valued key written in this file's OWN header resolves against this
   // file — sf.resolveMediaUrl is the same method a node's media goes through.
   // The inherited copies of these keys arrived already resolved (against the
   // ancestor that wrote them); this overwrites them with the local one, which
   // is what nearest-wins means.
   //
-  // Written to sf's head, never back to raw.head: rawFiles is what
+  // Written to sf's head, never back to raw.head: sourceFiles is what
   // resolveInheritedHead reads for every later file, so rewriting a root header
   // in place would leave descendants inheriting an already-resolved value and
   // resolving it a second time — and resolveMediaAddress is not idempotent
@@ -483,7 +483,7 @@ for (const [relPath, raw] of rawFiles) {
     const v = raw.head.meta.get(k);
     if (v !== undefined) sf.head.meta.set(k, sf.resolveMediaUrl(v));
   }
-  sourceFiles.set(relPath, sf);
+  rvFiles.set(relPath, sf);
 }
 
 // ── Escape helper (used in static HTML tree renderer) ─────────────────────────
@@ -494,21 +494,21 @@ function escHtml(s: string) {
 
 // ── Static HTML tree renderer ─────────────────────────────────────────────────
 
-function resolveTransclusion(val: string, sourceFile: SourceFileT) {
+function resolveTransclusion(val: string, rvFile: RvFileT) {
   if (!val || typeof val !== 'string') return null;
   if (val.startsWith('https://') || val.startsWith('http://')) return null;
 
-  const address = resolveAddress(val, sourceFile.pageAddress);
+  const address = resolveAddress(val, rvFile.pageAddress);
   if (!address || address.startsWith('https://') || address.startsWith('http://')) return null;
 
   let targetFile = addressToFile(address);
   const targetSlug = addressToSlug(address);
   if (!targetFile) return null;
 
-  let targetSf = sourceFiles.get(targetFile);
+  let targetSf = rvFiles.get(targetFile);
   if (!targetSf) {
     targetFile = targetFile.replace(/\.rvmark$/, '') + '/index.rvmark';
-    targetSf = sourceFiles.get(targetFile);
+    targetSf = rvFiles.get(targetFile);
   }
   if (!targetSf) return null;
 
@@ -519,22 +519,22 @@ function resolveTransclusion(val: string, sourceFile: SourceFileT) {
   return targetSf.roots.length ? { node: targetSf.roots[0], file: targetFile } : null;
 }
 
-function isInterpageRef(val: string, sourceFile: SourceFileT) {
+function isInterpageRef(val: string, rvFile: RvFileT) {
   if (!val || typeof val !== 'string') return false;
   if (val.startsWith('#')) return false;
   if (val.startsWith('https://') || val.startsWith('http://')) return true;
-  const address = resolveAddress(val, sourceFile.pageAddress);
+  const address = resolveAddress(val, rvFile.pageAddress);
   if (!address) return false;
   if (address.startsWith('https://') || address.startsWith('http://')) return true;
   const targetFile = addressToFile(address);
-  return !!targetFile && targetFile !== sourceFile.address;
+  return !!targetFile && targetFile !== rvFile.address;
 }
 
-function transclusionHref(val: string, sourceFile: SourceFileT) {
+function transclusionHref(val: string, rvFile: RvFileT) {
   if (!val || typeof val !== 'string') return null;
   if (val.startsWith('https://') || val.startsWith('http://')) return val;
 
-  const address = resolveAddress(val, sourceFile.pageAddress);
+  const address = resolveAddress(val, rvFile.pageAddress);
   if (!address) return null;
   if (address.startsWith('https://') || address.startsWith('http://')) return address;
 
@@ -543,9 +543,9 @@ function transclusionHref(val: string, sourceFile: SourceFileT) {
   let targetFile = addressToFile(address);
   if (!targetFile) return null;
 
-  if (!sourceFiles.has(targetFile)) {
+  if (!rvFiles.has(targetFile)) {
     const fallback = targetFile.replace(/\.rvmark$/, '') + '/index.rvmark';
-    if (sourceFiles.has(fallback)) targetFile = fallback;
+    if (rvFiles.has(fallback)) targetFile = fallback;
   }
 
   return addressToHref(address.startsWith(mountPath) ? mountPath + targetFile + (address.includes('#') ? '#' + addressToSlug(address) : '') : address);
@@ -575,7 +575,7 @@ function buildStaticTagChips(tags: ResolvedTag[]) {
 
 // Class list for .node-content, mirroring applyTagClasses (handler-utils.ts):
 // tag-defined classes first, then the node's own {class} attrs.
-function staticContentClasses(node: SourceNode, attrs: NodeAttrs) {
+function staticContentClasses(node: RvNode, attrs: NodeAttrs) {
   const out = [];
   for (const { def } of node.tags) {
     for (const cls of def.getAll('class')) out.push(...cls.split(/\s+/).filter(Boolean));
@@ -651,7 +651,7 @@ function wrapDisclosure(rowHtml: string, childrenHtml: string, open: boolean, id
   return `<details${open ? ' open' : ''}${idAttr}>${rowHtml}<div class="node-children">${childrenHtml}</div></details>`;
 }
 
-function renderStaticNode(node: SourceNode, sourceFile: SourceFileT, depth = 0) {
+function renderStaticNode(node: RvNode, rvFile: RvFileT, depth = 0) {
   // Merged view: tag-supplied `node.*` attrs (e.g. a {.book} tag defining
   // node.bullet) plus the node's own. The hydrated page reads exactly this via
   // resolveAttrs, so reading raw node.attrs here would silently drop every
@@ -695,7 +695,7 @@ function renderStaticNode(node: SourceNode, sourceFile: SourceFileT, depth = 0) 
   const sidepanelVal = attrs.get('sidepanel') ?? null;
   let sidepanelLinkHtml = '';
   if (sidepanelVal) {
-    const mediaAddr = resolveMediaAddress(sidepanelVal, sourceFile.pageAddress);
+    const mediaAddr = resolveMediaAddress(sidepanelVal, rvFile.pageAddress);
     const href = mediaAddr ? addressToHref(mediaAddr) : null;
     if (href) {
       sidepanelLinkHtml = ` <a class="static-sidepanel-link" href="${escHtml(href)}" title="Open sidepanel (requires JavaScript for interactive view)">◧</a>`;
@@ -750,14 +750,14 @@ function renderStaticNode(node: SourceNode, sourceFile: SourceFileT, depth = 0) 
   const transcludeVal = embedVal ?? childrenLinkVal;
 
   if (transcludeVal) {
-    const href = transclusionHref(transcludeVal, sourceFile);
-    const refClass = isInterpageRef(transcludeVal, sourceFile) ? 'static-ref static-ref--interpage' : 'static-ref';
+    const href = transclusionHref(transcludeVal, rvFile);
+    const refClass = isInterpageRef(transcludeVal, rvFile) ? 'static-ref static-ref--interpage' : 'static-ref';
     let linkLabel = node.label || '';
     if (embedVal && !linkLabel) {
-      const resolved = resolveTransclusion(embedVal, sourceFile);
+      const resolved = resolveTransclusion(embedVal, rvFile);
       if (resolved) {
         linkLabel = resolved.node.label || linkLabel || transcludeVal;
-        const targetSourceFile = sourceFiles.get(resolved.file);
+        const targetSourceFile = rvFiles.get(resolved.file);
         const targetTags = targetSourceFile ? buildStaticTagChips(resolved.node.tags) : '';
         const lbl = `<span class="node-label">${tags}${targetTags}<a class="${refClass}" href="${escHtml(href ?? '')}">${staticLabel(resolved.node, linkLabel ?? undefined)}</a></span>`;
         return `<li${liClassAttr}>${row(lbl, false)}</li>\n`;
@@ -773,7 +773,7 @@ function renderStaticNode(node: SourceNode, sourceFile: SourceFileT, depth = 0) 
   // hydrated page. Emitting them here would leave them permanently visible —
   // the exact inverse of the attribute — so they are dropped outright.
   const hasChildren = node.children.length > 0 && !openNever;
-  const childrenHtml = hasChildren ? renderStaticNodes(node.children, sourceFile, depth + 1) : '';
+  const childrenHtml = hasChildren ? renderStaticNodes(node.children, rvFile, depth + 1) : '';
   // Collapsed by default, matching renderRoot in main.ts: the hydrated page
   // mounts roots[0] and selects it without expanding. The fallback has no
   // selection to show for it, so the two agree on the painted result. An
@@ -823,7 +823,7 @@ function renderStaticNode(node: SourceNode, sourceFile: SourceFileT, depth = 0) 
 // IS the bullet element the grid already places — so the box tree is exactly
 // what the hydrated page builds, and :checked ~ .node-children drives the same
 // collapse aria-expanded drives there.
-function renderStaticTableNode(node: SourceNode, sourceFile: SourceFileT, depth: number, typeName: string) {
+function renderStaticTableNode(node: RvNode, rvFile: RvFileT, depth: number, typeName: string) {
   const attrs  = node.attrs;
   const isTable = typeName === 'table';
   const factory = factoryGet(typeName);
@@ -849,7 +849,7 @@ function renderStaticTableNode(node: SourceNode, sourceFile: SourceFileT, depth:
 
   const hasChildren = node.children.length > 0 && !openNever;
   const childrenHtml = hasChildren
-    ? `<div class="node-children">${renderStaticNodes(node.children, sourceFile, depth + 1)}</div>`
+    ? `<div class="node-children">${renderStaticNodes(node.children, rvFile, depth + 1)}</div>`
     : '';
 
   const { bulletAlt } = staticBulletProps(node, attrs, buildCtx);
@@ -885,7 +885,7 @@ function renderStaticTableNode(node: SourceNode, sourceFile: SourceFileT, depth:
   return `<li class="${escHtml(liClasses.join(' '))}"${idAttr}${styleAttr}>${inputHtml}${toggleHtml}${rowHtml}${childrenHtml}</li>\n`;
 }
 
-function renderStaticNodes(nodes: SourceNode[], sourceFile: SourceFileT, depth = 0) {
+function renderStaticNodes(nodes: RvNode[], rvFile: RvFileT, depth = 0) {
   if (!nodes.length) return '';
   let html = '<ul class="tree">\n';
   let i = 0;
@@ -894,10 +894,10 @@ function renderStaticNodes(nodes: SourceNode[], sourceFile: SourceFileT, depth =
     const typeName = node.attrs.get('type') ?? defaultTypeName();
 
     if (typeName === 'table' || typeName === 'tr') {
-      html += renderStaticTableNode(node, sourceFile, depth, typeName);
+      html += renderStaticTableNode(node, rvFile, depth, typeName);
       i++;
     } else {
-      html += renderStaticNode(node, sourceFile, depth);
+      html += renderStaticNode(node, rvFile, depth);
       i++;
     }
   }
@@ -912,7 +912,7 @@ function renderStaticNodes(nodes: SourceNode[], sourceFile: SourceFileT, depth =
 // absolute URL is built from the same origin, and a subtree that overrode it
 // would be claiming to live somewhere else. Trailing slash trimmed so
 // SITE_URL + '/' + stem never doubles it.
-const rootMeta = sourceFiles.get('index.rvmark')?.head?.meta;
+const rootMeta = rvFiles.get('index.rvmark')?.head?.meta;
 const SITE_URL = (rootMeta?.get('site-url') ?? '').replace(/\/+$/, '');
 if (SITE_URL && !/^https?:\/\//.test(SITE_URL))
   throw new Error(`buildSite: site-url must be an absolute origin (got '${SITE_URL}')`);
@@ -941,7 +941,7 @@ mkdirSync(DIST_DIR, { recursive: true });
 
 const siteMapJson = JSON.stringify(siteMap);
 
-for (const [relPath, sourceFile] of sourceFiles) {
+for (const [relPath, rvFile] of rvFiles) {
   const urlStem = fileToUrlStem(relPath);
   const isRoot  = urlStem === '';
 
@@ -951,7 +951,7 @@ for (const [relPath, sourceFile] of sourceFiles) {
 
   const base = isRoot ? '' : '../'.repeat(urlStem.split('/').length);
 
-  const meta        = sourceFile.head.meta;
+  const meta        = rvFile.head.meta;
   const title       = meta?.get('title') || urlStem || 'index';
   const description = meta?.get('description') || 'A tree-structured website powered by rvmark — expand nodes to explore.';
   const license     = meta?.get('license') ?? '';
@@ -1024,7 +1024,7 @@ for (const [relPath, sourceFile] of sourceFiles) {
         `href="${base}${stem}${stem && !stem.endsWith('/') ? '/' : ''}index.html${frag ?? ''}"`);
   };
 
-  const staticHtml = rebase(renderStaticNodes(sourceFile.roots, sourceFile));
+  const staticHtml = rebase(renderStaticNodes(rvFile.roots, rvFile));
 
   let html = TEMPLATE;
   // Before {{BASE}}, so a fragment referencing {{BASE}}_assets/... resolves too.
@@ -1157,8 +1157,8 @@ for (const [relPath, sourceFile] of sourceFiles) {
   // source bytes are emitted. Draft handling is unchanged.
   for (const relPath of allRvmarkFiles) {
     const src = readFileSync(join(RVMARK_DIR, relPath), 'utf8');
-    // Skip draft files. Can't use rawFiles membership here — shadowed files are
-    // absent from rawFiles regardless of draft status — so check the source.
+    // Skip draft files. Can't use sourceFiles membership here — shadowed files are
+    // absent from sourceFiles regardless of draft status — so check the source.
     if (!INCLUDE_DRAFTS && parse(src).head.meta?.has('draft')) continue;
     const stripped = INCLUDE_DRAFTS ? src : stripDraftLines(src);
     const outPath = join(DIST_DIR, contentOutSub, relPath);
@@ -1201,7 +1201,7 @@ for (const [relPath, sourceFile] of sourceFiles) {
   if (SITE_URL) {
     const urls: string[] = [];
     for (const [urlStem, relPath] of urlStemToFile) {
-      if (!indexable(sourceFiles.get(relPath)?.head?.meta, relPath)) continue;
+      if (!indexable(rvFiles.get(relPath)?.head?.meta, relPath)) continue;
       const lastmod = statSync(join(RVMARK_DIR, relPath)).mtime.toISOString().slice(0, 10);
       urls.push(
         `  <url>\n` +

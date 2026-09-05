@@ -207,12 +207,12 @@ test('sidepanel resolves for nodes that are never mounted', () => {
 
 // ── sidepanel: the reader ───────────────────────────────────────────────────────
 //
-// sidepanelConfigOf is what the panel actually calls. It touches only sourceNode,
+// sidepanelConfigOf is what the panel actually calls. It touches only rvNode,
 // so a stub with the right shape exercises it without a renderer.
 
 function stubRn(file, slug, pageAddress) {
   const node = nodeOf(file, slug);
-  return { sourceNode: { ...node, pageAddress } };
+  return { rvNode: { ...node, pageAddress } };
 }
 
 test('the reader returns the inherited ref for a node below the declaration', () => {

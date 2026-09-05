@@ -259,7 +259,7 @@ export interface Head {
 const SIGIL_NAME_RE = /^@[a-z][a-z0-9-]*$/;
 
 // Raw node as produced by parse() — no inherited meta resolved.
-export interface RawNode {
+export interface SourceNode {
   slug:       string;
   permalinkId: string;
   numbering:  string;
@@ -268,16 +268,16 @@ export interface RawNode {
   tags:       Tag[];
   label:      string;
   bodyLines:  string[];
-  children:   RawNode[];
+  children:   SourceNode[];
 }
 
-// Resolved node — RawNode with its inherited properties fully computed.
+// Resolved node — SourceNode with its inherited properties fully computed.
 //
 // `meta` and `searchable` are inherited properties: resolved once, down the
 // source tree, at parse time. They are registered in inherited.ts and threaded
 // by resolveFile; see that file for why inheritance lives there and not in a
 // walk over rendered ancestors.
-// Deliberately NOT `extends RawNode`. A served node's `attrs` and `tags` are
+// Deliberately NOT `extends SourceNode`. A served node's `attrs` and `tags` are
 // RESOLVED, not authored — `attrs` has its tags' `node.*` overrides merged in,
 // and `tags` carry their looked-up definitions rather than their inline props.
 // They occupy the authored fields' names rather than sitting beside them: a
@@ -285,7 +285,7 @@ export interface RawNode {
 // nothing for a second view to be a view OF. `tags` is the field that cannot be
 // narrowed under an extends, and the incompatibility is the type system stating
 // the same thing.
-export interface SourceNode {
+export interface RvNode {
   slug:        string;
   permalinkId: string;
   numbering:   string;
@@ -294,7 +294,7 @@ export interface SourceNode {
   bodyLines:   string[];
 
   meta:       Record<string, unknown>;
-  children:   SourceNode[];
+  children:   RvNode[];
   searchable: boolean;
   sidepanel:    import('./inherited.js').SidepanelScope | null;
 
@@ -354,10 +354,10 @@ export interface Reserved {
   stateScope:  string;
 }
 
-export interface RawFile {
+export interface SourceFile {
   head:    Head;
-  roots:   RawNode[];
-  nodeMap: Record<string, RawNode>;
+  roots:   SourceNode[];
+  nodeMap: Record<string, SourceNode>;
 }
 
 // The state-event attribute names live in node-types.ts, with the rest of the
@@ -456,10 +456,10 @@ function joinBraced(lines: string[], i: number): { text: string; next: number } 
   return null;
 }
 
-export function parse(src: string): RawFile {
+export function parse(src: string): SourceFile {
   const lines = src.replace(/\r\n/g, '\n').split('\n');
   let meta: FileMeta = new Multimap();
-  const nodeMap: Record<string, RawNode> = {};
+  const nodeMap: Record<string, SourceNode> = {};
   let i = 0;
 
   // ── 1. Document metadata and tag definitions at top ───────────────────────
@@ -518,7 +518,7 @@ export function parse(src: string): RawFile {
     label: string;
     bodyLines: string[];
   }
-  const rawNodes: ParseRawNode[] = [];
+  const sourceNodes: ParseRawNode[] = [];
   // Indent stack: array of indent strings seen so far (index 0 = root = "")
   const indentStack: string[] = [''];
   while (i < lines.length) {
@@ -548,7 +548,7 @@ export function parse(src: string): RawFile {
 
       const { attrs, tags, label } = extractAttrs(m[4]);
       const node: ParseRawNode = { depth, ordinal, auto, attrs, tags, label, bodyLines: [] };
-      rawNodes.push(node);
+      sourceNodes.push(node);
       i++;
       // Collect a multiline body delimited by a fenced code block (```+ or ~~~+),
       // if the first non-blank line after the node opens one. Body collection ends
@@ -556,7 +556,7 @@ export function parse(src: string): RawFile {
       // only the content between them is stored in bodyLines.
       //
       // Captured UNCONDITIONALLY — for any node, label or no label, type or no
-      // type. The SourceNode just records what's in the source; it makes no
+      // type. The RvNode just records what's in the source; it makes no
       // judgment about whether the body is "wanted". Whether anything consumes
       // bodyLines is a downstream decision for the type handler (a handler that
       // ignores it simply drops the body). A node may carry both a label and a
@@ -591,8 +591,8 @@ export function parse(src: string): RawFile {
     } else {
       // Non-node line: append non-empty lines to the previous node's label
       // so continuation text isn't silently lost.
-      if (lines[i].trim() !== '' && rawNodes.length > 0) {
-        const prev = rawNodes[rawNodes.length - 1];
+      if (lines[i].trim() !== '' && sourceNodes.length > 0) {
+        const prev = sourceNodes[sourceNodes.length - 1];
         prev.label = prev.label + '\n' + lines[i].trimStart();
       }
       i++;
@@ -600,19 +600,19 @@ export function parse(src: string): RawFile {
   }
 
   // ── 3. Build tree ──
-  const roots: RawNode[] = [];
-  const stack: Array<{ depth: number; node: RawNode }> = [];
+  const roots: SourceNode[] = [];
+  const stack: Array<{ depth: number; node: SourceNode }> = [];
 
   // Build the tree structure only. Ordinals — and the slug/permalinkId derived
   // from them — are assigned afterwards in assignOrdinals, because an auto-numbered
   // bullet's number depends on its siblings, known only once the group is complete.
   // (auto-ness is carried on node.auto, which assignOrdinals reads directly.)
-  for (const praw of rawNodes) {
+  for (const praw of sourceNodes) {
     const depth = praw.depth;
 
     while (stack.length && stack[stack.length - 1].depth >= depth) stack.pop();
 
-    const node: RawNode = {
+    const node: SourceNode = {
       slug: '',
       permalinkId: '',
       numbering: praw.ordinal,   // raw literal for now; finalised in assignOrdinals
@@ -641,7 +641,7 @@ export function parse(src: string): RawFile {
 }
 
 /**
- * Finalise a RawNode tree in place: assign each node its `numbering`, `slug`,
+ * Finalise a SourceNode tree in place: assign each node its `numbering`, `slug`,
  * and `permalinkId`, and (if a map is passed) index it by slug in `nodeMap`.
  *
  * This is the sibling-aware ordinal pass that `parse()` runs as its last step,
@@ -676,8 +676,8 @@ export function parse(src: string): RawFile {
  * root-ordinal form (`.11`) through resolveSlugInFile's anchor and root walks,
  * which resolve by numbering rather than by this map.
  *
- * There are two nodeMaps — assignOrdinals builds the RawNode one at parse/build
- * time, resolveFile the SourceNode one the RUNTIME resolves refs against. They
+ * There are two nodeMaps — assignOrdinals builds the SourceNode one at parse/build
+ * time, resolveFile the RvNode one the RUNTIME resolves refs against. They
  * index different types over different tree shapes, so both must exist; this
  * predicate is what keeps their naming policy from drifting apart. It drifting
  * is exactly how `#11` stayed broken in the browser after the build-time map
@@ -691,8 +691,8 @@ function claimsNodeMapName(n: { attrs: Multimap }): boolean {
 }
 
 export function assignOrdinals(
-  siblings: RawNode[],
-  nodeMap?: Record<string, RawNode>,
+  siblings: SourceNode[],
+  nodeMap?: Record<string, SourceNode>,
   parentId: string | null = null,
 ): void {
   let maxInt = 0;
@@ -715,25 +715,25 @@ export function assignOrdinals(
 }
 
 // ── resolveFile ───────────────────────────────────────────────────────────────
-// Second pass: merge inheritedHead into a RawFile, producing SourceNodes with
+// Second pass: merge inheritedHead into a SourceFile, producing SourceNodes with
 // every inherited property resolved (see inherited.ts).
-export function resolveFile(rawFile: RawFile, inheritedHead: Head): {
+export function resolveFile(sourceFile: SourceFile, inheritedHead: Head): {
   head:    Head;
-  roots:   SourceNode[];
-  nodeMap: Record<string, SourceNode>;
+  roots:   RvNode[];
+  nodeMap: Record<string, RvNode>;
 } {
-  const resolvedTagDefs: Record<string, TagDef> = { ...inheritedHead.tagDefs, ...rawFile.head.tagDefs };
-  const resolvedOrigins: Record<string, OriginDef> = { ...inheritedHead.origins, ...rawFile.head.origins };
+  const resolvedTagDefs: Record<string, TagDef> = { ...inheritedHead.tagDefs, ...sourceFile.head.tagDefs };
+  const resolvedOrigins: Record<string, OriginDef> = { ...inheritedHead.origins, ...sourceFile.head.origins };
   const fileMeta: FileMeta = new Multimap(inheritedHead.meta.allEntries());
-  for (const [k, v] of rawFile.head.meta.allEntries()) fileMeta.append(k, v);
+  for (const [k, v] of sourceFile.head.meta.allEntries()) fileMeta.append(k, v);
   const head: Head = { meta: fileMeta, tagDefs: resolvedTagDefs, origins: resolvedOrigins };
-  const nodeMap: Record<string, SourceNode> = {};
+  const nodeMap: Record<string, RvNode> = {};
 
   // The parser knows only that inherited properties exist, seed from the head,
   // and derive top-down. What they mean lives in inherited.ts.
-  function resolveNode(raw: RawNode, parentBag: InheritedBag): SourceNode {
+  function resolveNode(raw: SourceNode, parentBag: InheritedBag): RvNode {
     const bag  = deriveBag(parentBag, raw, resolvedTagDefs);
-    const node = { ...raw, ...bag, children: [] } as unknown as SourceNode;
+    const node = { ...raw, ...bag, children: [] } as unknown as RvNode;
     if (claimsNodeMapName(node)) nodeMap[node.slug] = node;
     node.children = raw.children.map(c => resolveNode(c, bag));
     // Derived, not authored: origin-side the subtree is right there, and
@@ -742,7 +742,7 @@ export function resolveFile(rawFile: RawFile, inheritedHead: Head): {
     return node;
   }
 
-  const roots = rawFile.roots.map(r => resolveNode(r, seedBag(head)));
+  const roots = sourceFile.roots.map(r => resolveNode(r, seedBag(head)));
   return { head, roots, nodeMap };
 }
 

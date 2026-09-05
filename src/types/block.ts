@@ -19,7 +19,7 @@
  */
 
 import './block.declare.js';
-import type { NodeTypeFactory, SourceNode, RenderNode } from '../client/render-node.js';
+import type { NodeTypeFactory, RvNode, RenderNode } from '../client/render-node.js';
 import { factoryRegister } from '../client/render-node.js';
 import { treeNavKeydown, actionKeydown, listboxKeydown, copyPermalink, applyOnSpawn, applyOnAction, sidepanelOpenFromNode, wireBulletActions } from '../client/handler-utils.js';
 import { ToggleSet } from '../client/toggle-set.js';
@@ -97,8 +97,8 @@ class BlockTypeHandler extends BaseTypeHandler {
 
   constructor(rn: RenderNode) {
     super(rn, 'a[href], pre, .block-body-scroll, .md-math-block, .katex-display, .katex-html');
-    const sourceNode = rn.sourceNode;
-    const attrs = sourceNode.attrs;
+    const rvNode = rn.rvNode;
+    const attrs = rvNode.attrs;
     applyOnSpawn(attrs, rn);
 
     const { content } = this;
@@ -120,8 +120,8 @@ class BlockTypeHandler extends BaseTypeHandler {
     this._toggles = new ToggleSet(rn, attrs, { alwaysOpen: true });
 
     void (async () => {
-      const { url, sectionSlug, bodyText } = await this.resolveSrc(attrs, sourceNode);
-      if (url || bodyText) this.buildBody(url, sectionSlug, bodyText, attrs, sourceNode);
+      const { url, sectionSlug, bodyText } = await this.resolveSrc(attrs, rvNode);
+      if (url || bodyText) this.buildBody(url, sectionSlug, bodyText, attrs, rvNode);
       else rn.ready();
     })();
 
@@ -134,19 +134,19 @@ class BlockTypeHandler extends BaseTypeHandler {
 
   private async resolveSrc(
     attrs: ResolvedAttrs,
-    sourceNode: SourceNode,
+    rvNode: RvNode,
   ): Promise<{ url: string | null; sectionSlug: string | null; bodyText: string | null }> {
-    const rawSrc = (attrs.get('src') ?? sourceNode.label ?? '').trim();
+    const rawSrc = (attrs.get('src') ?? rvNode.label ?? '').trim();
     if (rawSrc) {
       const hashIdx   = rawSrc.indexOf('#');
       const filePart  = hashIdx === -1 ? rawSrc : rawSrc.slice(0, hashIdx);
       const sectionSlug = hashIdx === -1 ? null : rawSrc.slice(hashIdx);
-      return { url: await resolveMediaOn(sourceNode, filePart), sectionSlug, bodyText: null };
+      return { url: await resolveMediaOn(rvNode, filePart), sectionSlug, bodyText: null };
     }
     return {
       url: null,
       sectionSlug: null,
-      bodyText: sourceNode.bodyLines?.length ? sourceNode.bodyLines.join('\n') : null,
+      bodyText: rvNode.bodyLines?.length ? rvNode.bodyLines.join('\n') : null,
     };
   }
 
@@ -155,7 +155,7 @@ class BlockTypeHandler extends BaseTypeHandler {
     sectionSlug: string | null,
     bodyText: string | null,
     attrs: ResolvedAttrs,
-    sourceNode: SourceNode,
+    rvNode: RvNode,
   ): void {
     const { content } = this;
     const outer   = document.createElement('div');
@@ -201,7 +201,7 @@ class BlockTypeHandler extends BaseTypeHandler {
       // Resolved, like a label's: a span's `img:` ref names an asset on the
       // origin, so it has to be asked for rather than emitted as authored.
       const { html, spanMap } = await mdToHtmlWithSpansResolved(
-        src, (refs) => resolveMediaAllOn(sourceNode, refs),
+        src, (refs) => resolveMediaAllOn(rvNode, refs),
       );
       // Kept for Ctrl+C, which copies the block's markdown source — the same
       // text whether it was written inline or fetched from a file.
@@ -216,7 +216,7 @@ class BlockTypeHandler extends BaseTypeHandler {
       this._unwireSpanToggles = wireSpanToggles(
         scroller, spanMap, attrs, this.rn, this._toggles,
       );
-      this.wireListboxOptions(scroller, spanMap, attrs, sourceNode);
+      this.wireListboxOptions(scroller, spanMap, attrs, rvNode);
       this._unwireSpans?.();
       this._unwireSpans = wireSpanVisibility(scroller, spanMap, this.rn.state);
       this.rn.ready();
@@ -244,7 +244,7 @@ class BlockTypeHandler extends BaseTypeHandler {
     scroller: HTMLElement,
     spanMap: Map<number, ParsedSpanAttrs>,
     attrs: ResolvedAttrs,
-    sourceNode: SourceNode,
+    rvNode: RvNode,
   ): void {
     if (!isListbox(attrs, spanMap)) return;
     const { content, rn } = this;
@@ -255,7 +255,7 @@ class BlockTypeHandler extends BaseTypeHandler {
       optionContainer: scroller,
       spanMap,
       rn,
-      sourceNode,
+      rvNode,
       scrollOnSelect:  true,
       volatile:        attrs.has('listbox-volatile'),
       nonempty:        attrs.has('listbox-nonempty'),

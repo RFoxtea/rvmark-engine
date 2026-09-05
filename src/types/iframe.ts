@@ -188,10 +188,10 @@ class IframeTypeHandler extends BaseTypeHandler {
 
   constructor(renderNode: RenderNode) {
     super(renderNode, '*');
-    const sourceNode = renderNode.sourceNode;
-    const attrs = sourceNode.attrs;
+    const rvNode = renderNode.rvNode;
+    const attrs = rvNode.attrs;
 
-    const rawUrl = attrs.get('src') ?? (sourceNode.label?.trim() || null);
+    const rawUrl = attrs.get('src') ?? (rvNode.label?.trim() || null);
     const box = resolveBox(attrs, 'iframe');
 
     const content = this.content;
@@ -208,9 +208,9 @@ class IframeTypeHandler extends BaseTypeHandler {
     // no resolvable src, so which of the two is used cannot be decided until the
     // origin has answered.
     void (async () => {
-      const url    = await resolveMediaOn(sourceNode, rawUrl);
-      const srcdoc = (!url && sourceNode.bodyLines?.length)
-        ? sourceNode.bodyLines.join('\n') : null;
+      const url    = await resolveMediaOn(rvNode, rawUrl);
+      const srcdoc = (!url && rvNode.bodyLines?.length)
+        ? rvNode.bodyLines.join('\n') : null;
 
       if (url || srcdoc) {
         const iframe = document.createElement('iframe');

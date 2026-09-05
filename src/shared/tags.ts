@@ -5,12 +5,12 @@
  * with, plus the node.* overrides its tags contribute.
  *
  * Parse-time machinery, and shared for the same reason parser.ts is: inherited.ts
- * derives a bag against a document's tagDefs, and source-file.ts serves a node
+ * derives a bag against a document's tagDefs, and rv-file.ts serves a node
  * against them, so both sides of the wire resolve tags by the same rules.
  *
  * Resolution only. A tag def is read off the document's head — merged down the
  * inherited chain — which makes *doing* the reading the origin's job; what
- * crosses to the client is the resolved ServedTag, and drawing it is
+ * crosses to the client is a ResolvedTag, and drawing it is
  * client/tag-chips.ts.
  *
  * Exports:

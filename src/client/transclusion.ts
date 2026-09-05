@@ -12,7 +12,7 @@
 
 import { parseTranscludeEntry } from '../shared/shared.js';
 import { resolveRefOn, childrenOf } from './origin-host.js';
-import type { SourceNode, NodeAttrs } from '../shared/parser.js';
+import type { RvNode, NodeAttrs } from '../shared/parser.js';
 
 interface TransclusionConfig {
   embedVal:       string | null;
@@ -26,7 +26,7 @@ interface TransclusionConfig {
 // Transclusion modes ({=> val}):
 //   link-mode     — no label, single ref, no '*' → replace with target's children
 //   children-mode — has label, or list, or '*'   → keep own chrome, borrow children
-export function resolveTransclusionConfig(node: SourceNode, attrs: NodeAttrs): TransclusionConfig {
+export function resolveTransclusionConfig(node: RvNode, attrs: NodeAttrs): TransclusionConfig {
   const transcludeRaw = attrs.get('transclude') ?? null;
   const embedList = transcludeRaw
     ? transcludeRaw.split(',').map(s => s.trim()).filter(Boolean)
@@ -52,9 +52,9 @@ export function resolveTransclusionConfig(node: SourceNode, attrs: NodeAttrs): T
 // ── resolveEffectiveChildren ──────────────────────────────────────────────
 // Follow a node's own transclude param recursively to get its effective children.
 export async function resolveEffectiveChildren(
-  targetNode: SourceNode,
+  targetNode: RvNode,
   visited:    Set<string>,
-): Promise<SourceNode[]> {
+): Promise<RvNode[]> {
   const tEmbedRaw = targetNode.attrs.get('transclude') ?? null;
   const tTranscludeRaw = tEmbedRaw && (() => {
     const list = tEmbedRaw.split(',').map((s: string) => s.trim()).filter(Boolean);
@@ -64,7 +64,7 @@ export async function resolveEffectiveChildren(
   if (!tTranscludeRaw) {
     return childrenOf(targetNode);
   }
-  const result: SourceNode[] = [];
+  const result: RvNode[] = [];
   for (const entry of tTranscludeRaw.split(',').map((s: string) => s.trim()).filter(Boolean)) {
     if (entry === '*') {
       result.push(...await childrenOf(targetNode));
@@ -94,7 +94,7 @@ export async function resolveEffectiveChildren(
 // It descends by `childrenOf`, so the subtree it walks is fetched as it goes.
 // That is the cost of the question, and it is paid only on a `?focus=` load.
 export async function isOrContainsPermalink(
-  node: SourceNode, permalinkBase: string | null, targetSlug: string,
+  node: RvNode, permalinkBase: string | null, targetSlug: string,
 ): Promise<boolean> {
   if (permalinkBase === targetSlug) return true;
   if (node.slug === targetSlug || node.attrs.get('id') === targetSlug) return true;

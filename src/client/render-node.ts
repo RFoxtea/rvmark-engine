@@ -10,12 +10,12 @@
  * a live RenderNode and builds content + wires behaviour during create(). No separate
  * render step.
  *
- * SourceNode — the markup-level unit, one per source line. Defined in parser.ts.
+ * RvNode — the markup-level unit, one per source line. Defined in parser.ts.
  */
 
-import type { SourceNode, NodeAttrs, ResolvedAttrs } from '../shared/parser.js';
+import type { RvNode, NodeAttrs, ResolvedAttrs } from '../shared/parser.js';
 import { parseShowWhen } from '../shared/parser.js';
-export type { SourceNode };
+export type { RvNode };
 export { parseShowWhen };
 import { StateFrame, buildStatePass, prerootFrame } from './state.js';
 import type { StateNode, PassEntry } from './state.js';
@@ -29,7 +29,7 @@ import { childrenOf } from './origin-host.js';
 export type { StateFrame as StateView };
 
 // ── ResolvedAttrs ─────────────────────────────────────────────────────────────
-// Defined with resolveAttrs in source-file.ts; re-exported here because the
+// Defined with resolveAttrs in rv-file.ts; re-exported here because the
 // TypeHandler interface below is its most-read consumer.
 export type { ResolvedAttrs };
 
@@ -68,13 +68,13 @@ export interface StaticBuildContext {
    *  `Origin.resolveResource`, and synchronous for the reason the note gives:
    *  the builder runs in Node with the store in hand, so the wire that forces
    *  the hydrated path to await is simply not in this one. */
-  resolveMedia(node: SourceNode, ref: string): string;
+  resolveMedia(node: RvNode, ref: string): string;
 }
 
 export interface NodeTypeFactory {
   readonly defaultOpen?: boolean;
   create(renderNode: RenderNode): TypeHandler;
-  staticRenderBody?(node: SourceNode, ctx: StaticBuildContext): string | null;
+  staticRenderBody?(node: RvNode, ctx: StaticBuildContext): string | null;
 }
 
 // ── Factory registry ──────────────────────────────────────────────────────────
@@ -110,7 +110,7 @@ export function evalShowWhen(raw: string, state: StateNode): boolean {
 
 interface ChildSlot {
   readonly index:       number;
-  readonly node:        SourceNode;
+  readonly node:        RvNode;
   readonly parentState: StateNode;
   readonly ul:          HTMLUListElement;
   readonly slots:       ChildSlot[];
@@ -202,16 +202,16 @@ export function isHiddenByModifier(attrs: NodeAttrs): boolean {
 // in parser.ts, alongside meta) — so this is a plain lookup, and it answers
 // correctly for nodes that are authored but not mounted, which is exactly the
 // population {searchable} exists to reach.
-export function isSearchable(node: SourceNode): boolean {
+export function isSearchable(node: RvNode): boolean {
   return node.searchable === true;
 }
 
 // ── buildRenderNode ───────────────────────────────────────────────────────────
-// Build one RenderNode from a SourceNode. Used by RenderNode.setChildren and
+// Build one RenderNode from an RvNode. Used by RenderNode.setChildren and
 // by the renderer bootstrap. Exported so handlers can call it for transclusion
 // child segments without depending on renderer.js.
 export function buildRenderNode(
-  node:        SourceNode,
+  node:        RvNode,
   focusSlug:   string | null,
   parentState: StateNode = prerootFrame,
 ): RenderNode {
@@ -321,7 +321,7 @@ export class RenderNode {
   readonly li:         HTMLElement;
   readonly children:   HTMLElement;
   readonly index:      number;
-  sourceNode: SourceNode;
+  rvNode: RvNode;
   permalinkId:         string = '';
   selectable:          boolean = true;
   meta:                Record<string, unknown> = {};
@@ -345,7 +345,7 @@ export class RenderNode {
   private _childSlots:        ChildSlot[] = [];
   private _pendingChildSlots: ChildSlot[] | null = null;
   private _pendingChildren:   Array<{
-    args: [SourceNode[], string | null, PassEntry[] | undefined];
+    args: [RvNode[], string | null, PassEntry[] | undefined];
     settle: (p: Promise<void>) => void;
   }> = [];
 
@@ -379,9 +379,9 @@ export class RenderNode {
       .then(() => this._resolveReady());
   }
 
-  constructor(node: SourceNode, parentState: StateNode = prerootFrame) {
+  constructor(node: RvNode, parentState: StateNode = prerootFrame) {
     this.index      = _rnIndex++;
-    this.sourceNode = node;
+    this.rvNode = node;
     this._attrs     = node.attrs;
     this.li         = document.createElement('li');
     this.children   = document.createElement('div');
@@ -433,8 +433,8 @@ export class RenderNode {
     return this;
   }
 
-  watchChildren(nodes: SourceNode[], callback: (anyVisible: boolean) => void): () => void {
-    const isVisible = (c: SourceNode) => {
+  watchChildren(nodes: RvNode[], callback: (anyVisible: boolean) => void): () => void {
+    const isVisible = (c: RvNode) => {
       const a = c.attrs;
       if (a.has('draft')) return false;
       return !a.getAll('show-when').some(sw => evalShowWhen(sw, this.state));
@@ -503,10 +503,10 @@ export class RenderNode {
     }
   }
 
-  replaceHandler(sourceNode: SourceNode): void {
-    this.sourceNode = sourceNode;
-    this.permalinkId = sourceNode.permalinkId ?? '';
-    this._attrs = sourceNode.attrs;
+  replaceHandler(rvNode: RvNode): void {
+    this.rvNode = rvNode;
+    this.permalinkId = rvNode.permalinkId ?? '';
+    this._attrs = rvNode.attrs;
     blastocyteFactory.create(this);
   }
 
@@ -542,7 +542,7 @@ export class RenderNode {
   // ── Children management ────────────────────────────────────────────────────
 
   setChildren(
-    nodes:               SourceNode[],
+    nodes:               RvNode[],
     focusSlug:           string | null = null,
     passChildrenEntries: PassEntry[] | undefined = undefined,
     delay = true,
@@ -582,8 +582,8 @@ export class RenderNode {
     // inside itself. It cannot leak state across an origin boundary and it
     // cannot claim another origin's content, because the outer tier is not its
     // to declare.
-    const host = this.sourceNode;
-    const barrierBetween = (child: SourceNode) =>
+    const host = this.rvNode;
+    const barrierBetween = (child: RvNode) =>
       child.address.baseUrl !== host.address.baseUrl || child.stateScope !== host.stateScope;
 
     const explicitPass = passChildrenEntries !== undefined

@@ -43,9 +43,9 @@ class ImageTypeHandler extends BaseTypeHandler {
 
   constructor(renderNode: RenderNode) {
     super(renderNode, 'a[href]');
-    const sourceNode = renderNode.sourceNode;
-    const attrs = sourceNode.attrs;
-    const rawUrl = attrs.get('src') ?? sourceNode.label ?? null;
+    const rvNode = renderNode.rvNode;
+    const attrs = rvNode.attrs;
+    const rawUrl = attrs.get('src') ?? rvNode.label ?? null;
     const alt        = attrs.get('alt') ?? '';
     const darkClass  = DARK_MODE_CLASSES[attrs.get('dark-mode') ?? ''] ?? '';
     const alignClass = ALIGN_CLASSES[attrs.get('align') ?? ''] ?? '';
@@ -57,7 +57,7 @@ class ImageTypeHandler extends BaseTypeHandler {
     const li = renderNode.li;
 
     void (async () => {
-      const resolved = await resolveMediaOn(sourceNode, rawUrl);
+      const resolved = await resolveMediaOn(rvNode, rawUrl);
       if (!resolved) return;
       const proto = (resolved.match(/^([a-zA-Z][a-zA-Z0-9+\-.]*):/) ?? [])[1]?.toLowerCase();
       if (proto && !['http', 'https'].includes(proto)) return;

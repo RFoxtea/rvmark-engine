@@ -2,7 +2,7 @@
  * builder.ts
  *
  * Helpers for scripts that generate `.rvmark` source files, so they can manipulate
- * rvmark abstract syntax trees (RawNode/RawFile objects) rather than concatenate 
+ * rvmark abstract syntax trees (SourceNode/SourceFile objects) rather than concatenate 
  * text.
  *
  * Pairs well with other modules:
@@ -12,8 +12,8 @@
  *   stringify text ← tree
  *
  * Exports:
- *   buildNode(spec)            → a RawNode (ordinals stubbed; call assignOrdinals)
- *   buildFile(spec)            → a RawFile with ordinals finalised + nodeMap built
+ *   buildNode(spec)            → a SourceNode (ordinals stubbed; call assignOrdinals)
+ *   buildFile(spec)            → a SourceFile with ordinals finalised + nodeMap built
  *   escapeLabel(text)          → escape a label body's rvmark-significant chars
  *   escapeAttrValue(text)      → escape an attr value's rvmark-significant chars
  *   span(text, spec)           → an inline `[text]{…}` span string for a label
@@ -21,7 +21,7 @@
 
 import { Multimap } from '../shared/multimap.js';
 import { assignOrdinals } from '../shared/parser.js';
-import type { RawNode, RawFile, Head, Tag, OriginDef } from '../shared/parser.js';
+import type { SourceNode, SourceFile, Head, Tag, OriginDef } from '../shared/parser.js';
 import { TagDef } from '../shared/parser.js';
 
 // ── attrs / tags input coercion ─────────────────────────────────────────────
@@ -63,11 +63,11 @@ export interface NodeSpec {
   label?: string;
   /** Fenced-body content lines (no fence markers — stringify adds them). */
   body?: string[];
-  children?: RawNode[];
+  children?: SourceNode[];
 }
 
 /**
- * Build a single RawNode. The identity fields (slug/permalinkId/numbering) are
+ * Build a single SourceNode. The identity fields (slug/permalinkId/numbering) are
  * stubbed here — a node's number depends on its siblings, so it can only be
  * resolved once the whole sibling group exists. Call assignOrdinals() on the
  * finished tree (buildFile does this for you) before stringify().
@@ -76,7 +76,7 @@ export interface NodeSpec {
  * an explicit `attrs` Multimap already containing them is respected (the
  * shorthand only appends, so pass one or the other, not both, for a given key).
  */
-export function buildNode(spec: NodeSpec = {}): RawNode {
+export function buildNode(spec: NodeSpec = {}): SourceNode {
   const attrs = toMultimap(spec.attrs);
   // Shorthands are prepended (via a fresh map) so they read first in output,
   // matching how authors write `{#id; …}`.
@@ -91,7 +91,7 @@ export function buildNode(spec: NodeSpec = {}): RawNode {
   return makeNode(spec, attrs);
 }
 
-function makeNode(spec: NodeSpec, attrs: Multimap): RawNode {
+function makeNode(spec: NodeSpec, attrs: Multimap): SourceNode {
   return {
     slug: '',
     permalinkId: '',
@@ -115,15 +115,15 @@ export interface HeadSpec {
 
 export interface FileSpec {
   head?:  HeadSpec;
-  roots:  RawNode[];
+  roots:  SourceNode[];
 }
 
 /**
- * Build a finalised RawFile: coerces the head, then runs assignOrdinals over the
+ * Build a finalised SourceFile: coerces the head, then runs assignOrdinals over the
  * roots so numbering/slug/permalinkId are filled in and nodeMap is populated —
  * the result is ready for stringifyFile().
  */
-export function buildFile(spec: FileSpec): RawFile {
+export function buildFile(spec: FileSpec): SourceFile {
   const tagDefs: Record<string, TagDef> = {};
   for (const [name, def] of Object.entries(spec.head?.tagDefs ?? {})) {
     tagDefs[name] = new TagDef(toMultimap(def));
@@ -133,7 +133,7 @@ export function buildFile(spec: FileSpec): RawFile {
     tagDefs,
     origins: spec.head?.origins ?? {},
   };
-  const nodeMap: Record<string, RawNode> = {};
+  const nodeMap: Record<string, SourceNode> = {};
   assignOrdinals(spec.roots, nodeMap);
   return { head, roots: spec.roots, nodeMap };
 }

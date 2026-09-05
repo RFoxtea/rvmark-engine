@@ -9,7 +9,7 @@ import { parsePass, treeNavKeydown, makeErrorNode } from '../client/handler-util
 import { Multimap } from '../shared/multimap.js';
 
 function differentiate(rn: RenderNode): TypeHandler {
-  const node     = rn.sourceNode;
+  const node     = rn.rvNode;
   const attrs    = node.attrs;
   const typeName = attrs.get('type') ?? defaultTypeName();
   const factory  = factoryGet(typeName);
@@ -62,7 +62,7 @@ factoryRegister('loading', { create: (rn) => loadingHandler(rn) });
 
 export const blastocyteFactory: NodeTypeFactory = {
   create(rn: RenderNode): TypeHandler {
-    const node  = rn.sourceNode;
+    const node  = rn.rvNode;
     const attrs = node.attrs;
     const { embedVal, transcludeMode } = resolveTransclusionConfig(node, attrs);
 

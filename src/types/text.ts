@@ -6,7 +6,7 @@
  */
 
 import './text.declare.js';
-import type { NodeTypeFactory, SourceNode, ResolvedAttrs, StaticBuildContext } from '../client/render-node.js';
+import type { NodeTypeFactory, RvNode, ResolvedAttrs, StaticBuildContext } from '../client/render-node.js';
 import { factoryRegister, RenderNode } from '../client/render-node.js';
 
 import { buildPermalinkHref, copyPermalink, treeNavKeydown, actionKeydown, listboxKeydown, applyOnSpawn, applyOnAction, sidepanelOpenFromNode, makeToggleBadge, applyBulletProps, applyBulletAlt, applyListItemProps, wireBulletActions } from '../client/handler-utils.js';
@@ -62,8 +62,8 @@ class TextTypeHandler extends BaseTypeHandler {
     // real focus on an option would desync. Tab-reachability and click-ownership
     // are different questions with different answers.
     super(rn, '.node-label a[href], .node-label .inline-toggle');
-    const sourceNode = rn.sourceNode;
-    const attrs = sourceNode.attrs;
+    const rvNode = rn.rvNode;
+    const attrs = rvNode.attrs;
     applyOnSpawn(attrs, rn);
 
     const hasLink   = attrs.get('action') === 'link';
@@ -75,7 +75,7 @@ class TextTypeHandler extends BaseTypeHandler {
     // node does not mount) and re-render the label once KaTeX lands. Only labels
     // that actually contain math pay this; everything else is untouched, and
     // MOUNT_SETTLE_MS hides a fast load entirely.
-    const rawLabel = sourceNode.label || '';
+    const rawLabel = rvNode.label || '';
     const needsKatex = hasMath(rawLabel) && !katexLoaded();
     if (needsKatex) this.managesReady = true;
 
@@ -98,13 +98,13 @@ class TextTypeHandler extends BaseTypeHandler {
     const provisional = needsKatex || needsImg;
     if (provisional) this._reRenderLabel = () => this._renderLabelFinal(rawLabel, needsImg);
 
-    this.buildCssProps(attrs, sourceNode);
+    this.buildCssProps(attrs, rvNode);
 
     const { content } = this;
 
-    const { sidepanelButton } = resolveTransclusionConfig(sourceNode, attrs);
+    const { sidepanelButton } = resolveTransclusionConfig(rvNode, attrs);
 
-    this.buildToggleBullet(sourceNode);
+    this.buildToggleBullet(rvNode);
     // Built after the bullet, which it needs; a listbox node is always-open
     // because its children area belongs to the selected option, not the bullet.
     this.toggles = new ToggleSet(rn, attrs, {
@@ -117,7 +117,7 @@ class TextTypeHandler extends BaseTypeHandler {
       },
     });
     this._installWatch();
-    this.buildLabel(lblHtml, spanMap, hasListbox, hasLink, sourceNode);
+    this.buildLabel(lblHtml, spanMap, hasListbox, hasLink, rvNode);
 
     // A provisional label is wired when its final markup lands, not twice: the
     // options, toggles and subscriptions all hang off elements `innerHTML` is
@@ -126,7 +126,7 @@ class TextTypeHandler extends BaseTypeHandler {
     // selection and no click handler.
     if (!provisional) this._wireLabel(attrs);
 
-    if (sourceNode.attrs.get('id')) {
+    if (rvNode.attrs.get('id')) {
       const anchor = document.createElement('a');
       anchor.href        = buildPermalinkHref(rn);
       anchor.className   = 'node-id';
@@ -150,8 +150,8 @@ class TextTypeHandler extends BaseTypeHandler {
     // instead, and attachHandler's own ready() still applies. Either way the
     // hold is taken here, after the row is built, so the settle finds a label
     // to wire.
-    if (needsKatex) void this._settleLabel(sourceNode, attrs).then(() => rn.ready());
-    else if (needsImg) rn.holdReady(this._settleLabel(sourceNode, attrs));
+    if (needsKatex) void this._settleLabel(rvNode, attrs).then(() => rn.ready());
+    else if (needsImg) rn.holdReady(this._settleLabel(rvNode, attrs));
 
     this.toggles.openIfRequested(paramOpen, false);
   }
@@ -164,9 +164,9 @@ class TextTypeHandler extends BaseTypeHandler {
    * whatever markup was painted last, and `_wireLabel` is the one place that
    * does it.
    */
-  private _paintLabel(html: string, spanMap: Map<number, ParsedSpanAttrs>, sourceNode: SourceNode): void {
+  private _paintLabel(html: string, spanMap: Map<number, ParsedSpanAttrs>, rvNode: RvNode): void {
     this.lbl.innerHTML = html;
-    const chips = buildTagChips(sourceNode.tags);
+    const chips = buildTagChips(rvNode.tags);
     if (chips.childNodes.length > 0) this.lbl.prepend(chips);
     this._spanMap = spanMap;
   }
@@ -215,7 +215,7 @@ class TextTypeHandler extends BaseTypeHandler {
    */
   private _renderLabelFinal(rawLabel: string, needsImg: boolean): LabelRender | Promise<LabelRender> {
     return needsImg
-      ? mdInlineWithSpansResolved(rawLabel, (refs) => resolveMediaAllOn(this.rn.sourceNode, refs))
+      ? mdInlineWithSpansResolved(rawLabel, (refs) => resolveMediaAllOn(this.rn.rvNode, refs))
       : mdInlineWithSpans(rawLabel);
   }
 
@@ -226,22 +226,22 @@ class TextTypeHandler extends BaseTypeHandler {
    * a failed resolve must leave the first render standing — wired, or the node
    * mounts with dead spans — rather than hang.
    */
-  private async _settleLabel(sourceNode: SourceNode, attrs: ResolvedAttrs): Promise<void> {
+  private async _settleLabel(rvNode: RvNode, attrs: ResolvedAttrs): Promise<void> {
     try {
       if (this.managesReady) await ensureKatex();
       const { html, spanMap } = await this._reRenderLabel!();
-      this._paintLabel(html, spanMap, sourceNode);
+      this._paintLabel(html, spanMap, rvNode);
     } catch { /* the first render stands, and is what gets wired */ }
     this._reRenderLabel = null;
     this._wireLabel(attrs);
   }
 
-  private buildCssProps(attrs: ResolvedAttrs, sourceNode: SourceNode) {
-    applyBulletProps(this.content, attrs, sourceNode);
+  private buildCssProps(attrs: ResolvedAttrs, rvNode: RvNode) {
+    applyBulletProps(this.content, attrs, rvNode);
     applyListItemProps(this.content, attrs);
   }
 
-  private buildToggleBullet(_sourceNode: SourceNode) {
+  private buildToggleBullet(_sourceNode: RvNode) {
     const tog = document.createElement('span');
     tog.className = 'toggle';
     this.tog = tog;
@@ -257,13 +257,13 @@ class TextTypeHandler extends BaseTypeHandler {
     spanMap: Map<number, ParsedSpanAttrs>,
     hasListbox: boolean,
     hasLink: boolean,
-    sourceNode: SourceNode,
+    rvNode: RvNode,
   ) {
     const lbl = document.createElement('span');
     lbl.className = 'node-label';
     this.lbl = lbl;
 
-    this._paintLabel(lblHtml, spanMap, sourceNode);
+    this._paintLabel(lblHtml, spanMap, rvNode);
 
     // On the label itself, so it survives a re-render's innerHTML.
     if (hasListbox) lbl.setAttribute('role', 'listbox');
@@ -290,7 +290,7 @@ class TextTypeHandler extends BaseTypeHandler {
       optionContainer: lbl,
       spanMap,
       rn,
-      sourceNode:      rn.sourceNode,
+      rvNode:      rn.rvNode,
       scrollOnSelect:  false,
       volatile,
       nonempty,
@@ -333,7 +333,7 @@ class TextTypeHandler extends BaseTypeHandler {
       }, content, notTog,
       // Toggleability is not fixed at wiring time — a node becomes expandable
       // once its children resolve — so this is asked per gesture.
-      () => rn.toggleable || rn.sourceNode.attrs.has('on-action'));
+      () => rn.toggleable || rn.rvNode.attrs.has('on-action'));
     } else {
       // Leaf (or always-open) node: nothing type-specific happens on re-click,
       // but it is still an action gesture, so on-action must fire here as well.
@@ -345,7 +345,7 @@ class TextTypeHandler extends BaseTypeHandler {
       // link and does nothing. {action: none} is inert by definition.
       wireSelectThenAction(
         content, () => { applyOnAction(rn); }, content, notTog,
-        () => rn.sourceNode.attrs.has('on-action'),
+        () => rn.rvNode.attrs.has('on-action'),
       );
     }
   }
@@ -500,7 +500,7 @@ export function staticRenderBullet(
 // dead icon URL, so a broken {bullet} leaves an empty gutter here where the
 // hydrated page would fall back to the default marker.
 export function staticBulletProps(
-  node:  SourceNode,
+  node:  RvNode,
   attrs: ResolvedAttrs,
   ctx:   StaticBuildContext,
 ): { classes: string[]; styles: string[]; bulletAlt: string | null } {

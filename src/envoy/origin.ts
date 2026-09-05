@@ -34,13 +34,13 @@
  * the wire can hold this module's store open.
  */
 
-import type { SourceNode, NodeAttrs, FileMeta, OriginDef, Tag } from '../shared/parser.js';
+import type { RvNode, NodeAttrs, FileMeta, OriginDef, Tag } from '../shared/parser.js';
 import {
   resolveSlugInFile, resolveAddress, resolveMediaAddress, addressToSlug, addressOrigin,
   parseTranscludeEntry, RVMARK_SEGMENT,
 } from '../shared/shared.js';
 import { loadRvmarkFile, invalidateLoaderCaches } from './loader.js';
-import type { SourceFile } from './source-file.js';
+import type { RvFile } from './rv-file.js';
 import { nodeTextMatches } from '../shared/search-match.js';
 import { Multimap } from '../shared/multimap.js';
 import type { FetchedResource } from '../shared/portable-node.js';
@@ -69,8 +69,8 @@ export interface Address {
  * adding it before something asks would fix an answer nobody needs yet.
  */
 export interface Origin {
-  node(key: string):                        Promise<SourceNode | null>;
-  childrenOf(key: string):                  Promise<SourceNode[]>;
+  node(key: string):                        Promise<RvNode | null>;
+  childrenOf(key: string):                  Promise<RvNode[]>;
   resolve(key: string, refs: string[]):     Promise<Address[][]>;
   hasMatchBelow(keys: string[], q: string): Promise<boolean[]>;
 
@@ -169,7 +169,7 @@ export interface Origin {
    * that the shell reads once at boot, and the design note has it retiring
    * along with heads. It sits here so that until then `main.ts` asks the origin
    * rather than holding the parsed file, which is the only thing that kept a
-   * `SourceFile` in the client.
+   * `RvFile` in the client.
    */
   meta(key: string): Promise<FileMeta>;
 }
@@ -304,7 +304,7 @@ function sigilCandidates(
 // A same-file `{=> #id}` target within `file`, or null. The local hop only:
 // this origin can no more follow a ref into a foreign one here than anywhere
 // else.
-function localTranscludeTarget(node: SourceNode, file: SourceFile): SourceNode | null {
+function localTranscludeTarget(node: RvNode, file: RvFile): RvNode | null {
   const raw = node.attrs.get('transclude');
   if (!raw || !raw.startsWith('#') || raw.includes(',')) return null;
   return resolveSlugInFile({ nodeMap: file.nodeMap, roots: file.roots }, raw.slice(1))?.node ?? null;
@@ -349,7 +349,7 @@ class RvmarkOrigin implements Origin {
 
   private address(key: string): string { return this.baseUrl + key; }
 
-  async node(key: string): Promise<SourceNode | null> {
+  async node(key: string): Promise<RvNode | null> {
     const address = this.address(key);
     const file = await loadRvmarkFile(address);
     if (!file) return null;
@@ -358,7 +358,7 @@ class RvmarkOrigin implements Origin {
     return resolveSlugInFile({ nodeMap: file.nodeMap, roots: file.roots }, slug)?.node ?? null;
   }
 
-  async childrenOf(key: string): Promise<SourceNode[]> {
+  async childrenOf(key: string): Promise<RvNode[]> {
     return (await this.node(key))?.children ?? [];
   }
 
@@ -404,7 +404,7 @@ class RvmarkOrigin implements Origin {
     const needle = query.trim().toLowerCase();
     if (!needle) return keys.map(() => false);
 
-    const below = (node: SourceNode, file: SourceFile, active: Set<SourceNode>): boolean => {
+    const below = (node: RvNode, file: RvFile, active: Set<RvNode>): boolean => {
       for (const child of node.children ?? []) {
         if (nodeTextMatches(child, needle)) return true;
         if (below(child, file, active)) return true;

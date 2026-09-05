@@ -58,11 +58,11 @@ export class ToggleSet {
     this.onExpand   = opts.onExpand;
     this.alwaysOpen = opts.alwaysOpen;
 
-    const sourceNode = rn.sourceNode;
+    const rvNode = rn.rvNode;
     const neverOpen  = attrs.get('open') === 'never';
-    const { embedVal, childrenList } = resolveTransclusionConfig(sourceNode, attrs);
+    const { embedVal, childrenList } = resolveTransclusionConfig(rvNode, attrs);
     this.expandable = !neverOpen
-      && (sourceNode.hasChildren || !!embedVal || !!childrenList);
+      && (rvNode.hasChildren || !!embedVal || !!childrenList);
   }
 
   /** True when the bullet may be operated: expandable, not pinned open, and
@@ -76,7 +76,7 @@ export class ToggleSet {
     // The bullet takes the hill like any other member.
     this._takeHill('bullet');
     await expandNode(this.rn);
-    for (const v of this.rn.sourceNode.attrs.getAll('on-expand')) applyEventAttr(v, this.rn);
+    for (const v of this.rn.rvNode.attrs.getAll('on-expand')) applyEventAttr(v, this.rn);
     this.onExpand?.({ scroll });
   }
 
@@ -196,7 +196,7 @@ export class ToggleSet {
 
   close(): void {
     this._takeHill(null);
-    for (const v of this.rn.sourceNode.attrs.getAll('on-collapse')) applyEventAttr(v, this.rn);
+    for (const v of this.rn.rvNode.attrs.getAll('on-collapse')) applyEventAttr(v, this.rn);
     this.rn.setChildren([]);
   }
 
@@ -230,7 +230,7 @@ export class ToggleSet {
    *  torn down before the reply lands has had `destroy` run, and drops it. */
   installWatch(setExpandable: (nowExpandable: boolean) => void): void {
     if (this.alwaysOpen) return;
-    if (!this.rn.sourceNode.hasChildren) {
+    if (!this.rn.rvNode.hasChildren) {
       if (this.expandable) setExpandable(true);
       return;
     }
@@ -241,7 +241,7 @@ export class ToggleSet {
 
     let dead = false;
     this._unwatchChildren = () => { dead = true; };
-    void childrenOf(this.rn.sourceNode).then((kids) => {
+    void childrenOf(this.rn.rvNode).then((kids) => {
       if (dead || !kids.length) return;
       const unwatch = this.rn.watchChildren(kids, (now) => setExpandable(now));
       if (dead) unwatch();
