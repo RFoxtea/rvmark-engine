@@ -34,6 +34,7 @@ const MIME = {
   '.txt':  'text/plain; charset=utf-8',
   // Served as plain text so "view source" opens in a tab instead of downloading.
   '.rvmark': 'text/plain; charset=utf-8',
+  '.md':     'text/plain; charset=utf-8',
   '.wasm': 'application/wasm',
 };
 

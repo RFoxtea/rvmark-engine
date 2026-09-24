@@ -76,12 +76,12 @@ test.describe('footer view menu', () => {
     }
   });
 
-  test('source link points at the served .rvmark file', async ({ page }) => {
+  test('source link points at the served source file', async ({ page }) => {
     await page.goto('/');
-    expect(await linkPath(page, 0)).toBe('/_rvmark/index.rvmark');
+    expect(await linkPath(page, 0)).toBe('/_rvmark/index.rv.md');
 
     // And it actually resolves — the source view must not 404.
-    const res = await page.request.get('/_rvmark/index.rvmark');
+    const res = await page.request.get('/_rvmark/index.rv.md');
     expect(res.status()).toBe(200);
     expect(await res.text()).toContain('Root node');
   });
@@ -91,7 +91,7 @@ test.describe('footer view menu', () => {
     await (await nodeContent(page, 'child-a')).click();
 
     // The source file is the same page; the static view carries the fragment.
-    await expect.poll(() => linkPath(page, 0)).toBe('/_rvmark/index.rvmark');
+    await expect.poll(() => linkPath(page, 0)).toBe('/_rvmark/index.rv.md');
     await expect.poll(() => linkPath(page, 1)).toBe('/?--static#child-a');
 
     await (await nodeContent(page, 'child-b')).click();
@@ -105,7 +105,7 @@ test.describe('footer view menu', () => {
     // The source link must follow the node, not the page.
     await (await nodeContent(page, 'other-root')).click();
 
-    await expect.poll(() => linkPath(page, 0)).toBe('/_rvmark/other.rvmark');
+    await expect.poll(() => linkPath(page, 0)).toBe('/_rvmark/other.rv.md');
     // ...and the static view follows it to the other page too.
     await expect.poll(() => linkPath(page, 1)).toBe('/other/?--static#other-root');
   });

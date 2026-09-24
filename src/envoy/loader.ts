@@ -19,7 +19,7 @@ import { parse, resolveFile } from '../shared/parser.js';
 import type { SourceFile, Head, OriginDef, TagDef } from '../shared/parser.js';
 import { Multimap } from '../shared/multimap.js';
 import { RvFile } from './rv-file.js';
-import { addressToFile, addressOrigin, RVMARK_SEGMENT } from '../shared/shared.js';
+import { addressToFile, addressOrigin, RVMARK_SEGMENT, RV_EXT, stripRvExt } from '../shared/shared.js';
 
 // ── Source acquisition ────────────────────────────────────────────────────────
 // getRvmarkSource is the abstraction step 7 (adapters) extends: today there are
@@ -145,7 +145,7 @@ function inheritedHeadKey(address: string): string {
   if (!file) return addressOrigin(address) + '|';
   const slash = file.lastIndexOf('/');
   const dir = slash === -1 ? '' : file.slice(0, slash + 1);
-  const isOwnIndex = file === dir + 'index.rvmark';
+  const isOwnIndex = file === dir + 'index' + RV_EXT;
   return addressOrigin(address) + '|' + dir + (isOwnIndex ? '|self' : '');
 }
 
@@ -160,9 +160,9 @@ function resolveInheritedHead(address: string): Promise<Head> {
     if (!file) return { meta: new Multimap(), tagDefs: {}, origins: {} };
 
     const parts = file.split('/');
-    const chain: string[] = ['index.rvmark'];
+    const chain: string[] = ['index' + RV_EXT];
     for (let i = 0; i < parts.length - 1; i++) {
-      chain.push(parts.slice(0, i + 1).join('/') + '/index.rvmark');
+      chain.push(parts.slice(0, i + 1).join('/') + '/index' + RV_EXT);
     }
 
     const mergedMeta = new Multimap();
@@ -237,7 +237,7 @@ export async function loadRvmarkFile(address: string): Promise<RvFile | null> {
     return await loadResolvedFile(key);
   } catch (_) {
     const origin = addressOrigin(key);
-    const fallbackFile = file.replace(/\.rvmark$/, '') + '/index.rvmark';
+    const fallbackFile = stripRvExt(file) + '/index' + RV_EXT;
     const fallbackAddress = origin + RVMARK_SEGMENT + fallbackFile;
     try {
       return await loadResolvedFile(fallbackAddress);

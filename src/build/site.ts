@@ -27,7 +27,7 @@ import { readFileSync, writeFileSync, readdirSync, mkdirSync, cpSync, rmSync, ex
 import { join, dirname } from 'path';
 import { createRequire } from 'module';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { fileToUrlStem, resolveAddress, resolveMediaAddress, addressToFile, addressToSlug, addressToHref, parseTranscludeEntry } from '../shared/shared.js';
+import { fileToUrlStem, resolveAddress, resolveMediaAddress, addressToFile, addressToSlug, addressToHref, parseTranscludeEntry, RV_EXT, isRvFile, stripRvExt, toRvFile } from '../shared/shared.js';
 import { defaultTypeName } from '../shared/node-types.js';
 import type { RvNode, NodeAttrs, ResolvedTag, TagDef, OriginDef, SourceFile } from '../shared/parser.js';
 import type { RvFile as RvFileT } from '../envoy/rv-file.js';
@@ -199,7 +199,7 @@ export async function buildSite(config: BuildSiteConfig) {
     readFile(url: string) {
       if (!url || !url.startsWith(mountPath)) return null;
       const relPath = url.slice(mountPath.length).split('#')[0];
-      try { return readFileSync(join(RVMARK_DIR, relPath), 'utf8'); }
+      try { return readFileSync(join(RVMARK_DIR, sourcePathOf.get(relPath) ?? relPath), 'utf8'); }
       catch { return null; }
     },
     // The build-time twin of Origin.resolveResource, and synchronous because the
@@ -263,9 +263,9 @@ export async function buildSite(config: BuildSiteConfig) {
 
   function resolveInheritedHead(relPath: string) {
   const parts = relPath.split('/');
-  const chain = ['index.rvmark'];
+  const chain = ['index' + RV_EXT];
   for (let i = 0; i < parts.length - 1; i++) {
-    chain.push(parts.slice(0, i + 1).join('/') + '/index.rvmark');
+    chain.push(parts.slice(0, i + 1).join('/') + '/index' + RV_EXT);
   }
 
   const mergedMeta = new Multimap();
@@ -305,8 +305,8 @@ function collectReservedNameViolations(dir: string, base: string): string[] {
     if (statSync(full).isDirectory()) {
       if (entry.startsWith('_')) violations.push(`${rel}/  (directory)`);
       else violations.push(...collectReservedNameViolations(full, rel));
-    } else if (entry.endsWith('.rvmark') && entry.startsWith('_')) {
-      violations.push(`${rel}  (.rvmark file)`);
+    } else if (isRvFile(entry) && entry.startsWith('_')) {
+      violations.push(`${rel}  (rvmark file)`);
     }
   }
   return violations;
@@ -315,7 +315,7 @@ function collectReservedNameViolations(dir: string, base: string): string[] {
 const reservedViolations = collectReservedNameViolations(RVMARK_DIR, '');
 if (reservedViolations.length) {
   throw new Error(
-    `Reserved-name violation: underscore-prefixed directories and .rvmark files are ` +
+    `Reserved-name violation: underscore-prefixed directories and rvmark files are ` +
     `not allowed in the content tree (the '_' prefix is reserved for engine paths).\n` +
     reservedViolations.map(v => `  - ${v}`).join('\n'),
   );
@@ -330,22 +330,30 @@ function walkRvmark(dir: string, base: string): string[] {
     const rel = base ? `${base}/${entry}` : entry;
     if (statSync(full).isDirectory()) {
       results.push(...walkRvmark(full, rel));
-    } else if (entry.endsWith('.rvmark')) {
+    } else if (isRvFile(entry)) {
       results.push(rel);
     }
   }
   return results;
 }
 
-const allRvmarkFiles = walkRvmark(RVMARK_DIR, '').sort();
+// Keyed by the published name (foo.rv.md); the source may be foo.rvmark.
+const sourcePathOf = new Map<string, string>();
+for (const src of walkRvmark(RVMARK_DIR, '')) {
+  const published = toRvFile(src);
+  const clash = sourcePathOf.get(published);
+  if (clash) throw new Error(`${clash} and ${src} both publish as ${published}`);
+  sourcePathOf.set(published, src);
+}
+const allRvmarkFiles = [...sourcePathOf.keys()].sort();
 
-// Primacy: foo.rvmark shadows foo/index.rvmark
+// Primacy: foo.rv.md shadows foo/index.rv.md
 const allFileSet = new Set(allRvmarkFiles);
 const shadowedSet = new Set();
 for (const f of allRvmarkFiles) {
-  if (!f.endsWith('/index.rvmark')) continue;
-  const dirStem = f.slice(0, -'/index.rvmark'.length);
-  const shadowFile = dirStem + '.rvmark';
+  if (!f.endsWith('/index' + RV_EXT)) continue;
+  const dirStem = f.slice(0, -('/index' + RV_EXT).length);
+  const shadowFile = dirStem + RV_EXT;
   if (allFileSet.has(shadowFile)) {
     console.warn(`  ⚠ ${shadowFile} shadows ${f} — skipping ${f}`);
     shadowedSet.add(f);
@@ -447,7 +455,7 @@ function stripDraftLines(src: string) {
 
 // First pass: parse each file to get raw head (local meta + tagDefs only).
 for (const relPath of rvmarkFiles) {
-  const src = readFileSync(join(RVMARK_DIR, relPath), 'utf8');
+  const src = readFileSync(join(RVMARK_DIR, sourcePathOf.get(relPath)!), 'utf8');
   const raw = parse(src);
 
   if (!INCLUDE_DRAFTS && raw.head.meta?.has('draft')) {
@@ -507,7 +515,7 @@ function resolveTransclusion(val: string, rvFile: RvFileT) {
 
   let targetSf = rvFiles.get(targetFile);
   if (!targetSf) {
-    targetFile = targetFile.replace(/\.rvmark$/, '') + '/index.rvmark';
+    targetFile = stripRvExt(targetFile) + '/index' + RV_EXT;
     targetSf = rvFiles.get(targetFile);
   }
   if (!targetSf) return null;
@@ -544,7 +552,7 @@ function transclusionHref(val: string, rvFile: RvFileT) {
   if (!targetFile) return null;
 
   if (!rvFiles.has(targetFile)) {
-    const fallback = targetFile.replace(/\.rvmark$/, '') + '/index.rvmark';
+    const fallback = stripRvExt(targetFile) + '/index' + RV_EXT;
     if (rvFiles.has(fallback)) targetFile = fallback;
   }
 
@@ -912,7 +920,7 @@ function renderStaticNodes(nodes: RvNode[], rvFile: RvFileT, depth = 0) {
 // absolute URL is built from the same origin, and a subtree that overrode it
 // would be claiming to live somewhere else. Trailing slash trimmed so
 // SITE_URL + '/' + stem never doubles it.
-const rootMeta = rvFiles.get('index.rvmark')?.head?.meta;
+const rootMeta = rvFiles.get('index' + RV_EXT)?.head?.meta;
 const SITE_URL = (rootMeta?.get('site-url') ?? '').replace(/\/+$/, '');
 if (SITE_URL && !/^https?:\/\//.test(SITE_URL))
   throw new Error(`buildSite: site-url must be an absolute origin (got '${SITE_URL}')`);
@@ -1156,7 +1164,7 @@ for (const [relPath, rvFile] of rvFiles) {
   // is still copied here. Shadowing governs which HTML page wins, not which
   // source bytes are emitted. Draft handling is unchanged.
   for (const relPath of allRvmarkFiles) {
-    const src = readFileSync(join(RVMARK_DIR, relPath), 'utf8');
+    const src = readFileSync(join(RVMARK_DIR, sourcePathOf.get(relPath)!), 'utf8');
     // Skip draft files. Can't use sourceFiles membership here — shadowed files are
     // absent from sourceFiles regardless of draft status — so check the source.
     if (!INCLUDE_DRAFTS && parse(src).head.meta?.has('draft')) continue;
@@ -1166,14 +1174,14 @@ for (const [relPath, rvFile] of rvFiles) {
     writeFileSync(outPath, stripped);
   }
 
-  // Copy non-.rvmark files in the rvmark dir (e.g. docs.md, images).
+  // Copy non-rvmark files in the rvmark dir (e.g. docs.md, images).
   function copyNonRvmark(dir: string, relBase: string) {
     for (const entry of readdirSync(dir)) {
       const full = join(dir, entry);
       const rel  = relBase ? `${relBase}/${entry}` : entry;
       if (statSync(full).isDirectory()) {
         copyNonRvmark(full, rel);
-      } else if (!entry.endsWith('.rvmark') && !entry.endsWith('.mjs')) {
+      } else if (!isRvFile(entry) && !entry.endsWith('.mjs')) {
         const outPath = join(DIST_DIR, contentOutSub, rel);
         mkdirSync(dirname(outPath), { recursive: true });
         cpSync(full, outPath);
@@ -1202,7 +1210,7 @@ for (const [relPath, rvFile] of rvFiles) {
     const urls: string[] = [];
     for (const [urlStem, relPath] of urlStemToFile) {
       if (!indexable(rvFiles.get(relPath)?.head?.meta, relPath)) continue;
-      const lastmod = statSync(join(RVMARK_DIR, relPath)).mtime.toISOString().slice(0, 10);
+      const lastmod = statSync(join(RVMARK_DIR, sourcePathOf.get(relPath)!)).mtime.toISOString().slice(0, 10);
       urls.push(
         `  <url>\n` +
         `    <loc>${escHtml(SITE_URL + '/' + (urlStem ? urlStem + '/' : ''))}</loc>\n` +

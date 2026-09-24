@@ -142,7 +142,7 @@ test.describe('page load and hydration', () => {
     await page.goto('/');
     const rvmarkPage = await page.evaluate(() => window.__RVMARK_PAGE__);
     expect(rvmarkPage).toBeTruthy();
-    expect(rvmarkPage.file).toMatch(/\.rvmark$/);
+    expect(rvmarkPage.file).toMatch(/\.rv\.md$/);
   });
 
   test('window.__RVMARK_SITE_MAP__ is set and contains known pages', async ({ page }) => {
@@ -765,7 +765,7 @@ test.describe('delayed and broken transclusions', () => {
   test('delayed children-mode transclusion shows one loading marker, then settles', async ({ page }) => {
     let release;
     const gate = new Promise((r) => { release = r; });
-    await page.route('**/_rvmark/other.rvmark', async (route) => {
+    await page.route('**/_rvmark/other.rv.md', async (route) => {
       await gate;               // hold the fetch — this IS the delay
       await route.continue();
     });
@@ -786,7 +786,7 @@ test.describe('delayed and broken transclusions', () => {
   });
 
   test('broken children-mode transclusion shows a not-found error marker', async ({ page }) => {
-    await page.route('**/_rvmark/other.rvmark', (route) => route.fulfill({ status: 404, body: 'nope' }));
+    await page.route('**/_rvmark/other.rv.md', (route) => route.fulfill({ status: 404, body: 'nope' }));
 
     await page.goto('/');
     await waitForTree(page);

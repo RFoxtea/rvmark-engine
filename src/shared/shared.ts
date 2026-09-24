@@ -13,12 +13,33 @@ import type { RvNode } from './parser.js';
 // _vendor/ (third-party libs). See build/site.ts.
 export const RVMARK_SEGMENT = '/_rvmark/';
 
+// The extension rvmark files are published and addressed under. Sources may
+// still be named `.rvmark`; the build renames them to this.
+export const RV_EXT = '.rv.md';
+const LEGACY_RV_EXT = '.rvmark';
+
+export function isRvFile(path: string): boolean {
+  return path.endsWith(RV_EXT) || path.endsWith(LEGACY_RV_EXT);
+}
+
+export function stripRvExt(path: string): string {
+  if (path.endsWith(RV_EXT)) return path.slice(0, -RV_EXT.length);
+  if (path.endsWith(LEGACY_RV_EXT)) return path.slice(0, -LEGACY_RV_EXT.length);
+  return path;
+}
+
+/** 'foo' / 'foo.rvmark' / 'foo.rv.md' → 'foo.rv.md'; 'dir/' → 'dir/index.rv.md'. */
+export function toRvFile(path: string): string {
+  if (!path || path.endsWith('/')) return path + 'index' + RV_EXT;
+  return stripRvExt(path) + RV_EXT;
+}
+
 /**
  * The boot context a built page hands the engine, stamped inline as
  * window.__RVMARK_PAGE__ by the builder (see template.html), read by main.ts
  * init and shell.ts's mount-path lookup.
  *
- *   file - the page's source, relative to the content root ('docs/writing.rvmark')
+ *   file - the page's source, relative to the content root ('docs/writing.rv.md')
  *   base - the prefix from this output page up to the site root ('../../'),
  *          relative rather than root-absolute so links also work over file://
  *
@@ -38,13 +59,13 @@ export interface RvmarkPageContext {
 //   - origin: 'https://host' (or 'http://host') — always present at runtime.
 //     For same-origin local files, runtime prepends location.origin in loadPageFile.
 //   - /_rvmark/: literal path segment where every federated site publishes raw files.
-//   - file:    relative path within the origin's rvmark tree, e.g. 'docs.rvmark'
-//              or 'logic/nd.rvmark', or an asset path like 'images/photo.jpg'.
+//   - file:    relative path within the origin's rvmark tree, e.g. 'docs.rv.md'
+//              or 'logic/nd.rv.md', or an asset path like 'images/photo.jpg'.
 //   - #slug:   optional fragment.
 //
 // Examples:
-//   'https://thissite.com/_rvmark/docs.rvmark#intro'
-//   'https://alice.example/_rvmark/docs.rvmark#intro'
+//   'https://thissite.com/_rvmark/docs.rv.md#intro'
+//   'https://alice.example/_rvmark/docs.rv.md#intro'
 //   'https://thissite.com/_rvmark/images/photo.jpg'
 //
 // sourceFileAddress is a canonical address (the file that owns the ref).
@@ -110,12 +131,10 @@ export function resolveAddress(ref: string, sourceFileAddress: string): string |
 
   let resolved = resolveLocalPath(pathPart, sourceFileAddress);
   // A trailing slash names a directory, so it takes that directory's index
-  // rather than a file called '.rvmark'. Same rule buildSigilAddress applies
-  // (origin.ts); without it the '.rvmark' request 404s and only the
-  // <file>/index.rvmark fallback in loadRvmarkFile makes the ref work.
-  if (resolved.endsWith('/')) resolved += 'index.rvmark';
-  else if (!resolved.endsWith('.rvmark')) resolved += '.rvmark';
-  return resolved + fragment;
+  // rather than a file called '.rv.md'. Same rule buildSigilAddress applies
+  // (origin.ts); without it the '.rv.md' request 404s and only the
+  // <file>/index.rv.md fallback in loadRvmarkFile makes the ref work.
+  return toRvFile(resolved) + fragment;
 }
 
 /**
@@ -181,9 +200,9 @@ export function resolveMediaAddress(ref: string, sourceFileAddress: string): str
 
 /**
  * Convert a canonical address to a navigable href for <a href>.
- * Strips '/_rvmark/', strips '.rvmark', maps 'index' to '', preserves origin.
- *   'https://thissite.com/_rvmark/docs.rvmark#x'  → 'https://thissite.com/docs#x'
- *   'https://alice.com/_rvmark/docs.rvmark#x'    → 'https://alice.com/docs#x'
+ * Strips '/_rvmark/', strips '.rv.md', maps 'index' to '', preserves origin.
+ *   'https://thissite.com/_rvmark/docs.rv.md#x'  → 'https://thissite.com/docs#x'
+ *   'https://alice.com/_rvmark/docs.rv.md#x'    → 'https://alice.com/docs#x'
  *   'https://thissite.com/_rvmark/images/p.jpg'  → 'https://thissite.com/_rvmark/images/p.jpg'
  */
 export function addressToHref(address: string): string {
@@ -197,12 +216,12 @@ export function addressToHref(address: string): string {
   const fragment = hashIdx === -1 ? '' : without.slice(hashIdx);
 
   // Non-rvmark assets are served under /_rvmark/ as-is
-  if (!filePart.endsWith('.rvmark')) return origin + RVMARK_SEGMENT + filePart + fragment;
+  if (!isRvFile(filePart)) return origin + RVMARK_SEGMENT + filePart + fragment;
   return origin + '/' + fileToUrlStem(filePart) + fragment;
 }
 
 /**
- * Extract the .rvmark file path (relative to the origin's rvmark tree) from a
+ * Extract the rvmark file path (relative to the origin's rvmark tree) from a
  * canonical address. Returns null if the address doesn't point under /_rvmark/.
  */
 export function addressToFile(address: string): string | null {
@@ -224,13 +243,13 @@ export function addressToSlug(address: string): string | null {
 
 /**
  * Convert a relative rvmark file path to its URL stem.
- *   'index.rvmark'        → ''
- *   'docs.rvmark'         → 'docs'
- *   'logic/nd.rvmark'     → 'logic/nd'
- *   'logic/index.rvmark'  → 'logic'
+ *   'index.rv.md'         → ''
+ *   'docs.rv.md'          → 'docs'
+ *   'logic/nd.rv.md'      → 'logic/nd'
+ *   'logic/index.rv.md'   → 'logic'
  */
 export function fileToUrlStem(relPath: string): string {
-  let stem = relPath.replace(/\.rvmark$/, '');
+  let stem = stripRvExt(relPath);
   if (stem === 'index') return '';
   if (stem.endsWith('/index')) stem = stem.slice(0, -'/index'.length);
   return stem;

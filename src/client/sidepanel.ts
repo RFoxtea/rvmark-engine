@@ -30,7 +30,7 @@
 import { mdToHtml } from './markdown.js';
 import { getPageContext } from './page-context.js';
 
-import { addressToHref } from '../shared/shared.js';
+import { addressToHref, isRvFile } from '../shared/shared.js';
 import { originFor, addressOf, resolveRefAt, fetchMediaAllAt } from './origin-host.js';
 import { parsePass } from './handler-utils.js';
 import { prerootFrame, StateRelay, buildStatePass } from './state.js';
@@ -91,6 +91,7 @@ function strategyFor(refString: string | null): string {
   if (!refString) return 'rvmark';
   const hashIdx = refString.indexOf('#');
   const pathPart = hashIdx !== -1 ? refString.slice(0, hashIdx) : refString;
+  if (isRvFile(pathPart)) return 'rvmark';
   if (pathPart.endsWith('.md')) return 'markdown';
   if (pathPart.endsWith('.html')) return 'html';
   return 'rvmark';

@@ -37,7 +37,7 @@
 import type { RvNode, NodeAttrs, FileMeta, OriginDef, Tag } from '../shared/parser.js';
 import {
   resolveSlugInFile, resolveAddress, resolveMediaAddress, addressToSlug, addressOrigin,
-  parseTranscludeEntry, RVMARK_SEGMENT,
+  parseTranscludeEntry, RVMARK_SEGMENT, toRvFile,
 } from '../shared/shared.js';
 import { loadRvmarkFile, invalidateLoaderCaches } from './loader.js';
 import type { RvFile } from './rv-file.js';
@@ -240,10 +240,7 @@ function resolveFallbackRoot(
 // Construct a canonical address for `<origin-root>/<file>#<slug>`.
 function buildSigilAddress(originRoot: string, path: string, slug: string | null): string {
   const root = originRoot.endsWith('/') ? originRoot : originRoot + '/';
-  let file = path.replace(/^\/+/, '');
-  if (!file) file = 'index.rvmark';
-  if (!file.endsWith('.rvmark') && !file.endsWith('/')) file += '.rvmark';
-  if (file.endsWith('/')) file += 'index.rvmark';
+  const file = toRvFile(path.replace(/^\/+/, ''));
   return root + RVMARK_SEGMENT.slice(1) + file + (slug ? '#' + slug : '');
 }
 

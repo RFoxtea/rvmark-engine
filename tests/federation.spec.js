@@ -77,6 +77,6 @@ test.describe('cross-origin transclusion via origin sigils', () => {
     await page.goto('/federation-test/');
     await waitForTree(page);
     await waitForNode(page, 'peer-child');
-    expect(peerRequests.some(u => u.includes('federation-target.rvmark'))).toBe(true);
+    expect(peerRequests.some(u => u.includes('federation-target.rv.md'))).toBe(true);
   });
 });

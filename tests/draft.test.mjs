@@ -105,8 +105,8 @@ test('draft content is absent from built static HTML', () => {
   }
 });
 
-test('draft content is absent from the served .rvmark source', () => {
-  const src = readFileSync(join(DIST, '_rvmark/index.rvmark'), 'utf8');
+test('draft content is absent from the served source', () => {
+  const src = readFileSync(join(DIST, '_rvmark/index.rv.md'), 'utf8');
   for (const s of DRAFT_STRINGS) {
     assert.ok(!src.includes(s), `${s} leaked into the served source`);
   }
