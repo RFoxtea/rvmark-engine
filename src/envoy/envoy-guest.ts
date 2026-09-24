@@ -53,7 +53,7 @@
 import type { PortableNode } from '../shared/portable-node.js';
 import { serializeNode } from '../shared/portable-node.js';
 import type { RvNode } from '../shared/parser.js';
-import { originFor, type Address } from './origin.js';
+import { originFor, type Candidate } from './origin.js';
 
 export type Transform = (node: PortableNode) => PortableNode | Promise<PortableNode>;
 
@@ -148,7 +148,7 @@ const QUERIES: Record<string, (args: any) => Promise<unknown>> = {
     return Promise.all(kids.map(serve));
   },
 
-  async resolve([key, refs]: [string, string[]]): Promise<Address[][]> {
+  async resolve([key, refs]: [string, string[]]): Promise<Candidate[][]> {
     return originFor(base()).resolve(key, refs);
   },
 

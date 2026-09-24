@@ -61,6 +61,14 @@ export interface Address {
   key:     string;
 }
 
+/** A ref for the origin at `baseUrl` to resolve itself (a sigil's target). */
+export interface Referral {
+  baseUrl: string;
+  ref:     string;
+}
+
+export type Candidate = Address | Referral;
+
 // ── The not-found register ────────────────────────────────────────────────────
 //
 // One question, asked once per origin: is there an envoy here AT ALL. A baseUrl
@@ -302,7 +310,7 @@ function envoyFor(baseUrl: string): OriginEnvoy {
 export interface Origin {
   node(key: string):                             Promise<RvNode | null>;
   childrenOf(key: string):                       Promise<RvNode[]>;
-  resolve(key: string, refs: string[]):          Promise<Address[][]>;
+  resolve(key: string, refs: string[]):          Promise<Candidate[][]>;
   hasMatchBelow(keys: string[], q: string):      Promise<boolean[]>;
   resolveResources(key: string, refs: string[]): Promise<(string | null)[]>;
   fetchResources(key: string, refs: string[]):   Promise<(FetchedResource | null)[]>;
@@ -346,8 +354,8 @@ class RemoteOrigin implements Origin {
     return wire.map(w => this.accept(w));
   }
 
-  resolve(key: string, refs: string[]): Promise<Address[][]> {
-    return this.ask<Address[][]>('resolve', [key, refs]);
+  resolve(key: string, refs: string[]): Promise<Candidate[][]> {
+    return this.ask<Candidate[][]>('resolve', [key, refs]);
   }
 
   hasMatchBelow(keys: string[], q: string): Promise<boolean[]> {
@@ -419,8 +427,9 @@ function currentBaseUrl(): string {
  *
  * The ref crosses as the author wrote it. Sigils, fallback chains, `.rvmark`
  * suffixing and path arithmetic are all origin-side and no caller learns that
- * any of them exist. What comes back is candidate addresses, in order, and the
- * walk over them happens HERE rather than inside the origin: a fallback chain
+ * any of them exist. What comes back is candidates, in order: addresses, or
+ * referrals — a sigil's ref, which only the origin it names can turn into one
+ * of its keys. The walk over them happens HERE rather than inside the origin: a fallback chain
  * falls through only when a load *fails*, and an origin must not fetch what a
  * foreign address points at — producing the node would mean parsing another
  * origin's content, which is the thing the boundary exists to stop.
@@ -432,9 +441,16 @@ export async function resolveRefAt(from: Address, rawRef: string | null | undefi
   if (!rawRef) return null;
   try {
     const candidates = (await originFor(from.baseUrl).resolve(from.key, [rawRef]))[0] ?? [];
-    for (const { baseUrl, key } of candidates) {
-      const node = await originFor(baseUrl).node(key).catch(() => null);
-      if (node) return node;
+    for (const candidate of candidates) {
+      // A referral's ref is '/'-rooted, so the key it is resolved from is moot.
+      const addresses = 'ref' in candidate
+        ? ((await originFor(candidate.baseUrl).resolve('/', [candidate.ref]))[0] ?? [])
+        : [candidate];
+      for (const address of addresses) {
+        if (!('key' in address)) continue;
+        const node = await originFor(address.baseUrl).node(address.key).catch(() => null);
+        if (node) return node;
+      }
     }
     return null;
   } catch { return null; }

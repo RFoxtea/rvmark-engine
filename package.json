@@ -13,6 +13,10 @@
       "types": "./out/build/site.d.ts",
       "import": "./out/build/site.js"
     },
+    "./build/browser": {
+      "types": "./out/build/browser.d.ts",
+      "import": "./out/build/browser.js"
+    },
     "./envoy": {
       "types": "./out/envoy/envoy-guest.d.ts",
       "import": "./out/envoy/envoy-guest.js"

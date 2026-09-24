@@ -37,7 +37,7 @@
 import type { RvNode, NodeAttrs, FileMeta, OriginDef, Tag } from '../shared/parser.js';
 import {
   resolveSlugInFile, resolveAddress, resolveMediaAddress, addressToSlug, addressOrigin,
-  parseTranscludeEntry, RVMARK_SEGMENT, toRvFile,
+  parseTranscludeEntry, RVMARK_SEGMENT,
 } from '../shared/shared.js';
 import { loadRvmarkFile, invalidateLoaderCaches } from './loader.js';
 import type { RvFile } from './rv-file.js';
@@ -58,6 +58,15 @@ export interface Address {
   key:     string;
 }
 
+/** A ref for the origin at `baseUrl` to resolve itself. A sigil names an
+ *  origin, not its keys, so that origin is asked for the '/'-rooted ref. */
+export interface Referral {
+  baseUrl: string;
+  ref:     string;
+}
+
+export type Candidate = Address | Referral;
+
 
 /**
  * The queries an origin answers.
@@ -71,7 +80,7 @@ export interface Address {
 export interface Origin {
   node(key: string):                        Promise<RvNode | null>;
   childrenOf(key: string):                  Promise<RvNode[]>;
-  resolve(key: string, refs: string[]):     Promise<Address[][]>;
+  resolve(key: string, refs: string[]):     Promise<Candidate[][]>;
   hasMatchBelow(keys: string[], q: string): Promise<boolean[]>;
 
   /**
@@ -237,21 +246,24 @@ function resolveFallbackRoot(
   return null;
 }
 
-// Construct a canonical address for `<origin-root>/<file>#<slug>`.
-function buildSigilAddress(originRoot: string, path: string, slug: string | null): string {
-  const root = originRoot.endsWith('/') ? originRoot : originRoot + '/';
-  const file = toRvFile(path.replace(/^\/+/, ''));
-  return root + RVMARK_SEGMENT.slice(1) + file + (slug ? '#' + slug : '');
+// `<origin-root>/<path>#<slug>` as a '/'-rooted ref on that origin. A path in
+// the root is a directory of the origin's content: one envoy answers for all of
+// an origin, so there is no second content root beneath it.
+function sigilReferral(originRoot: string, path: string, slug: string | null): Referral {
+  const baseUrl = addressOrigin(originRoot);
+  let dir = originRoot.slice(baseUrl.length);
+  if (dir.startsWith(RVMARK_SEGMENT)) dir = dir.slice(RVMARK_SEGMENT.length - 1);
+  if (!dir.startsWith('/')) dir = '/' + dir;
+  if (!dir.endsWith('/')) dir += '/';
+  return { baseUrl, ref: dir + path.replace(/^\/+/, '') + (slug ? '#' + slug : '') };
 }
 
 /**
- * The candidate addresses for a sigil ref, in the order they should be tried.
+ * The origins to ask for a sigil ref, in the order they should be tried.
  *
- * Candidates, not nodes: a fallback chain falls through only when a load
- * *fails*, and this origin must not fetch what a foreign address points at —
- * producing the node would mean parsing another origin's content, which is the
- * thing the boundary exists to stop. So the chain leaves here as data and the
- * caller walks it.
+ * Referrals, not nodes or keys: a fallback chain falls through only when a load
+ * *fails*, and only the named origin knows which of its files a path means.
+ * So the chain leaves here as data and the caller walks it.
  */
 function sigilCandidates(
   sigil:             string,
@@ -260,7 +272,7 @@ function sigilCandidates(
   origins:           Record<string, OriginDef>,
   sourceFileAddress: string,
   visited:           Set<string>,
-): string[] {
+): Referral[] {
   if (visited.has(sigil) || visited.size >= FALLBACK_DEPTH_CAP) return [];
   const def = origins[sigil];
   if (!def) {
@@ -270,7 +282,7 @@ function sigilCandidates(
   const next = new Set(visited);
   next.add(sigil);
 
-  const out = [buildSigilAddress(def.url, path, slug)];
+  const out = [sigilReferral(def.url, path, slug)];
   if (!def.fallback) return out;
 
   if (def.fallback.startsWith('@')) {
@@ -279,7 +291,7 @@ function sigilCandidates(
     const fbSubpath = slashIdx === -1 ? '' : def.fallback.slice(slashIdx + 1);
     if (fbSubpath) {
       const fbRoot = resolveFallbackRoot(def.fallback, origins, sourceFileAddress, next);
-      if (fbRoot) out.push(buildSigilAddress(fbRoot, path, slug));
+      if (fbRoot) out.push(sigilReferral(fbRoot, path, slug));
     } else {
       out.push(...sigilCandidates(fbSigil, path, slug, origins, sourceFileAddress, next));
     }
@@ -287,7 +299,7 @@ function sigilCandidates(
   }
 
   const fbRoot = resolveFallbackRoot(def.fallback, origins, sourceFileAddress, next);
-  if (fbRoot) out.push(buildSigilAddress(fbRoot, path, slug));
+  if (fbRoot) out.push(sigilReferral(fbRoot, path, slug));
   return out;
 }
 
@@ -359,9 +371,9 @@ class RvmarkOrigin implements Origin {
     return (await this.node(key))?.children ?? [];
   }
 
-  async resolve(key: string, refs: string[]): Promise<Address[][]> {
+  async resolve(key: string, refs: string[]): Promise<Candidate[][]> {
     const sourceFileAddress = this.address(key);
-    const out: Address[][] = [];
+    const out: Candidate[][] = [];
 
     for (const rawIn of refs) {
       const raw = rawIn ? parseTranscludeEntry(rawIn).ref : '';
@@ -371,10 +383,7 @@ class RvmarkOrigin implements Origin {
       if (sigil) {
         const file = await loadRvmarkFile(sourceFileAddress);
         const origins = file?.head.origins ?? {};
-        out.push(
-          sigilCandidates(sigil.sigil, sigil.path, sigil.slug, origins, sourceFileAddress, new Set())
-            .map(addressOf),
-        );
+        out.push(sigilCandidates(sigil.sigil, sigil.path, sigil.slug, origins, sourceFileAddress, new Set()));
         continue;
       }
 
