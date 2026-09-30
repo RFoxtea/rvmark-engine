@@ -33,6 +33,10 @@
       "types": "./out/build/builder.d.ts",
       "import": "./out/build/builder.js"
     },
+    "./edit": {
+      "types": "./out/edit/outline.d.ts",
+      "default": "./out/edit/outline.js"
+    },
     "./package.json": "./package.json"
   },
   "engines": {

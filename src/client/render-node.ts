@@ -153,8 +153,10 @@ function spawnSlot(
 function reactiveSpawnSlot(
   slot:       ChildSlot,
   focusSlug:  string | null,
+  isHidden:   () => boolean,
 ): void {
-  spawnSlot(slot, focusSlug);
+  const rn = spawnSlot(slot, focusSlug);
+  if (isHidden()) { rn.destroy(); return; }
   insertSlot(slot);
   recomputeAria(slot.slots);
   if (slot.ul.isConnected) slot.live!.fireConnected();
@@ -177,7 +179,7 @@ function initSlot(
   const check = () => {
     const hidden = isHidden();
     if (!hidden && slot.live === null) {
-      reactiveSpawnSlot(slot, focusSlug);
+      reactiveSpawnSlot(slot, focusSlug, isHidden);
     } else if (hidden && slot.live !== null) {
       slot.live.destroy();
     }
@@ -187,8 +189,11 @@ function initSlot(
   keys.forEach((k, i) => slot.parentState.subscribe(k, fns[i]));
   slot.teardown = () => keys.forEach((k, i) => slot.parentState.unsubscribe(k, fns[i]));
 
-  if (!isHidden()) return spawnSlot(slot, focusSlug);
-  return null;
+  if (isHidden()) return null;
+  // on-spawn runs during construction and may hide the node it spawns.
+  const rn = spawnSlot(slot, focusSlug);
+  if (isHidden()) { rn.destroy(); return null; }
+  return rn;
 }
 
 

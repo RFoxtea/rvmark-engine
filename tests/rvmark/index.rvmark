@@ -162,6 +162,10 @@ DRAFT_CONTINUATION_TEXT that spans a continuation line
   18. {#pass-scope-sidepanel-rewire-b; let &exvar = 0; open} pass-scope-sidepanel-rewire-b
     1. {#pass-sidepanel-rewire-host-b; sidepanel: ./other#pass-sidepanel-target; action: sidepanel; sidepanel-pass: &exvar rw} pass-sidepanel-rewire-host-b
     2. {#pass-sidepanel-rewire-b-indicator; show-when: &exvar == 1} pass-sidepanel-rewire-b-written
+  19. {#spawn-self-hide-scope; let &selfhide = 0; open} spawn-self-hide-scope
+    1. {#spawn-self-hide-parent} spawn-self-hide-parent
+      1. {#spawn-self-hide; on-spawn: set &selfhide = 1; show-when: &selfhide == 0} spawn-self-hide
+    2. {#spawn-self-hide-indicator; show-when: &selfhide == 1} spawn-self-hide-written
 23. {#iframe-pass-root; open} iframe-pass fixture root
   1. {#iframe-pass-scope-rw; let &iframevar = 0; open} iframe-pass-scope-rw
     1. {#iframe-pass-host-rw; = iframe; iframe-pass: &iframevar rw} ./iframe-fixture.html

@@ -1174,6 +1174,12 @@ test.describe('state pass system', () => {
     await expect(await waitForNode(page, 'pass-read-indicator')).toBeVisible();
   });
 
+  test('on-spawn that fails its own show-when removes the node it spawned', async ({ page }) => {
+    await (await nodeContent(page, 'spawn-self-hide-parent')).press('ArrowRight');
+    await expect(await waitForNode(page, 'spawn-self-hide-indicator')).toBeVisible();
+    expect(await tryNodeContent(page, 'spawn-self-hide')).toBeNull();
+  });
+
   test('cross-file default: host state blocked without children-pass', async ({ page }) => {
     const host = await nodeContent(page, 'pass-host-blocked');
     await host.press('Enter'); // passvar<<1 in pass-scope-blocked
