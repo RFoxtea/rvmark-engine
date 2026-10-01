@@ -22,6 +22,9 @@
   --surface-2:   color-mix(in srgb, CanvasText 5%, Canvas);
   --highlight:   color-mix(in srgb, CanvasText 12%, Canvas);
 
+  /* Doubled: a bare `monospace` makes browsers scale the size by 13/16. */
+  --mono: monospace, monospace;
+
   --indent: 1.1rem;
   --bullet-w: 1rem;
   /* Sizes for mask-drawn chrome marks.
@@ -489,7 +492,7 @@ details[open] > .node-content.node-content--bullet-spins:not(.node-content--bull
 .node-label strong { font-weight: 700; }
 .node-label em     { font-style: italic; }
 .node-label a      { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
-.node-label code   { background: var(--surface); padding: 0 3px; border-radius: 2px; font-size: 0.85em; }
+.node-label code   { background: var(--surface); padding: 0 3px; border-radius: 2px; font-family: var(--mono, monospace); font-size: 0.85em; }
 .node-label rt     { font-size: 0.7em; }
 .node-label .vinculum { text-decoration: overline; }
 .node-label .vinculum .vinculum { text-decoration: overline double; }
@@ -1953,6 +1956,7 @@ body.sidepanel-open .sidepanel {
   background: var(--surface);
   padding: 0 3px;
   border-radius: 2px;
+  font-family: var(--mono, monospace);
   font-size: 0.85em;
 }
 

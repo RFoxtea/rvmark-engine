@@ -12,52 +12,84 @@ export interface OutlineNode {
   /** Length of the indent + ordinal/bullet + following whitespace. */
   matchLen: number;
   depth: number;
+  /** Fenced body, opening fence to closing fence. */
+  body: LineRange | null;
 }
 
 export type LineRange = [start: number, end: number];
 
-export const NODE_LINE = /^( *)(?:([a-zA-Z0-9]+)\.|([*-]))\s+/;
-const NODE_MEDIA = /\{[^}]*(?:=\s*block|type:\s*block)\b/;
-const NODE_MEDIA_INLINE = /\{[^}]*(?:=\s*block|type:\s*block)[^}]*\}\s*\S/;
+// Node lines and bodies as parser.ts reads them.
+export const NODE_LINE = /^([ \t]*)(?:([a-zA-Z0-9]+)\.|([*-]))\s+/;
 const INT_ORDINAL = /^[1-9][0-9]*$/;
 const FENCE_OPEN = /^([ \t]*)(`{3,}|~{3,})/;
 const FENCE_CLOSE = /^([ \t]*)(`{3,}|~{3,})\s*$/;
 
-interface Scan {
-  nodes: OutlineNode[];
-  /** Fenced bodies of block-type nodes, opening fence to closing fence. */
-  blockBodies: LineRange[];
+// The document head as parser.ts reads it: a meta block, then tag and origin
+// definitions, each possibly spanning lines.
+const HEAD_OPEN = /^\s*[{\[@]/;
+const META = /^\{.*\}$/s;
+const TAG_DEF = /^\[[^\]{]*\{.*\}\s*\]$/s;
+const ORIGIN_DEF = /^@[^\s{]+\s*\{.*\}\s*$/s;
+
+/**
+ * The line after the braced construct opening on line `i`: null if none opens
+ * there, Infinity if its brace never closes.
+ */
+function bracedEnd(lines: readonly string[], i: number): number | null {
+  if (!HEAD_OPEN.test(lines[i])) return null;
+  let depth = 0;
+  let seen = false;
+  for (let j = i; j < lines.length; j++) {
+    for (const ch of lines[j]) {
+      if (ch === '{') { depth++; seen = true; }
+      else if (ch === '}') depth--;
+    }
+    if (seen && depth <= 0) return j + 1;
+  }
+  return seen ? Infinity : null;
 }
 
-function scan(lines: readonly string[]): Scan {
+/**
+ * The first line past the document head. An unclosed brace takes the rest of
+ * the file: the parser rejects such a document, so nothing after it is a node.
+ */
+export function headEnd(lines: readonly string[]): number {
+  let i = 0;
+  for (let first = true; ; first = false) {
+    while (i < lines.length && !lines[i].trim()) i++;
+    if (i >= lines.length) return i;
+    const end = bracedEnd(lines, i);
+    if (end === null) return i;
+    if (end === Infinity) return lines.length;
+    const text = lines.slice(i, end).map(l => l.trim()).join(' ');
+    if (!(first && META.test(text)) && !TAG_DEF.test(text) && !ORIGIN_DEF.test(text)) return i;
+    i = end;
+  }
+}
+
+function scan(lines: readonly string[]): OutlineNode[] {
   const nodes: OutlineNode[] = [];
-  const blockBodies: LineRange[] = [];
-  let fenceChar: string | null = null;
-  let fenceLen = 0;
-  let fenceStart = -1;
-  let inMediaBody = false;
-  for (let i = 0; i < lines.length; i++) {
-    const text = lines[i];
-    if (fenceChar !== null) {
-      const closeM = FENCE_CLOSE.exec(text);
-      if (closeM && closeM[2][0] === fenceChar && closeM[2].length >= fenceLen) {
-        if (inMediaBody) { blockBodies.push([fenceStart, i]); inMediaBody = false; }
-        fenceChar = null; fenceLen = 0;
-      }
-      continue;
+  let i = headEnd(lines);
+  while (i < lines.length) {
+    const m = NODE_LINE.exec(lines[i]);
+    if (!m) { i++; continue; }
+    const node: OutlineNode = { lineIndex: i, indent: m[1], ordinal: m[2] || m[3], matchLen: m[0].length, depth: 0, body: null };
+    nodes.push(node);
+    i++;
+    let j = i;
+    while (j < lines.length && !lines[j].trim()) j++;
+    const open = j < lines.length ? FENCE_OPEN.exec(lines[j]) : null;
+    if (!open) continue;
+    let k = j + 1;
+    for (; k < lines.length; k++) {
+      const close = FENCE_CLOSE.exec(lines[k]);
+      if (close && close[2][0] === open[2][0] && close[2].length >= open[2].length && close[1] === open[1]) break;
     }
-    const openM = FENCE_OPEN.exec(text);
-    if (openM) { fenceChar = openM[2][0]; fenceLen = openM[2].length; fenceStart = i; continue; }
-    // Between a block-type node line and its opening fence, nothing is a node.
-    if (inMediaBody) continue;
-    const m = NODE_LINE.exec(text);
-    if (m) {
-      nodes.push({ lineIndex: i, indent: m[1], ordinal: m[2] || m[3], matchLen: m[0].length, depth: 0 });
-      if (NODE_MEDIA.test(text) && !NODE_MEDIA_INLINE.test(text)) inMediaBody = true;
-    }
+    node.body = [j, Math.min(k, lines.length - 1)];
+    i = k + 1;
   }
   assignDepths(nodes);
-  return { nodes, blockBodies };
+  return nodes;
 }
 
 function assignDepths(nodes: OutlineNode[]): void {
@@ -75,7 +107,7 @@ function assignDepths(nodes: OutlineNode[]): void {
 }
 
 export function collectNodes(lines: readonly string[]): OutlineNode[] {
-  return scan(lines).nodes;
+  return scan(lines);
 }
 
 /** The node's line through its last non-blank descendant line. */
@@ -90,10 +122,10 @@ export function subtreeRange(nodes: readonly OutlineNode[], idx: number, lines: 
   return [start, end];
 }
 
-/** Every node subtree spanning more than one line, plus every block body. */
+/** Every node subtree spanning more than one line, plus every body. */
 export function foldRanges(lines: readonly string[]): LineRange[] {
-  const { nodes, blockBodies } = scan(lines);
-  const ranges = [...blockBodies];
+  const nodes = scan(lines);
+  const ranges = nodes.flatMap(n => n.body ? [n.body] : []);
   for (let i = 0; i < nodes.length; i++) {
     const [start, end] = subtreeRange(nodes, i, lines);
     if (end > start) ranges.push([start, end]);

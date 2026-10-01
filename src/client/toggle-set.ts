@@ -229,15 +229,12 @@ export class ToggleSet {
    *  `hasChildren` says) and corrects itself if the answer is no. A row that is
    *  torn down before the reply lands has had `destroy` run, and drops it. */
   installWatch(setExpandable: (nowExpandable: boolean) => void): void {
-    if (this.alwaysOpen) return;
-    if (!this.rn.rvNode.hasChildren) {
-      if (this.expandable) setExpandable(true);
-      return;
-    }
+    if (this.alwaysOpen || !this.expandable) return;
     // Synchronously first, because `hasChildren` already answers the common
     // case and everything downstream — `{open}`, the toggle's wiring — runs in
     // this turn and would otherwise see a leaf.
     setExpandable(true);
+    if (!this.rn.rvNode.hasChildren) return;
 
     let dead = false;
     this._unwatchChildren = () => { dead = true; };

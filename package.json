@@ -34,8 +34,8 @@
       "import": "./out/build/builder.js"
     },
     "./edit": {
-      "types": "./out/edit/outline.d.ts",
-      "default": "./out/edit/outline.js"
+      "types": "./out/edit/index.d.ts",
+      "default": "./out/edit/index.js"
     },
     "./package.json": "./package.json"
   },
