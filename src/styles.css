@@ -375,10 +375,12 @@ details[open] > .node-content--bullet-image:not(.node-content--bullet-spins):not
   .toggle-badge::before { transition: none; }
 }
 
-/* Ordered-list items ({.li}). A list (.tree) that contains any .li item owns a
-   counter scoped to itself, so sibling lists each restart at 1. The number
-   replaces the bullet; nested .li lists count independently. */
-.tree:has(> .node > .node-content.li)                       { counter-reset: rvmark-li; }
+/* Ordered-list items ({.li}). Every list (.tree) owns a counter scoped to
+   itself, so sibling lists each restart at 1. The number replaces the bullet;
+   nested .li lists count independently. Unconditional rather than
+   :has(> .node > .node-content.li): that restyled every ancestor list on each
+   expand, and a counter nothing increments costs nothing. */
+.tree                                                       { counter-reset: rvmark-li; }
 .node-content.li                                            { counter-increment: rvmark-li; }
 /* Numbered items draw text, not an icon — undo the mask box from .toggle::before
    so the counter is painted as a glyph again (digits need no symbol font). */
@@ -689,25 +691,23 @@ details[open] > .node-content.node-content--bullet-spins:not(.node-content--bull
   margin-left: calc(var(--bullet-w) + var(--tree-gap));
 }
 
-.node:has(> .node-content[aria-expanded="true"]) > .node-children { display: block; }
+/* A sibling combinator, not .node:has(> …): :has() on the li makes every
+   ancestor li re-match its whole subtree on each expand. */
+.node > .node-content[aria-expanded="true"] ~ .node-children { display: block; }
 
 /* Static fallback: <details> already hides its own content when closed, so the
    .node-children default above would keep it hidden when open. The disclosure
    owns visibility here; the div is only a layout wrapper. */
 details > .node-children { display: block; }
 
-/* An always-open type (block) gets no disclosure in the fallback, matching its
-   ToggleSet alwaysOpen — its children sit beside the row and are never hidden,
-   so nothing would ever flip the default display:none for them.
+/* An always-open type (block) or `open: always` gets no disclosure in the
+   fallback — its children sit beside the row and are never hidden, so nothing
+   would ever flip the default display:none for them. Marked on the li at build
+   time.
 
-   Keyed off the row actually being an always-open type rather than off
-   #static-content: an id selector would outrank the :checked rules that drive
-   the table family's collapse further down, forcing every table open. */
-.node:has(> .node-content > .block-body) > .node-children { display: block; }
-
-/* `open: always` on an ordinary node — same situation: no disclosure, so
-   nothing flips the default display:none. Marked on the li at build time,
-   since there is no structural tell the way .block-body is one. */
+   A class rather than #static-content: an id selector would outrank the
+   :checked rules that drive the table family's collapse further down, forcing
+   every table open. */
 .node.static-always-open > .node-children { display: block; }
 
 /* The row inside a disclosure is a <summary>, which defaults to
@@ -1996,7 +1996,7 @@ body.sidepanel-open .sidepanel {
 }
 
 /* ── Children container: dissolve into the parent grid ── */
-.node:has(> .node-content--table[aria-expanded="true"]) > .node-children {
+.node > .node-content--table[aria-expanded="true"] ~ .node-children {
   display: contents;
   margin-left: 0;
 }

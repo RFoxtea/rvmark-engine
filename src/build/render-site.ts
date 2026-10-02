@@ -527,10 +527,11 @@ function renderStaticNode(node: RvNode, rvFile: RvFile, depth = 0) {
   // {hidden} marker stays on the li: it suppresses the whole row, children
   // included, and .node-content would only reach the row itself.
   const contentClasses = staticContentClasses(node, attrs);
+  const nodeType   = attrs.get('type') ?? defaultTypeName();
   const liClasses = [
     isHidden ? 'static-hidden' : '',
     'node',
-    attrs.get('open') === 'always' ? 'static-always-open' : '',
+    attrs.get('open') === 'always' || ALWAYS_OPEN_TYPES.has(nodeType) ? 'static-always-open' : '',
   ].filter(Boolean);
   const liClassAttr = ` class="${escHtml(liClasses.join(' '))}"`;
 
@@ -544,7 +545,6 @@ function renderStaticNode(node: RvNode, rvFile: RvFile, depth = 0) {
     }
   }
 
-  const nodeType   = attrs.get('type') ?? defaultTypeName();
   const hasBullet  = BULLET_TYPES.has(nodeType);
 
   // The `open` attribute, read exactly as text.ts/toggle-set.ts read it:

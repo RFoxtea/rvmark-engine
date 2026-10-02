@@ -13,6 +13,7 @@
 import { scrollRowIntoMiddle } from './scroll.js';
 import { sidepanelIsOpen, sidepanelClose } from './sidepanel.js';
 import { RenderNode } from './render-node.js';
+import { rowIsNavigable, edgeRow } from './handler-utils.js';
 import { spanIsInteractive } from './markdown.js';
 
 // ── Select-then-action click ───────────────────────────────────────────────
@@ -87,24 +88,6 @@ export function focusAndScroll(el: HTMLElement | null | undefined): void {
   scrollRowIntoMiddle(el);
 }
 
-// ── Visible content helpers ────────────────────────────────────────────────
-
-export function visibleContents(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>('.node-content')]
-    .filter(r => r.offsetParent !== null && (r.closest<HTMLElement>('.node') as any)?._renderNode?.selectable !== false);
-}
-
-// Returns the visible .node-content elements that are direct siblings of li
-// (i.e. children of the same parent <ul>, in document order, excluding hidden nodes).
-export function siblingContents(li: HTMLElement): HTMLElement[] {
-  const parentUl = li.parentElement;
-  if (!parentUl) return [];
-  return [...parentUl.children]
-    .filter(el => el.classList.contains('node'))
-    .map(el => el.querySelector<HTMLElement>(':scope > .node-content'))
-    .filter((c): c is HTMLElement => !!c && c.offsetParent !== null && (c.closest<HTMLElement>('.node') as any)?._renderNode?.selectable !== false);
-}
-
 // ── Global event listeners ─────────────────────────────────────────────────
 
 // Escape closes sidepanel.
@@ -129,10 +112,9 @@ document.addEventListener('keydown', (e) => {
   if (active && ARROW_CONSUMERS.has(active.tagName)) return;
   const ownerContent = active?.closest('.node-content');
   if (ownerContent) return;
-  const all = visibleContents();
-  if (!all.length) return;
   const current = RenderNode.currentSelection?.contentEl ?? null;
-  const target = (current && all.includes(current)) ? current : all[0];
+  const target = (current && rowIsNavigable(current)) ? current : edgeRow('first');
+  if (!target) return;
   target.focus();
   e.preventDefault();
 });

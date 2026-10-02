@@ -641,18 +641,49 @@ export function wireFocusGating(
 // ── Tree navigation ────────────────────────────────────────────────────────
 // Stage 1 bridge: in stage 2 these calls move onto RenderNode traversal methods.
 
-function visibleContents(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>('.node-content')]
-    .filter(r => r.offsetParent !== null && (r.closest<HTMLElement>('.node') as any)?._renderNode?.selectable !== false);
+// Rows are found by stepping from the current one, never by sweeping the
+// document: offsetParent costs O(depth), so testing every row on every keypress
+// made navigation O(rows × depth).
+
+export function rowIsNavigable(c: HTMLElement): boolean {
+  return c.offsetParent !== null && (c.closest<HTMLElement>('.node') as any)?._renderNode?.selectable !== false;
 }
 
-function siblingContents(li: HTMLElement): HTMLElement[] {
-  const parentUl = li.parentElement;
-  if (!parentUl) return [];
-  return [...parentUl.children]
-    .filter(el => el.classList.contains('node'))
-    .map(el => el.querySelector<HTMLElement>(':scope > .node-content'))
-    .filter((c): c is HTMLElement => !!c && c.offsetParent !== null && (c.closest<HTMLElement>('.node') as any)?._renderNode?.selectable !== false);
+function rowWalker(): TreeWalker {
+  return document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, (n) => {
+    const el = n as HTMLElement;
+    if (el.id === 'static-content') return NodeFilter.FILTER_REJECT;
+    return el.classList.contains('node-content') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+  });
+}
+
+// The nearest navigable row after (1) or before (-1) `from`, in document order.
+function adjacentRow(from: HTMLElement, dir: 1 | -1): HTMLElement | null {
+  const w = rowWalker();
+  w.currentNode = from;
+  for (;;) {
+    const n = (dir === 1 ? w.nextNode() : w.previousNode()) as HTMLElement | null;
+    if (!n || rowIsNavigable(n)) return n;
+  }
+}
+
+export function edgeRow(edge: 'first' | 'last'): HTMLElement | null {
+  const w = rowWalker();
+  if (edge === 'first') w.nextNode();
+  else while (w.lastChild()) { /* descend to the final row */ }
+  const c = w.currentNode as HTMLElement;
+  if (c === document.body) return null;
+  return rowIsNavigable(c) ? c : adjacentRow(c, edge === 'first' ? 1 : -1);
+}
+
+function adjacentSiblingRow(li: HTMLElement, dir: 1 | -1): HTMLElement | null {
+  const step = (el: Element) => dir === 1 ? el.nextElementSibling : el.previousElementSibling;
+  for (let el = step(li); el; el = step(el)) {
+    if (!el.classList.contains('node')) continue;
+    const c = el.querySelector<HTMLElement>(':scope > .node-content');
+    if (c && rowIsNavigable(c)) return c;
+  }
+  return null;
 }
 
 function focusAndScroll(el: HTMLElement | null | undefined): void {
@@ -665,44 +696,26 @@ function focusAndScroll(el: HTMLElement | null | undefined): void {
 // Returns true if the event was consumed.
 export function treeNavKeydown(e: KeyboardEvent, content: HTMLElement, li: HTMLElement): boolean {
   switch (e.key) {
-    case 'ArrowDown': {
-      if (e.altKey) {
-        const sibs = siblingContents(li);
-        focusAndScroll(sibs[sibs.indexOf(content) + 1] ?? null);
-      } else {
-        const all = visibleContents();
-        focusAndScroll(all[all.indexOf(content) + 1] ?? null);
-      }
+    case 'ArrowDown':
+      focusAndScroll(e.altKey ? adjacentSiblingRow(li, 1) : adjacentRow(content, 1));
       e.preventDefault();
       return true;
-    }
-    case 'ArrowUp': {
-      if (e.altKey) {
-        const sibs = siblingContents(li);
-        focusAndScroll(sibs[sibs.indexOf(content) - 1] ?? null);
-      } else {
-        const all = visibleContents();
-        focusAndScroll(all[all.indexOf(content) - 1] ?? null);
-      }
+    case 'ArrowUp':
+      focusAndScroll(e.altKey ? adjacentSiblingRow(li, -1) : adjacentRow(content, -1));
       e.preventDefault();
       return true;
-    }
     case 'ArrowLeft':
       focusAndScroll(li.parentElement?.closest<HTMLElement>('.node')?.querySelector<HTMLElement>(':scope > .node-content'));
       e.preventDefault();
       return true;
-    case 'Home': {
-      const all = visibleContents();
-      focusAndScroll(all[0] ?? null);
+    case 'Home':
+      focusAndScroll(edgeRow('first'));
       e.preventDefault();
       return true;
-    }
-    case 'End': {
-      const all = visibleContents();
-      focusAndScroll(all[all.length - 1] ?? null);
+    case 'End':
+      focusAndScroll(edgeRow('last'));
       e.preventDefault();
       return true;
-    }
   }
   return false;
 }
