@@ -10,7 +10,7 @@
  * and `DOMPurify` — a host installs both first (site.ts, browser.ts).
  */
 
-import { fileToUrlStem, resolveAddress, resolveMediaAddress, addressToFile, addressToSlug, addressToHref, parseTranscludeEntry, RV_EXT, isRvFile, stripRvExt, toRvFile } from '../shared/shared.js';
+import { fileToUrlStem, resolveAddress, resolveRef, resolveMediaAddress, addressToFile, addressToSlug, addressToHref, parseTranscludeEntry, RV_EXT, isRvFile, stripRvExt, toRvFile } from '../shared/shared.js';
 import { defaultTypeName } from '../shared/node-types.js';
 import { parse, resolveFile } from '../shared/parser.js';
 import type { RvNode, NodeAttrs, ResolvedTag, TagDef, OriginDef, SourceFile } from '../shared/parser.js';
@@ -337,12 +337,21 @@ function escHtml(s: string) {
 
 // ── Static HTML tree renderer ─────────────────────────────────────────────────
 
-function resolveTransclusion(val: string, rvFile: RvFile) {
+// The canonical address a transclusion ref targets, or null. An origin ref
+// takes the first origin in its chain: the rest are tried on load failure,
+// which a build cannot observe. Its referral is turned into an address here,
+// where the hydrated page would ask the named origin to.
+function transclusionAddress(val: string, rvFile: RvFile) {
   if (!val || typeof val !== 'string') return null;
-  if (val.startsWith('https://') || val.startsWith('http://')) return null;
+  const [target] = resolveRef(val, rvFile.pageAddress, rvFile.head.origins);
+  if (!target) return null;
+  return typeof target === 'string' ? target : resolveAddress(target.ref, target.baseUrl + '/');
+}
 
-  const address = resolveAddress(val, rvFile.pageAddress);
-  if (!address || address.startsWith('https://') || address.startsWith('http://')) return null;
+const isForeign = (address: string) => address.startsWith('https://') || address.startsWith('http://');
+
+function resolveTransclusion(address: string | null) {
+  if (!address || isForeign(address)) return null;
 
   let targetFile = addressToFile(address);
   const targetSlug = addressToSlug(address);
@@ -362,24 +371,18 @@ function resolveTransclusion(val: string, rvFile: RvFile) {
   return targetSf.roots.length ? { node: targetSf.roots[0], file: targetFile } : null;
 }
 
-function isInterpageRef(val: string, rvFile: RvFile) {
-  if (!val || typeof val !== 'string') return false;
-  if (val.startsWith('#')) return false;
-  if (val.startsWith('https://') || val.startsWith('http://')) return true;
-  const address = resolveAddress(val, rvFile.pageAddress);
-  if (!address) return false;
-  if (address.startsWith('https://') || address.startsWith('http://')) return true;
+function isInterpageRef(val: string, address: string | null, rvFile: RvFile) {
+  if (!address || val.startsWith('#')) return false;
+  if (isForeign(address)) return true;
   const targetFile = addressToFile(address);
   return !!targetFile && targetFile !== rvFile.address;
 }
 
-function transclusionHref(val: string, rvFile: RvFile) {
-  if (!val || typeof val !== 'string') return null;
-  if (val.startsWith('https://') || val.startsWith('http://')) return val;
-
-  const address = resolveAddress(val, rvFile.pageAddress);
+function transclusionHref(val: string, address: string | null) {
   if (!address) return null;
-  if (address.startsWith('https://') || address.startsWith('http://')) return address;
+  if (isForeign(val)) return val;
+  // Trailing slash on the page stem, so a static host serves it without a redirect.
+  if (isForeign(address)) return addressToHref(address).replace(/^([^#]*[^/#])(#|$)/, '$1/$2');
 
   if (val.startsWith('#')) return val;
 
@@ -592,11 +595,12 @@ function renderStaticNode(node: RvNode, rvFile: RvFile, depth = 0) {
   const transcludeVal = embedVal ?? childrenLinkVal;
 
   if (transcludeVal) {
-    const href = transclusionHref(transcludeVal, rvFile);
-    const refClass = isInterpageRef(transcludeVal, rvFile) ? 'static-ref static-ref--interpage' : 'static-ref';
+    const address = transclusionAddress(transcludeVal, rvFile);
+    const href = transclusionHref(transcludeVal, address);
+    const refClass = isInterpageRef(transcludeVal, address, rvFile) ? 'static-ref static-ref--interpage' : 'static-ref';
     let linkLabel = node.label || '';
     if (embedVal && !linkLabel) {
-      const resolved = resolveTransclusion(embedVal, rvFile);
+      const resolved = resolveTransclusion(address);
       if (resolved) {
         linkLabel = resolved.node.label || linkLabel || transcludeVal;
         const targetSourceFile = rvFiles.get(resolved.file);

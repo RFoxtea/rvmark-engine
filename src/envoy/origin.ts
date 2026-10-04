@@ -34,11 +34,12 @@
  * the wire can hold this module's store open.
  */
 
-import type { RvNode, NodeAttrs, FileMeta, OriginDef, Tag } from '../shared/parser.js';
+import type { RvNode, NodeAttrs, FileMeta, Tag } from '../shared/parser.js';
 import {
-  resolveSlugInFile, resolveAddress, resolveMediaAddress, addressToSlug, addressOrigin,
-  parseTranscludeEntry, RVMARK_SEGMENT,
+  resolveSlugInFile, resolveRef, isOriginRef, resolveMediaAddress, addressToSlug, addressOrigin,
+  parseTranscludeEntry,
 } from '../shared/shared.js';
+import type { Referral } from '../shared/shared.js';
 import { loadRvmarkFile, invalidateLoaderCaches } from './loader.js';
 import type { RvFile } from './rv-file.js';
 import { nodeTextMatches } from '../shared/search-match.js';
@@ -58,12 +59,7 @@ export interface Address {
   key:     string;
 }
 
-/** A ref for the origin at `baseUrl` to resolve itself. A sigil names an
- *  origin, not its keys, so that origin is asked for the '/'-rooted ref. */
-export interface Referral {
-  baseUrl: string;
-  ref:     string;
-}
+export type { Referral };
 
 export type Candidate = Address | Referral;
 
@@ -195,114 +191,6 @@ function currentBaseUrl(): string {
   return typeof location !== 'undefined' ? location.origin : '';
 }
 
-// ── Sigils (origin-side: the client never learns these exist) ─────────────────
-
-const FALLBACK_DEPTH_CAP = 8;
-
-/** Split '@sigil/path#slug', '@sigil#slug', or '@sigil'. Null if not a sigil. */
-function parseSigilRef(ref: string): { sigil: string; path: string; slug: string | null } | null {
-  if (!ref.startsWith('@')) return null;
-  const hashIdx = ref.indexOf('#');
-  const slug = hashIdx === -1 ? null : ref.slice(hashIdx + 1) || null;
-  const beforeHash = hashIdx === -1 ? ref : ref.slice(0, hashIdx);
-  const slashIdx = beforeHash.indexOf('/');
-  const sigil = slashIdx === -1 ? beforeHash : beforeHash.slice(0, slashIdx);
-  const path = slashIdx === -1 ? '' : beforeHash.slice(slashIdx + 1);
-  return { sigil, path, slug };
-}
-
-// Resolve a `fallback:` value to an origin root URL. Accepts another sigil
-// ('@name', '@name/subpath/'), or a local path ('/abs/path/', './rel/path/')
-// resolved against sourceFileAddress. Cycles caught by `visited`.
-function resolveFallbackRoot(
-  fallback: string,
-  origins: Record<string, OriginDef>,
-  sourceFileAddress: string,
-  visited: Set<string>,
-): string | null {
-  if (fallback.startsWith('@')) {
-    const slashIdx = fallback.indexOf('/');
-    const sigil = slashIdx === -1 ? fallback : fallback.slice(0, slashIdx);
-    const subpath = slashIdx === -1 ? '' : fallback.slice(slashIdx + 1);
-    if (visited.has(sigil)) return null;
-    const def = origins[sigil];
-    if (!def) return null;
-    const base = def.url.endsWith('/') ? def.url : def.url + '/';
-    return subpath ? base + subpath : base;
-  }
-  const origin = addressOrigin(sourceFileAddress);
-  if (fallback.startsWith('/')) return origin + fallback;
-  if (fallback.startsWith('./') || fallback.startsWith('../')) {
-    const localPart = sourceFileAddress.slice(origin.length);
-    const dir = localPart.replace(/[^/]*$/, '');
-    const parts = (dir + fallback).split('/');
-    const out: string[] = [];
-    for (const p of parts) {
-      if (p === '..') out.pop();
-      else if (p !== '.') out.push(p);
-    }
-    return origin + out.join('/');
-  }
-  return null;
-}
-
-// `<origin-root>/<path>#<slug>` as a '/'-rooted ref on that origin. A path in
-// the root is a directory of the origin's content: one envoy answers for all of
-// an origin, so there is no second content root beneath it.
-function sigilReferral(originRoot: string, path: string, slug: string | null): Referral {
-  const baseUrl = addressOrigin(originRoot);
-  let dir = originRoot.slice(baseUrl.length);
-  if (dir.startsWith(RVMARK_SEGMENT)) dir = dir.slice(RVMARK_SEGMENT.length - 1);
-  if (!dir.startsWith('/')) dir = '/' + dir;
-  if (!dir.endsWith('/')) dir += '/';
-  return { baseUrl, ref: dir + path.replace(/^\/+/, '') + (slug ? '#' + slug : '') };
-}
-
-/**
- * The origins to ask for a sigil ref, in the order they should be tried.
- *
- * Referrals, not nodes or keys: a fallback chain falls through only when a load
- * *fails*, and only the named origin knows which of its files a path means.
- * So the chain leaves here as data and the caller walks it.
- */
-function sigilCandidates(
-  sigil:             string,
-  path:              string,
-  slug:              string | null,
-  origins:           Record<string, OriginDef>,
-  sourceFileAddress: string,
-  visited:           Set<string>,
-): Referral[] {
-  if (visited.has(sigil) || visited.size >= FALLBACK_DEPTH_CAP) return [];
-  const def = origins[sigil];
-  if (!def) {
-    if (visited.size === 0) console.warn(`rvmark: undeclared origin sigil '${sigil}' in ${sourceFileAddress}`);
-    return [];
-  }
-  const next = new Set(visited);
-  next.add(sigil);
-
-  const out = [sigilReferral(def.url, path, slug)];
-  if (!def.fallback) return out;
-
-  if (def.fallback.startsWith('@')) {
-    const slashIdx = def.fallback.indexOf('/');
-    const fbSigil   = slashIdx === -1 ? def.fallback : def.fallback.slice(0, slashIdx);
-    const fbSubpath = slashIdx === -1 ? '' : def.fallback.slice(slashIdx + 1);
-    if (fbSubpath) {
-      const fbRoot = resolveFallbackRoot(def.fallback, origins, sourceFileAddress, next);
-      if (fbRoot) out.push(sigilReferral(fbRoot, path, slug));
-    } else {
-      out.push(...sigilCandidates(fbSigil, path, slug, origins, sourceFileAddress, next));
-    }
-    return out;
-  }
-
-  const fbRoot = resolveFallbackRoot(def.fallback, origins, sourceFileAddress, next);
-  if (fbRoot) out.push(sigilReferral(fbRoot, path, slug));
-  return out;
-}
-
 // ── Matching ──────────────────────────────────────────────────────────────────
 // The deep walk lives here: an origin answers questions about content the caller
 // has never fetched, and it can only do that by matching on its own side. The
@@ -379,21 +267,19 @@ class RvmarkOrigin implements Origin {
       const raw = rawIn ? parseTranscludeEntry(rawIn).ref : '';
       if (!raw) { out.push([]); continue; }
 
-      const sigil = parseSigilRef(raw);
-      if (sigil) {
-        const file = await loadRvmarkFile(sourceFileAddress);
-        const origins = file?.head.origins ?? {};
-        out.push(sigilCandidates(sigil.sigil, sigil.path, sigil.slug, origins, sourceFileAddress, new Set()));
-        continue;
-      }
-
-      const address = resolveAddress(raw, sourceFileAddress);
+      // A referral's key is moot ('/'), and names no file to load a head from.
+      const origins = isOriginRef(raw)
+        ? (await loadRvmarkFile(sourceFileAddress))?.head.origins ?? {}
+        : {};
       // Raw cross-origin addresses are rejected here and only here: federation
-      // goes through sigils, so that a head's declaration cannot be bypassed by
-      // author text. A caller holding only authored text has no way around it.
-      const origin = addressOrigin(address ?? '');
-      if (!address || (origin && origin !== this.baseUrl)) { out.push([]); continue; }
-      out.push([addressOf(address)]);
+      // goes through origin refs, so that a head's declaration cannot be
+      // bypassed by author text. A caller holding only authored text has no
+      // way around it.
+      out.push(resolveRef(raw, sourceFileAddress, origins).flatMap((target): Candidate[] => {
+        if (typeof target !== 'string') return [target];
+        const origin = addressOrigin(target);
+        return origin && origin !== this.baseUrl ? [] : [addressOf(target)];
+      }));
     }
     return out;
   }

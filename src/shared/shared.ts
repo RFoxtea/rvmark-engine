@@ -5,7 +5,7 @@
  * No DOM, no imports, no side effects.
  */
 
-import type { RvNode } from './parser.js';
+import type { RvNode, OriginDef } from './parser.js';
 
 // Reserved engine namespace: content source/media is published under this
 // underscore-prefixed segment so it can never collide with user content paths.
@@ -136,6 +136,142 @@ export function resolveAddress(ref: string, sourceFileAddress: string): string |
   // <file>/index.rv.md fallback in loadRvmarkFile makes the ref work.
   return toRvFile(resolved) + fragment;
 }
+
+/** A ref for the origin at `baseUrl` to resolve itself. An origin ref names an
+ *  origin, not its keys, so that origin is asked for the '/'-rooted ref. */
+export interface Referral {
+  baseUrl: string;
+  ref:     string;
+}
+
+// ── Origin refs ───────────────────────────────────────────────────────────────
+
+const FALLBACK_DEPTH_CAP = 8;
+
+/** Split '@name/path#slug', '@name#slug', or '@name'. Null if not an origin ref. */
+function parseOriginRef(ref: string): { name: string; path: string; slug: string | null } | null {
+  if (!ref.startsWith('@')) return null;
+  const hashIdx = ref.indexOf('#');
+  const slug = hashIdx === -1 ? null : ref.slice(hashIdx + 1) || null;
+  const beforeHash = hashIdx === -1 ? ref : ref.slice(0, hashIdx);
+  const slashIdx = beforeHash.indexOf('/');
+  const name = slashIdx === -1 ? beforeHash : beforeHash.slice(0, slashIdx);
+  const path = slashIdx === -1 ? '' : beforeHash.slice(slashIdx + 1);
+  return { name, path, slug };
+}
+
+// Resolve a `fallback:` value to an origin root URL. Accepts another origin name
+// ('@name', '@name/subpath/'), or a local path ('/abs/path/', './rel/path/')
+// resolved against sourceFileAddress. Cycles caught by `visited`.
+function resolveFallbackRoot(
+  fallback: string,
+  origins: Record<string, OriginDef>,
+  sourceFileAddress: string,
+  visited: Set<string>,
+): string | null {
+  if (fallback.startsWith('@')) {
+    const slashIdx = fallback.indexOf('/');
+    const name = slashIdx === -1 ? fallback : fallback.slice(0, slashIdx);
+    const subpath = slashIdx === -1 ? '' : fallback.slice(slashIdx + 1);
+    if (visited.has(name)) return null;
+    const def = origins[name];
+    if (!def) return null;
+    const base = def.url.endsWith('/') ? def.url : def.url + '/';
+    return subpath ? base + subpath : base;
+  }
+  const origin = addressOrigin(sourceFileAddress);
+  if (fallback.startsWith('/')) return origin + fallback;
+  if (fallback.startsWith('./') || fallback.startsWith('../')) {
+    const localPart = sourceFileAddress.slice(origin.length);
+    const dir = localPart.replace(/[^/]*$/, '');
+    const parts = (dir + fallback).split('/');
+    const out: string[] = [];
+    for (const p of parts) {
+      if (p === '..') out.pop();
+      else if (p !== '.') out.push(p);
+    }
+    return origin + out.join('/');
+  }
+  return null;
+}
+
+// `<origin-root>/<path>#<slug>` as a '/'-rooted ref on that origin. A path in
+// the root is a directory of the origin's content: one envoy answers for all of
+// an origin, so there is no second content root beneath it.
+function originReferral(originRoot: string, path: string, slug: string | null): Referral {
+  const baseUrl = addressOrigin(originRoot);
+  let dir = originRoot.slice(baseUrl.length);
+  if (dir.startsWith(RVMARK_SEGMENT)) dir = dir.slice(RVMARK_SEGMENT.length - 1);
+  if (!dir.startsWith('/')) dir = '/' + dir;
+  if (!dir.endsWith('/')) dir += '/';
+  return { baseUrl, ref: dir + path.replace(/^\/+/, '') + (slug ? '#' + slug : '') };
+}
+
+/**
+ * The origins to ask for an origin ref, in the order they should be tried.
+ *
+ * Referrals, not nodes or keys: a fallback chain falls through only when a load
+ * *fails*, and only the named origin knows which of its files a path means.
+ * So the chain leaves here as data and the caller walks it.
+ */
+function originCandidates(
+  name:              string,
+  path:              string,
+  slug:              string | null,
+  origins:           Record<string, OriginDef>,
+  sourceFileAddress: string,
+  visited:           Set<string>,
+): Referral[] {
+  if (visited.has(name) || visited.size >= FALLBACK_DEPTH_CAP) return [];
+  const def = origins[name];
+  if (!def) {
+    if (visited.size === 0) console.warn(`rvmark: undeclared origin '${name}' in ${sourceFileAddress}`);
+    return [];
+  }
+  const next = new Set(visited);
+  next.add(name);
+
+  const out = [originReferral(def.url, path, slug)];
+  if (!def.fallback) return out;
+
+  if (def.fallback.startsWith('@')) {
+    const slashIdx = def.fallback.indexOf('/');
+    const fbName    = slashIdx === -1 ? def.fallback : def.fallback.slice(0, slashIdx);
+    const fbSubpath = slashIdx === -1 ? '' : def.fallback.slice(slashIdx + 1);
+    if (fbSubpath) {
+      const fbRoot = resolveFallbackRoot(def.fallback, origins, sourceFileAddress, next);
+      if (fbRoot) out.push(originReferral(fbRoot, path, slug));
+    } else {
+      out.push(...originCandidates(fbName, path, slug, origins, sourceFileAddress, next));
+    }
+    return out;
+  }
+
+  const fbRoot = resolveFallbackRoot(def.fallback, origins, sourceFileAddress, next);
+  if (fbRoot) out.push(originReferral(fbRoot, path, slug));
+  return out;
+}
+
+/**
+ * A transclusion ref's targets, in the order they should be tried.
+ *
+ * A path ref has one: its canonical address. An origin ref ('@name/path#slug')
+ * has one referral per origin in its fallback chain, looked up in `origins` —
+ * the declarations in the head of the file that wrote the ref.
+ */
+export function resolveRef(
+  ref:               string,
+  sourceFileAddress: string,
+  origins:           Record<string, OriginDef>,
+): Array<string | Referral> {
+  const originRef = parseOriginRef(ref);
+  if (originRef) return originCandidates(originRef.name, originRef.path, originRef.slug, origins, sourceFileAddress, new Set());
+  const address = resolveAddress(ref, sourceFileAddress);
+  return address ? [address] : [];
+}
+
+/** Whether resolving `ref` reads the writing file's origin declarations. */
+export const isOriginRef = (ref: string) => ref.startsWith('@');
 
 /**
  * Make a ref absolute against the file that WROTE it, without deciding what it
