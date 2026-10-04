@@ -192,6 +192,8 @@ header {
   gap: 1rem;
 }
 
+header[hidden] { display: none; }
+
 header h1 {
   color: var(--fg);
 }
@@ -688,12 +690,20 @@ details[open] > .node-content.node-content--bullet-spins:not(.node-content--bull
 /* ── Children container ── */
 .node-children {
   display: none;
-  margin-left: calc(var(--bullet-w) + var(--tree-gap));
+  --children-indent: calc(var(--bullet-w) + var(--tree-gap));
 }
+/* The indent sits on the child rows, not on this container, so the container
+   can dissolve when open (below) without the rows losing it. */
+.node-children > .tree > .node { margin-left: var(--children-indent); }
 
 /* A sibling combinator, not .node:has(> …): :has() on the li makes every
-   ancestor li re-match its whole subtree on each expand. */
-.node > .node-content[aria-expanded="true"] ~ .node-children { display: block; }
+   ancestor li re-match its whole subtree on each expand.
+
+   display:contents leaves two boxes per level instead of three. Firefox's
+   reflow cost climbs steeply with box depth, and a recursive transclusion can
+   be followed hundreds of levels down. The nested .tree must stay a box: its
+   counter-reset is what restarts a nested {li} list. */
+.node > .node-content[aria-expanded="true"] ~ .node-children { display: contents; }
 
 /* Static fallback: <details> already hides its own content when closed, so the
    .node-children default above would keep it hidden when open. The disclosure
@@ -1920,7 +1930,7 @@ body.sidepanel-open .sidepanel {
 .tr-row > .node-children {
   grid-column: 2 / -1;
   display: none;
-  margin-left: 0;
+  --children-indent: 0;
 }
 
 .tr-row:has(> .node-content[aria-expanded="true"]) > .node-children {
@@ -1998,7 +2008,7 @@ body.sidepanel-open .sidepanel {
 /* ── Children container: dissolve into the parent grid ── */
 .node > .node-content--table[aria-expanded="true"] ~ .node-children {
   display: contents;
-  margin-left: 0;
+  --children-indent: 0;
 }
 
 .table-node > .node-children > .tree {
@@ -2055,7 +2065,7 @@ body.sidepanel-open .sidepanel {
    the static twin of the [aria-expanded="true"] rule above. */
 .static-toggle:checked ~ .node-children {
   display: contents;
-  margin-left: 0;
+  --children-indent: 0;
 }
 
 /* tr: the expansion panel is a plain grid item in columns 2+. */
@@ -2068,7 +2078,7 @@ body.sidepanel-open .sidepanel {
    without one, since an always-open node offers no collapse to drive. */
 .table-node.static-always-open > .node-children {
   display: contents;
-  margin-left: 0;
+  --children-indent: 0;
 }
 .tr-row.static-always-open > .node-children {
   display: block;
@@ -2141,6 +2151,10 @@ label.tr-toggle:not(.leaf):hover { color: var(--accent); }
      only if JS never ran) is what prints — same "print what's on screen"
      rule as expand/collapse state. */
   .tree { overflow: visible; }
+
+  /* --node-w is 100% here, and a table row carries its own indent as a margin:
+     auto fills what is left, where 100% would overflow by the indent. */
+  .table-node { width: auto; }
 
   .node-content {
     width: auto;

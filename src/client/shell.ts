@@ -25,6 +25,8 @@ export function setMeta(meta: Multimap | null): void {
   document.title = title;
   const siteTitle = document.getElementById('site-title');
   if (siteTitle) siteTitle.textContent = title;
+  const header = document.querySelector('header');
+  if (header) header.hidden = !meta?.get('title');
   setFooter(null);
 }
 

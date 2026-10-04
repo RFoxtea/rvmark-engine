@@ -868,6 +868,7 @@ for (const [relPath, rvFile] of rvFiles) {
   html = html.replaceAll('{{SITE_HEAD}}',     () => SITE_HEAD);
   html = html.replaceAll('{{SOCIAL_META}}',   () => socialMeta);
   html = html.replaceAll('{{TITLE}}',         escHtml(title));
+  html = html.replaceAll('{{HEADER_HIDDEN}}', meta?.get('title') ? '' : ' hidden');
   html = html.replaceAll('{{DESCRIPTION}}',   escHtml(description));
   html = html.replaceAll('{{BASE}}',          base);
   html = html.replaceAll('{{RVMARK_FILE}}',   relPath);
