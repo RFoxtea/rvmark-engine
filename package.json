@@ -1,10 +1,10 @@
 {
   "name": "rvmark",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
-  "description": "rvmark engine \u2014 interactive tree-based document runtime and static site generator.",
+  "description": "rvmark engine — interactive tree-based document runtime and static site generator.",
   "bin": {
     "rvmark": "./bin/rvmark.mjs"
   },
@@ -24,6 +24,10 @@
     "./parser": {
       "types": "./out/shared/parser.d.ts",
       "import": "./out/shared/parser.js"
+    },
+    "./migrate": {
+      "types": "./out/shared/migrate.d.ts",
+      "import": "./out/shared/migrate.js"
     },
     "./stringify": {
       "types": "./out/build/stringify.d.ts",
@@ -64,7 +68,8 @@
     "dompurify": "^3.4.12",
     "marked": "^15.0.12",
     "split.js": "^1.6.5",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

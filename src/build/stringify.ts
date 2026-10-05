@@ -23,6 +23,7 @@
 
 import type { SourceFile, SourceNode, Head, TagDef } from '../shared/parser.js';
 import type { Multimap } from '../shared/multimap.js';
+import { writeFrontmatter } from '../shared/frontmatter.js';
 
 const INDENT = 2;
 
@@ -84,7 +85,8 @@ function stringifyTags(tags: SourceNode['tags']): string {
 
 // ── head ───────────────────────────────────────────────────────────────────
 function stringifyHead(head: Head): string {
-  const metaStr = stringifyAttrs(head.meta);
+  const yaml = writeFrontmatter(head.meta, head.frontmatter);
+  const metaStr = yaml ? `---\n${yaml}\n---` : '';
 
   // Tag-def and origin lines form one block, kept together.
   const defLines: string[] = [];
@@ -97,7 +99,7 @@ function stringifyHead(head: Head): string {
     defLines.push(`${name} {${parts.join('; ')}}`);
   }
 
-  // The `{meta}` line and the def block are separated by a blank line when both
+  // The frontmatter and the def block are separated by a blank line when both
   // are present (matching hand-authored layout); either alone stands on its own.
   const blocks: string[] = [];
   if (metaStr) blocks.push(metaStr);

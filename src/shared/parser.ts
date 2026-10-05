@@ -33,6 +33,7 @@
 
 import { Multimap } from './multimap.js';
 import { seedBag, deriveBag, type InheritedBag } from './inherited.js';
+import { splitFrontmatter, readFrontmatter } from './frontmatter.js';
 
 export interface StateEntry {
   key: string;
@@ -252,6 +253,8 @@ export interface OriginDef {
 
 export interface Head {
   meta:    FileMeta;
+  // The YAML text `meta` was read from, kept so stringify can edit it in place.
+  frontmatter?: string;
   tagDefs: Record<string, TagDef>;
   origins: Record<string, OriginDef>;
 }
@@ -437,7 +440,7 @@ export function parseAttrBlock(raw: string): Multimap {
  * unnoticed — the lines simply fell through to the node collector, which did not
  * match them either.
  */
-function joinBraced(lines: string[], i: number): { text: string; next: number } | null {
+export function joinBraced(lines: string[], i: number): { text: string; next: number } | null {
   if (!lines[i].trimStart().startsWith('{') && !/^\s*(?:\[|@)/.test(lines[i])) return null;
   let depth = 0;
   let seen = false;
@@ -463,11 +466,18 @@ export function parse(src: string): SourceFile {
   let i = 0;
 
   // ── 1. Document metadata and tag definitions at top ───────────────────────
+  // Frontmatter, or the edition-1 `{…}` meta block — never both.
+  const fm = splitFrontmatter(lines);
+  if (fm) {
+    meta = readFrontmatter(fm.yaml);
+    i = fm.next;
+  }
   while (i < lines.length && lines[i].trim() === '') i++;
   if (i < lines.length) {
     const joined = joinBraced(lines, i);
     const metaM = joined?.text.match(/^\{(.*)\}$/s);
     if (joined && metaM) {
+      if (fm) throw new Error(`rvmark: a file has frontmatter or a '{…}' meta block, not both`);
       meta = parseAttrBlock(metaM[1]);
       i = joined.next;
     }
@@ -636,7 +646,7 @@ export function parse(src: string): SourceFile {
   // here the raw literals set above (and node.auto) are the input.
   assignOrdinals(roots, nodeMap);
 
-  const head: Head = { meta, tagDefs, origins };
+  const head: Head = { meta, tagDefs, origins, ...(fm ? { frontmatter: fm.yaml } : {}) };
   return { head, roots, nodeMap };
 }
 

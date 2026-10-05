@@ -5,6 +5,8 @@
  * Usage:
  *   rvmark [build] [opts]    # build the site once (default subcommand)
  *   rvmark serve [opts]      # build, watch for changes, and preview-serve
+ *   rvmark migrate [opts]    # rewrite the content dir's sources to the current edition
+ *   rvmark --version         # print the engine version
  *   rvmark --test            # build the engine's own test fixtures
  *
  *   opts: [--config <file>] [--content <dir>] [--out <dir>] [--theme <file>]
@@ -27,8 +29,8 @@ import { buildSite } from '../out/build/site.js';
 import { watchPaths, serializeBuilds } from '../scripts/watch.mjs';
 import { startServer } from '../scripts/static-server.mjs';
 import { execSync } from 'child_process';
-import { readFileSync, existsSync, statSync } from 'fs';
-import { join, dirname, resolve, isAbsolute } from 'path';
+import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from 'fs';
+import { join, dirname, resolve, isAbsolute, relative } from 'path';
 import { fileURLToPath } from 'url';
 
 const ENGINE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -96,9 +98,13 @@ function loadConfigFile(path) {
 
 // First non-flag arg is the subcommand (default: build).
 const rawArgs = process.argv.slice(2);
+if (rawArgs.includes('--version')) {
+  console.log(JSON.parse(readFileSync(join(ENGINE_ROOT, 'package.json'), 'utf8')).version);
+  process.exit(0);
+}
 const subcommand = (rawArgs[0] && !rawArgs[0].startsWith('--')) ? rawArgs.shift() : 'build';
-if (!['build', 'serve'].includes(subcommand)) {
-  console.error(`rvmark: unknown subcommand '${subcommand}' (expected 'build' or 'serve')`);
+if (!['build', 'serve', 'migrate'].includes(subcommand)) {
+  console.error(`rvmark: unknown subcommand '${subcommand}' (expected 'build', 'serve' or 'migrate')`);
   process.exit(1);
 }
 
@@ -141,6 +147,32 @@ function resolveConfig(cfg) {
     mountPath:  opts.mount    ?? '/_rvmark/',
     includeDrafts: flags.has('includeDrafts') || cfg.includeDrafts === true,
   };
+}
+
+if (subcommand === 'migrate') {
+  const { migrate } = await import('../out/shared/migrate.js');
+  const { isRvFile, stripRvExt } = await import('../out/shared/shared.js');
+  const root = config.contentDir;
+  let changed = 0;
+  for (const rel of readdirSync(root, { recursive: true })) {
+    if (!isRvFile(rel)) continue;
+    const path = join(root, rel);
+    const src = readFileSync(path, 'utf8');
+    let out;
+    try {
+      out = migrate(src, { stamp: stripRvExt(rel) === 'index' });
+    } catch (e) {
+      console.error(`${relative('.', path)}: ${e.message}`);
+      process.exitCode = 1;
+      continue;
+    }
+    if (out === src) continue;
+    writeFileSync(path, out);
+    console.log(`migrated ${relative('.', path)}`);
+    changed++;
+  }
+  console.log(`${changed} file${changed === 1 ? '' : 's'} migrated`);
+  process.exit();
 }
 
 if (subcommand === 'serve') {

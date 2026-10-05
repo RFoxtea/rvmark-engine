@@ -5,6 +5,8 @@
  * Code extension and the playground share it. Line indices are 0-based.
  */
 
+import { splitFrontmatter } from '../shared/frontmatter.js';
+
 export interface OutlineNode {
   lineIndex: number;
   indent: string;
@@ -50,12 +52,19 @@ function bracedEnd(lines: readonly string[], i: number): number | null {
 }
 
 /**
- * The first line past the document head. An unclosed brace takes the rest of
+ * The first line past the document head. An unclosed brace or frontmatter takes the rest of
  * the file: the parser rejects such a document, so nothing after it is a node.
  */
 export function headEnd(lines: readonly string[]): number {
   let i = 0;
-  for (let first = true; ; first = false) {
+  let fm = false;
+  try {
+    const split = splitFrontmatter(lines);
+    if (split) { i = split.next; fm = true; }
+  } catch {
+    return lines.length;
+  }
+  for (let first = !fm; ; first = false) {
     while (i < lines.length && !lines[i].trim()) i++;
     if (i >= lines.length) return i;
     const end = bracedEnd(lines, i);

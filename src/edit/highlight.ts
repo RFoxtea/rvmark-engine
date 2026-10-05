@@ -4,7 +4,8 @@
  * Follows the rules of the parser (shared/parser.ts) and the span extension
  * (client/markdown.ts); where this and those disagree, this is wrong.
  *
- *   {title: …}                    file head: meta block, first construct only
+ *   --- … ---                     file head: YAML frontmatter, first line only
+ *   {title: …}                    file head: edition-1 meta block, first construct only
  *   [Name {…}]  @origin {…}       file head: tag and origin definitions
  *   - Node.   1. Node.            node line: '-', '*' or 'ord.' then whitespace
  *   {#slug; = type; key: value}   node attrs, only directly after the bullet
@@ -44,6 +45,7 @@ type Seg = 'ref' | 'type' | 'id' | 'class' | 'expr' | null;
 
 /** Flat, so a shallow copy is a full copy. */
 export interface HighlightState {
+  front: 'start' | 'in' | 'done';  // frontmatter: not yet at line 1, inside it, past it
   head: boolean;          // before the first node: meta, tag and origin defs
   headBrace: boolean;     // a head construct's name was read; its '{' is next
   awaitFence: boolean;    // the last non-blank line was a node line
@@ -61,7 +63,7 @@ export interface HighlightState {
 
 export function startState(): HighlightState {
   return {
-    head: true, headBrace: false, awaitFence: false,
+    front: 'start', head: true, headBrace: false, awaitFence: false,
     fenceCh: null, fenceLen: 0, fenceIndent: '',
     innerCh: null, innerLen: 0,
     part: 'label', attr: null,
@@ -378,8 +380,28 @@ function step(c: Cursor, state: HighlightState): Result {
   }
 }
 
+// Frontmatter is YAML, not rvmark: a key is marked, everything else is a value.
+function frontLine(line: string, state: HighlightState): Token[] | null {
+  if (state.front === 'done') return null;
+  const tok = (from: number, to: number, type: TokenType): Token => ({ from, to, type, definition: false });
+  if (state.front === 'start') {
+    if (!/^\uFEFF?---[ \t]*$/.test(line)) { state.front = 'done'; return null; }
+    state.front = 'in';
+    return [tok(0, line.length, 'punctuation')];
+  }
+  if (/^(?:---|\.\.\.)[ \t]*$/.test(line)) { state.front = 'done'; return [tok(0, line.length, 'punctuation')]; }
+  if (!line.trim()) return [];
+  const m = line.match(/^([^\s:#][^:]*)(:)(?=\s|$)/);
+  if (!m) return [tok(0, line.length, 'string')];
+  const tokens = [tok(0, m[1].length, 'property'), tok(m[1].length, m[0].length, 'punctuation')];
+  if (line.length > m[0].length) tokens.push(tok(m[0].length, line.length, 'string'));
+  return tokens;
+}
+
 /** Tokens of one line, advancing `state` past it. Blank lines must be fed too. */
 export function highlightLine(line: string, state: HighlightState): Token[] {
+  const front = frontLine(line, state);
+  if (front) return front;
   const tokens: Token[] = [];
   if (!line.trim()) return tokens;
   state.kind = classify(line, state);

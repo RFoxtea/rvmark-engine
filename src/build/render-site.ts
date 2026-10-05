@@ -10,6 +10,7 @@
  * and `DOMPurify` — a host installs both first (site.ts, browser.ts).
  */
 
+import { ENGINE_VERSION } from '../shared/version.js';
 import { fileToUrlStem, resolveAddress, resolveRef, resolveMediaAddress, addressToFile, addressToSlug, addressToHref, parseTranscludeEntry, RV_EXT, isRvFile, stripRvExt, toRvFile } from '../shared/shared.js';
 import { defaultTypeName } from '../shared/node-types.js';
 import { parse, resolveFile } from '../shared/parser.js';
@@ -814,6 +815,7 @@ for (const [relPath, rvFile] of rvFiles) {
     : SITE_URL ? SITE_URL + cardImgRef : '';
 
   const socialMeta = [
+    `  <meta name="generator" content="rvmark ${ENGINE_VERSION}">`,
     ...(indexable(meta, relPath) ? [] : ['  <meta name="robots" content="noindex, follow">']),
     `  <meta property="og:type" content="${isRoot ? 'website' : 'article'}">`,
     `  <meta property="og:title" content="${escHtml(title)}">`,
