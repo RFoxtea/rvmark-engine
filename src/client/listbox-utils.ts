@@ -156,13 +156,13 @@ export function wireListbox(cfg: ListboxConfig): ListboxNav {
         // Restore the node's own children only when the listbox itself held the
         // hill (or there is no toggle set to hold it). A manual toggle holding
         // the hill is untouched by deselection — nothing knocked it off, so it
-        // stands. `on-no-option-select` still fires either way: it is a fact
+        // stands. `on-nothing` still fires either way: it is a fact
         // about selection, not about the children area, and Euclid relies on it
         // to clear the diagram highlight.
         if (heldHill || !toggles || toggles.hillIsFree()) {
           void childrenOf(rvNode).then(kids => rn.setChildren(kids, null));
         }
-        for (const v of rn.attrs.getAll('on-no-option-select')) applyEventAttr(v, rn);
+        for (const v of rn.attrs.getAll('on-nothing')) applyEventAttr(v, rn);
       },
       nonempty,
     },

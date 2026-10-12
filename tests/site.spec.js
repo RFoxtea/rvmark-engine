@@ -1756,7 +1756,7 @@ test.describe('listbox span state assignments', () => {
   // The bullet's job is to clear the LISTBOX SELECTION, so that is what this
   // asserts. It deliberately does not check the show-when indicator: reset does
   // not revert an option's state mutation (that is the author's job, via
-  // on-no-option-select), so indicator visibility would test state plumbing
+  // on-nothing), so indicator visibility would test state plumbing
   // rather than whether the bullet click reached nav.reset().
   test('clicking the bullet clears the option selection', async ({ page }) => {
     const node = await nodeContent(page, 'listbox-node');

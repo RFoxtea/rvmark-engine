@@ -52,10 +52,8 @@ interface SidepanelResult {
   /** Page URL — used by rvmark strategy; sets iframe.src directly. */
   url?: string;
   /**
-   * Whether the iframe content is trusted as same-origin. For `url`, derived
-   * automatically from the URL's origin. For `srcdoc`, the strategy must set
-   * this — true when the srcdoc was built from sanitized/local content,
-   * false when it inlines raw remote HTML.
+   * Whether the frame runs unsandboxed. Set by a strategy whose srcdoc was
+   * built from sanitized content; never derived from where the content lives.
    */
   trusted?: boolean;
 }
@@ -187,13 +185,6 @@ function _buildIframe(result: SidepanelResult, relay: StateRelay | null, passEnt
       _relayCleanup = relay ? wireRelay(relay, passEntries, iframe.contentWindow) : null;
     }
   });
-  // Same-origin trust: an explicit `trusted` flag from the strategy wins;
-  // otherwise derive it from result.url's origin. srcdoc with no flag defaults
-  // to untrusted.
-  const trusted = result.trusted ?? (result.url ? (() => {
-    try { return new URL(result.url!, window.location.href).origin === window.location.origin; }
-    catch { return false; }
-  })() : false);
   // A url-backed frame keeps its OWN origin; a srcdoc one would be handed ours.
   //
   // `allow-same-origin` does not mean "same origin as this page" — it means the
@@ -207,7 +198,7 @@ function _buildIframe(result: SidepanelResult, relay: StateRelay | null, passEnt
   // srcdoc has no origin of its own to keep, so the flag there WOULD be ours.
   // Nothing reaches this holding a srcdoc it does not trust — markdown builds
   // its own sanitized markup — and if anything ever does, it must not have it.
-  if (!trusted) {
+  if (!result.trusted) {
     iframe.setAttribute('sandbox', result.url ? 'allow-scripts allow-same-origin' : 'allow-scripts');
   }
   if (result.url) {

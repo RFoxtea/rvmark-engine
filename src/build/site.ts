@@ -249,6 +249,8 @@ export async function buildSite(config: BuildSiteConfig) {
     for (const [entry, outfile] of [
       ['out/client/main.js',         join(ENGINE_DIR, 'client/main.js')],
       ['out/client/iframe-guest.js', join(ENGINE_DIR, 'client/iframe-guest.js')],
+      ['out/shared/attr-parser.js', join(ENGINE_DIR, 'shared/attr-parser.js')],
+      ['out/client/state.js',        join(ENGINE_DIR, 'client/state.js')],
       ['out/envoy/envoy-guest.js',   join(ENGINE_DIR, 'envoy/envoy-guest.js')],
     ]) {
       if (!existsSync(enginePath(entry))) continue;

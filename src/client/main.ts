@@ -178,7 +178,9 @@ async function init(page: RvmarkPageContext): Promise<void> {
   });
 
   window.addEventListener('message', (e: MessageEvent) => {
-    if (e.origin !== window.location.origin) return;
+    const fromSidepanel = [...document.querySelectorAll<HTMLIFrameElement>('.sidepanel-iframe')]
+      .some(f => f.contentWindow === e.source);
+    if (!fromSidepanel) return;
     if (e.data?.type === 'sidepanel-meta') setFooter(e.data.meta);
   });
 }

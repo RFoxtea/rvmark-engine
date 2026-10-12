@@ -91,6 +91,10 @@ const SANITIZE_ATTRS = [
 // (position, display, z-index, background, etc.).
 const SAFE_STYLE_PROPS = /^(height|width|min-width|max-width|vertical-align|top|bottom|left|right|padding(-left|-right|-top|-bottom)?|margin(-left|-right|-top|-bottom)?)$/;
 const SAFE_STYLE_VALUE = /^-?[\d.]+(em|ex|px|rem|%|pt)?$/;
+// `color` is the one non-numeric property let through, for the span `color` attribute.
+const COLOR_ARGS = String.raw`[\w\s.,%/#+-]*`;
+const SAFE_COLOR_VALUE = new RegExp(
+  `^(#[0-9a-f]{3,8}|[a-z]+|(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix|light-dark|var)\\(${COLOR_ARGS}(\\(${COLOR_ARGS}\\)${COLOR_ARGS})*\\))$`, 'i');
 
 function sanitizeStyleAttr(value: string): string {
   return value.split(';')
@@ -100,6 +104,7 @@ function sanitizeStyleAttr(value: string): string {
       const p = prop.trim().toLowerCase();
       const v = rest.join(':').trim();
       if (SAFE_STYLE_PROPS.test(p) && SAFE_STYLE_VALUE.test(v)) return `${p}:${v}`;
+      if (p === 'color' && SAFE_COLOR_VALUE.test(v)) return `${p}:${v}`;
       return null;
     })
     .filter(Boolean)
@@ -311,7 +316,7 @@ let _spanReserved: Set<string> | null = null;
 function spanReserved(): Set<string> {
   return _spanReserved ??= new Set([
     'option', 'selected', 'index', 'transclude', 'href', 'img', 'ruby',
-    'class', 'style', 'role', 'show-when', 'toggle', 'dark-mode',
+    'class', 'style', 'color', 'role', 'show-when', 'toggle', 'dark-mode',
     ...STATE_EVENT_ATTRS,
   ]);
 }
@@ -330,7 +335,9 @@ function renderInlineSpan(token: any, label: string): string {
   const dataAttrs: string[] = [`data-rvmark-span="${ordinal}"`];
 
   let role:  string | null = attrs.get('role')  ?? null;
-  const style: string | null = attrs.get('style') ?? null;
+  const color = attrs.get('color');
+  const style: string | null =
+    [attrs.get('style'), color && `color:${color}`].filter(Boolean).join(';') || null;
 
   // Role is settled here only for spans whose kind their own attrs determine.
   // A bare `=> #ref` is a manual toggle, but node-level `{listbox}` may make it

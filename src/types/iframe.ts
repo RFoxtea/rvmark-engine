@@ -216,16 +216,13 @@ class IframeTypeHandler extends BaseTypeHandler {
         const iframe = document.createElement('iframe');
         iframe.className = 'html-body html-body-iframe';
 
-        const isSameOrigin = url && (() => {
-          try { return new URL(url, window.location.href).origin === window.location.origin; }
-          catch { return false; }
-        })();
-        if (!isSameOrigin) iframe.setAttribute('sandbox', 'allow-scripts');
+        // A url-backed frame keeps its own origin; a srcdoc one would be handed ours.
+        iframe.setAttribute('sandbox', url ? 'allow-scripts allow-same-origin' : 'allow-scripts');
         applyBox(iframe, box);
 
         const iframePassRaw = attrs.get('iframe-pass') ?? null;
         const iframePassEntries = iframePassRaw ? parsePass(iframePassRaw) : [];
-        const relay = (iframePassRaw && isSameOrigin)
+        const relay = iframePassRaw
           ? new StateRelay(buildStatePass(renderNode.state, iframePassEntries))
           : null;
 

@@ -166,7 +166,7 @@ registerCoreAttr({ name: 'on-blur',             type: 'expr' });
 registerCoreAttr({ name: 'on-action',           type: 'expr' });
 registerCoreAttr({ name: 'on-expand',           type: 'expr' });
 registerCoreAttr({ name: 'on-collapse',         type: 'expr' });
-registerCoreAttr({ name: 'on-no-option-select', type: 'expr' });
+registerCoreAttr({ name: 'on-nothing', type: 'expr' });
 registerCoreAttr({ name: 'on-on',               type: 'expr' });
 registerCoreAttr({ name: 'on-off',              type: 'expr' });
 registerCoreAttr({ name: 'on-destroy',          type: 'expr' });
@@ -186,7 +186,7 @@ registerCoreAttr({ name: 'on-destroy',          type: 'expr' });
  */
 export const STATE_EVENT_ATTRS = new Set([
   'on-spawn', 'on-select', 'on-deselect', 'on-focus', 'on-blur',
-  'on-action', 'on-expand', 'on-collapse', 'on-no-option-select',
+  'on-action', 'on-expand', 'on-collapse', 'on-nothing',
   // A checkbox span's two transitions (§6). It is neither expanded nor
   // selected, so it needs its own pair: `set` cannot express "flip" — the
   // grammar assigns literals only — and one event could not clear what it set.

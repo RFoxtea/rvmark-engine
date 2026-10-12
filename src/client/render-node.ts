@@ -14,9 +14,9 @@
  */
 
 import type { RvNode, NodeAttrs, ResolvedAttrs } from '../shared/parser.js';
-import { parseShowWhen } from '../shared/parser.js';
+import { parseShowWhen, evalShowWhen } from '../shared/parser.js';
 export type { RvNode };
-export { parseShowWhen };
+export { parseShowWhen, evalShowWhen };
 import { StateFrame, buildStatePass, prerootFrame } from './state.js';
 import type { StateNode, PassEntry } from './state.js';
 import { isOrContainsPermalink } from './transclusion.js';
@@ -79,30 +79,6 @@ export interface NodeTypeFactory {
 
 // ── Factory registry ──────────────────────────────────────────────────────────
 export { factoryRegister, factoryGet } from './type-registry.js';
-
-// ── show-when evaluation ──────────────────────────────────────────────────────
-// Returns true if the node should be HIDDEN (condition means "hide when").
-export function evalShowWhen(raw: string, state: StateNode): boolean {
-  return parseShowWhen(raw).some(cond => {
-    const lhs = state.get(cond.key);
-    if (cond.op === 'truthy')  return !lhs;
-    if (cond.op === '!truthy') return !!lhs;
-    if (lhs === undefined) return cond.op !== '!=';
-    const lhsNum = Number(lhs);
-    const rhsRaw = cond.val ?? '';
-    const rhs: string | number = Number.isNaN(Number(rhsRaw)) ? rhsRaw : Number(rhsRaw);
-    const lhsComp: string | number = (typeof rhs === 'number' && !Number.isNaN(lhsNum)) ? lhsNum : lhs;
-    switch (cond.op) {
-      case '==': return lhsComp != rhs;
-      case '!=': return lhsComp == rhs;
-      case '>':  return (lhsComp as number) <= (rhs as number);
-      case '<':  return (lhsComp as number) >= (rhs as number);
-      case '>=': return (lhsComp as number) <  (rhs as number);
-      case '<=': return (lhsComp as number) >  (rhs as number);
-    }
-    return false;
-  });
-}
 
 // ── ChildSlot ─────────────────────────────────────────────────────────────────
 // Represents one position in a parent's child list. Owns the spawn/destroy
