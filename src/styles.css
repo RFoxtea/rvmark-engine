@@ -1682,12 +1682,6 @@ html.rvmark-sidepanel-guest footer { display: none; }
   text-align: right;
 }
 
-.img-body figcaption {
-  margin-top: 0.3rem;
-  font-size: var(--text-chrome);
-  color: var(--muted);
-}
-
 /* ---- sidepanel ---- */
 /* ── Sidepanel ── */
 
@@ -2116,7 +2110,6 @@ label.tr-toggle:not(.leaf):hover { color: var(--accent); }
    it's unwound here to plain flowing, wrapping block layout that paginates. */
 @media print {
   @page {
-    size: A4;
     margin: 1.2cm;
   }
 

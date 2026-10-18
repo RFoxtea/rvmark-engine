@@ -20,11 +20,15 @@ import type { ListboxNav } from '../client/listbox.js';
 import { wireSelectThenAction, focusAndScroll } from '../client/interaction.js';
 import { resolveMediaAllOn } from '../client/origin-host.js';
 
-export const CELL_SEP = /\s*\|\s*/;
+// `\|` is a pipe inside a cell, code spans included, as in GFM tables.
+export const CELL_SEP = /\s*(?<!\\)\|\s*/;
 
 export function parseCells(label: string): string[] {
-  return label.split(CELL_SEP).map(s => s.trim()).filter((s, i, a) => i < a.length - 1 || s !== '');
+  return label.split(CELL_SEP).map(s => s.trim().replace(/\\\|/g, '|'))
+    .filter((s, i, a) => i < a.length - 1 || s !== '');
 }
+
+export const escapeCell = (cell: string): string => cell.replace(/\|/g, '\\|');
 
 export interface TrConfig {
   liClass:           string;
@@ -267,7 +271,7 @@ export abstract class TrTypeHandlerBase extends BaseTypeHandler {
               // Plain text is the row as it is written on the site: cells
               // joined by '|', normalised through the same parse the cells
               // themselves came from.
-              const text = parseCells(rn.rvNode.label).join(' | ');
+              const text = parseCells(rn.rvNode.label).map(escapeCell).join(' | ');
               const html = [...content.querySelectorAll<HTMLElement>(`.${this.cfg.cellClass}`)]
                 .map(c => clipboardHtml(c)).join(' | ');
               navigator.clipboard.write([

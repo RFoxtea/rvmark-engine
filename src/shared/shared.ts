@@ -297,6 +297,8 @@ export function absolutiseRef(ref: string, sourceFileAddress: string): string {
   if (ref.startsWith('/')) return ref;
   if (ref.startsWith('#')) return ref;
   if (ref.startsWith('https://') || ref.startsWith('http://')) return ref;
+  // Inline image data carries its content, not a location.
+  if (/^data:image\//i.test(ref)) return ref;
   // A sigil ref names a declared origin, not a path. Only the head that
   // declared the sigil can say what it addresses (Origin.resolve), so this
   // must hand it on untouched — prefixing '/' would make it a local path.

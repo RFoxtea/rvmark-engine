@@ -33,6 +33,8 @@ const ALIGN_CLASSES: Record<string, string> = {
   right:  'img-body--right',
 };
 
+// Inline image data needs no resolving, and an <img> runs no script in it.
+const DATA_IMAGE_RE = /^data:image\//i;
 const WIDTH_RE = /^[0-9]+(\.[0-9]+)?(px|em|rem|%|vw|vh|ch|ex|cm|mm|in|pt|pc)$/;
 
 class ImageTypeHandler extends BaseTypeHandler {
@@ -57,10 +59,11 @@ class ImageTypeHandler extends BaseTypeHandler {
     const li = renderNode.li;
 
     void (async () => {
-      const resolved = await resolveMediaOn(rvNode, rawUrl);
+      const inline   = !!rawUrl && DATA_IMAGE_RE.test(rawUrl);
+      const resolved = inline ? rawUrl : await resolveMediaOn(rvNode, rawUrl);
       if (!resolved) return;
       const proto = (resolved.match(/^([a-zA-Z][a-zA-Z0-9+\-.]*):/) ?? [])[1]?.toLowerCase();
-      if (proto && !['http', 'https'].includes(proto)) return;
+      if (!inline && proto && !['http', 'https'].includes(proto)) return;
       this.url = resolved;
 
       const figure = document.createElement('figure');
@@ -75,12 +78,6 @@ class ImageTypeHandler extends BaseTypeHandler {
       if (width) img.style.width = width;
       applyBox(img, { ...box, width: null });
       figure.appendChild(img);
-
-      if (alt) {
-        const cap = document.createElement('figcaption');
-        cap.textContent = alt;
-        figure.appendChild(cap);
-      }
 
       content.appendChild(figure);
     })();
@@ -157,7 +154,7 @@ const imageFactory: NodeTypeFactory = {
   },
   staticRenderBody(node, ctx) {
     const rawUrl = node.attrs.get('src') ?? node.label ?? null;
-    const url = rawUrl ? ctx.resolveMedia(node, rawUrl) : null;
+    const url = rawUrl && DATA_IMAGE_RE.test(rawUrl) ? rawUrl : rawUrl ? ctx.resolveMedia(node, rawUrl) : null;
     if (!url) return null;
     const alt        = node.attrs.get('alt') ?? '';
     const darkClass  = DARK_MODE_CLASSES[node.attrs.get('dark-mode') ?? ''] ?? '';
@@ -174,8 +171,7 @@ const imageFactory: NodeTypeFactory = {
       box.ratio      ? `aspect-ratio:${box.ratio}`    : '',
     ].filter(Boolean).join(';');
     const styleAttr  = decls ? ` style="${esc(decls)}"` : '';
-    const cap        = alt ? `<figcaption>${esc(alt)}</figcaption>` : '';
-    return `<figure class="${esc(cls)}"><img src="${esc(url)}" alt="${esc(alt)}" loading="lazy"${styleAttr}>${cap}</figure>`;
+    return `<figure class="${esc(cls)}"><img src="${esc(url)}" alt="${esc(alt)}" loading="lazy"${styleAttr}></figure>`;
   },
 };
 
