@@ -186,9 +186,17 @@ export interface Insertion { at: Position; text: string; cursor: Position }
 
 /**
  * Enter on a node line starts a sibling: after the cursor, or above the node
- * when the cursor is at column 0. Null means an ordinary newline.
+ * when the cursor is at column 0. Enter at the end of a body's closing fence
+ * starts a sibling of that body's node. Null means an ordinary newline.
  */
 export function continueOutline(lines: readonly string[], cursor: Position): Insertion | null {
+  const closed = cursor.col >= lines[cursor.line].trimEnd().length && FENCE_CLOSE.test(lines[cursor.line])
+    ? collectNodes(lines).find(n => n.body && n.body[1] === cursor.line && n.body[0] !== cursor.line)
+    : undefined;
+  if (closed) {
+    const prefix = closed.indent + nextSiblingMarker(lines, closed.lineIndex)! + ' ';
+    return { at: cursor, text: '\n' + prefix, cursor: { line: cursor.line + 1, col: prefix.length } };
+  }
   const marker = nextSiblingMarker(lines, cursor.line);
   if (marker === null) return null;
   const prefix = NODE_LINE.exec(lines[cursor.line])![1] + marker + ' ';
