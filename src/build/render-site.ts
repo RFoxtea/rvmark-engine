@@ -44,6 +44,7 @@ export interface RenderSiteInput {
   includeDrafts?: boolean;
   mountPath?: string;
   log?(line: string): void;
+  warn?(line: string): void;
 }
 
 /** Where content is mirrored in the dist, e.g. '_rvmark' for '/_rvmark/'. */
@@ -59,6 +60,7 @@ export function renderSite(input: RenderSiteInput): Map<string, string> {
     includeDrafts: INCLUDE_DRAFTS = false,
     mountPath = '/_rvmark/',
     log = console.log,
+    warn = console.warn,
   } = input;
 
   const out = new Map<string, string>();
@@ -191,7 +193,7 @@ for (const f of allRvmarkFiles) {
   const dirStem = f.slice(0, -('/index' + RV_EXT).length);
   const shadowFile = dirStem + RV_EXT;
   if (allFileSet.has(shadowFile)) {
-    console.warn(`  ⚠ ${shadowFile} shadows ${f} — skipping ${f}`);
+    warn(`  ⚠ ${shadowFile} shadows ${f} — skipping ${f}`);
     shadowedSet.add(f);
   }
 }
@@ -764,7 +766,7 @@ const SITE_URL = (rootMeta?.get('site-url') ?? '').replace(/\/+$/, '');
 if (SITE_URL && !/^https?:\/\//.test(SITE_URL))
   throw new Error(`buildSite: site-url must be an absolute origin (got '${SITE_URL}')`);
 if (!SITE_URL)
-  console.warn('  warning: no {site-url} in the root header — omitting canonical, og:url and sitemap.xml');
+  warn('  warning: no {site-url} in the root header — omitting canonical, og:url and sitemap.xml');
 const siteName = rootMeta?.get('title') || 'rvmark';
 
 // robots takes a named value, the way `open: always|never` does. It cannot be
