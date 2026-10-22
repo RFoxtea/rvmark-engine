@@ -13,12 +13,18 @@ test('frontmatter scalars become meta, as strings', () => {
   assert.equal(f.roots.length, 1);
 });
 
-test('unquoted true is a flag, unquoted false is absent, quoted stays text', () => {
-  const m = parse('---\ndraft: true\nsearchable: false\ntitle: "true"\nempty:\n---\n- A\n').head.meta;
+test('flag keys take true and false, other keys stay text', () => {
+  const m = parse('---\ndraft: true\nsearchable: false\ntitle: true\nlicense:\n---\n- A\n').head.meta;
   assert.equal(m.get('draft'), '');
   assert.equal(m.has('searchable'), false);
   assert.equal(m.get('title'), 'true');
-  assert.equal(m.get('empty'), '');
+  assert.equal(m.get('license'), '');
+});
+
+test('an empty text key is written empty, not as true', () => {
+  const f = parse('---\ntitle: T\n---\n\n- A\n');
+  f.head.meta.set('license', '');
+  assert.equal(stringifyFile(f), '---\ntitle: T\nlicense:\n---\n\n- A\n');
 });
 
 test('non-scalar values and block scalars', () => {

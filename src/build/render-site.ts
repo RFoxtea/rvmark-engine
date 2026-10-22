@@ -856,17 +856,14 @@ for (const [relPath, rvFile] of rvFiles) {
   // neither is rewritten twice or wrongly.
   //
   // What's left after that exclusion is always a page URL stem
-  // ('docs/navigating', optionally '#slug') — never a real file. A server
-  // maps that stem to docs/navigating/index.html implicitly; file:// has no
-  // server, so the literal filename has to be in the href, inserted before
-  // any fragment.
+  // ('docs/navigating', optionally '#slug'), rewritten to its directory form.
   const rebase = (html: string) => {
     const rel = base + mountPath.replace(/^\//, '');
     return html
       .replaceAll(`"${mountPath}`, `"${rel}`)
       .replaceAll(`&quot;${mountPath}`, `&quot;${rel}`)
       .replace(/href="\/(?!\/)([^"#]*)(#[^"]*)?"/g, (_: string, stem: string, frag: string) =>
-        `href="${base}${stem}${stem && !stem.endsWith('/') ? '/' : ''}index.html${frag ?? ''}"`);
+        `href="${base + stem + (stem && !stem.endsWith('/') ? '/' : '') || './'}${frag ?? ''}"`);
   };
 
   const staticHtml = rebase(renderStaticNodes(rvFile.roots, rvFile));

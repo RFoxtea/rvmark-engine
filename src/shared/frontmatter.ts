@@ -6,9 +6,9 @@
  * still reads.
  *
  * YAML is parsed in full but read narrowly. Every scalar is a string (failsafe
- * schema), with one exception: an unquoted `true` is a bare flag (value '') and
- * an unquoted `false` leaves the key out. Non-scalar values are other tools'
- * business — they stay in the text and never reach `meta`.
+ * schema), except for flag keys: `true` sets them (value '') and `false` leaves
+ * them out. A key with no value is an empty string. Non-scalar values are other
+ * tools' business — they stay in the text and never reach `meta`.
  *
  * Exports:
  *   EDITION                    → the language edition this engine reads and writes
@@ -22,6 +22,8 @@ import { Multimap } from './multimap.js';
 
 export const EDITION = 2;
 export const EDITION_KEY = 'rvmark';
+
+const FLAG_KEYS = new Set(['draft', 'searchable', 'no-keymap']);
 
 const OPEN_RE  = /^---[ \t]*$/;
 const CLOSE_RE = /^(?:---|\.\.\.)[ \t]*$/;
@@ -53,7 +55,7 @@ function scalarEntries(doc: Document): Array<[string, string]> {
     if (v === null) { out.push([key, '']); continue; }
     if (!isScalar(v)) continue;
     const text = String(v.value ?? '');
-    if (v.type === Scalar.PLAIN) {
+    if (FLAG_KEYS.has(key) && v.type === Scalar.PLAIN) {
       if (text === 'true')  { out.push([key, '']); continue; }
       if (text === 'false') continue;
     }
@@ -77,10 +79,10 @@ export function readFrontmatter(yaml: string): Multimap {
   return meta;
 }
 
-function scalarFor(val: string): Scalar {
-  if (val === '') return new Scalar('true');
+function scalarFor(key: string, val: string): Scalar {
+  if (val === '' && FLAG_KEYS.has(key)) return new Scalar('true');
   const s = new Scalar(val);
-  if (val === 'true' || val === 'false') s.type = Scalar.QUOTE_DOUBLE;
+  if (val === '') s.type = Scalar.PLAIN;
   return s;
 }
 
@@ -94,7 +96,7 @@ export function writeFrontmatter(meta: Multimap, raw?: string): string {
   for (const key of before.keys()) if (!meta.has(key)) { map.delete(key); dirty = true; }
   for (const key of meta.keys()) {
     const val = meta.get(key)!;
-    if (before.get(key) !== val) { map.set(new Scalar(key), scalarFor(val)); dirty = true; }
+    if (before.get(key) !== val) { map.set(new Scalar(key), scalarFor(key, val)); dirty = true; }
   }
   if (!dirty && raw !== undefined) return raw;
   return map.items.length ? doc.toString({ lineWidth: 0, flowCollectionPadding: false }).replace(/\n$/, '') : '';
