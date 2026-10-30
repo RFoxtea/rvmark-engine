@@ -12,7 +12,6 @@
  *
  * Strategies determine how the iframe content is built:
  *   - rvmark: a full rvmark page with its own parser/renderer/tree
- *   - markdown: a styled rendered .md file
  *   - html: an HTML file, loaded at its own origin
  *
  * Nodes with {action: sidepanel} open the sidepanel on select-then-reclick; that
@@ -27,11 +26,8 @@
  * notifySelection(content) must be called whenever selection changes.
  */
 
-import { mdToHtml } from './markdown.js';
-import { getPageContext } from './page-context.js';
-
 import { addressToHref, isRvFile } from '../shared/shared.js';
-import { originFor, addressOf, resolveRefAt, fetchMediaAllAt } from './origin-host.js';
+import { originFor, addressOf, resolveRefAt } from './origin-host.js';
 import { parsePass } from './handler-utils.js';
 import { prerootFrame, StateRelay, buildStatePass } from './state.js';
 import { postGuestMode, broadcastPreroot, prerootDeclareMsg, prerootSetMsg, prerootDeleteMsg, wireRelay, registerThemeIframe, unregisterThemeIframe } from './iframe-host.js';
@@ -47,15 +43,7 @@ export interface SidepanelConfig {
 
 interface SidepanelResult {
   title: string;
-  /** srcdoc HTML — used by markdown/html strategies. */
-  html?: string;
-  /** Page URL — used by rvmark strategy; sets iframe.src directly. */
-  url?: string;
-  /**
-   * Whether the frame runs unsandboxed. Set by a strategy whose srcdoc was
-   * built from sanitized content; never derived from where the content lives.
-   */
-  trusted?: boolean;
+  url:   string;
 }
 
 const _sidepanelStrategies = new Map<string, SidepanelStrategy>();
@@ -185,8 +173,6 @@ function _buildIframe(result: SidepanelResult, relay: StateRelay | null, passEnt
       _relayCleanup = relay ? wireRelay(relay, passEntries, iframe.contentWindow) : null;
     }
   });
-  // A url-backed frame keeps its OWN origin; a srcdoc one would be handed ours.
-  //
   // `allow-same-origin` does not mean "same origin as this page" — it means the
   // document is not forced into an opaque origin. With `src` at a foreign URL
   // that origin is the peer's, never ours, so the flag grants the page its own
@@ -194,18 +180,8 @@ function _buildIframe(result: SidepanelResult, relay: StateRelay | null, passEnt
   // is the same trade origin-host.ts makes for an envoy, and it is what an
   // opaque origin costs: relative subresources become cross-origin requests the
   // peer's own server never agreed to serve.
-  //
-  // srcdoc has no origin of its own to keep, so the flag there WOULD be ours.
-  // Nothing reaches this holding a srcdoc it does not trust — markdown builds
-  // its own sanitized markup — and if anything ever does, it must not have it.
-  if (!result.trusted) {
-    iframe.setAttribute('sandbox', result.url ? 'allow-scripts allow-same-origin' : 'allow-scripts');
-  }
-  if (result.url) {
-    iframe.src = result.url;
-  } else {
-    iframe.srcdoc = result.html!;
-  }
+  iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+  iframe.src = result.url;
   new MutationObserver((_, obs) => {
     if (!iframe.isConnected) {
       if (iframe.contentWindow) unregisterThemeIframe(iframe.contentWindow);
@@ -395,19 +371,6 @@ export function sidepanelOpenFromNode(rn: RenderNode): void {
   void sidepanelOpen(config.rawRef, config.sourceFileAddress, rn, config.attrs);
 }
 
-// ── Shared head builder ───────────────────────────────────────────────────────
-
-function sidepanelHead(basePath: string): string {
-  return `
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- No webfonts here either — see the note in template.html. -->
-  <link rel="stylesheet" href="${basePath}styles.css">
-  <!-- No KaTeX here either — sidepanels run the engine, so ensureKatex() fetches
-       it on demand if the sidepaneled content actually contains math. -->
-  <script type="module" src="${basePath}_engine/client/iframe-guest.js"><\/script>`;
-}
-
 // ── Strategy: rvmark tree ─────────────────────────────────────────────────────
 
 class RvmarkSidepanelStrategy extends SidepanelStrategy {
@@ -426,73 +389,6 @@ class RvmarkSidepanelStrategy extends SidepanelStrategy {
   }
 }
 sidepanelRegister('rvmark', new RvmarkSidepanelStrategy());
-
-
-// ── Strategy: markdown ────────────────────────────────────────────────────────
-
-class MarkdownSidepanelStrategy extends SidepanelStrategy {
-  async build(rawRef: string, sourceFileAddress: string): Promise<SidepanelResult | null> {
-    const ctx = getPageContext();
-    const from = addressOf(sourceFileAddress);
-    const fullPath = (await originFor(from.baseUrl).resolveResources(from.key, [rawRef]))[0] ?? rawRef;
-    const basePath = ctx.basePath;
-
-    // Read through the origin, not off the network. A cross-origin `fetch` from
-    // here needs CORS on the peer's server, which a static host may not even
-    // offer — but the origin's own envoy is same-origin with its files, so it
-    // can read them and hand back the bytes. Same route the bullet mask takes,
-    // and the reason a foreign markdown sidepanel works at all.
-    const res = (await fetchMediaAllAt(sourceFileAddress, [rawRef]))[0];
-    if (!res) return null;
-
-    // The bytes are a document to be READ, so this is where they become text,
-    // and UTF-8 is the assumption: `.md` files are UTF-8 in practice, and a
-    // charset from the origin's own header would be the origin deciding how to
-    // decode its own file — which it is, but the label is not worth trusting
-    // for a guess this safe. Malformed sequences become U+FFFD rather than
-    // throwing; a mangled character is a better failure than a blank panel.
-    const text = new TextDecoder().decode(res.bytes);
-
-    // Sanitized here, whatever the origin is. mdToHtml runs DOMPurify over the
-    // rendered markup, and that — not the origin, not the mime — is what makes
-    // this safe to put in a srcdoc that is NOT sandboxed. Foreign markdown gets
-    // exactly the same treatment as local: the bytes were never trusted.
-    const renderedHtml = mdToHtml(text);
-    const displayName = fullPath.split('/').pop()!.replace(/\.md$/, '');
-
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-${sidepanelHead(basePath)}
-<style>
-  html, body {
-    padding: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-    min-height: 100%;
-  }
-  .md-body {
-    margin-left: 0;
-    padding: 1.2rem 1.4rem;
-    border-left: none;
-    max-width: none;
-    max-height: none;
-    overflow-y: visible;
-  }
-  .md-body:focus { outline: none; }
-</style>
-</head>
-<body>
-<div class="md-body" tabindex="0">
-  ${renderedHtml}
-</div>
-</body>
-</html>`;
-
-    return { title: displayName, html, trusted: true };
-  }
-}
-sidepanelRegister('markdown', new MarkdownSidepanelStrategy());
 
 
 // ── Strategy: html ────────────────────────────────────────────────────────────
