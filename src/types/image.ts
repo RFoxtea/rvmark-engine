@@ -6,7 +6,7 @@
  *      or {type: image; src: https://example.com/photo.jpg}
  * Optional: alt: some description
  * Optional: dark-mode: invert | background | none
- * Optional: align: left | center | right
+ * Optional: align: left | center (default) | right
  * Optional: width: CSS length (e.g. 50%, 300px) — constrains the image width
  * Optional: height: CSS length — fixes the image height
  * Optional: ratio: w/h (e.g. 4/3, 16:9) — reserves the box before load, so the
@@ -50,7 +50,7 @@ class ImageTypeHandler extends BaseTypeHandler {
     const rawUrl = attrs.get('src') ?? rvNode.label ?? null;
     const alt        = attrs.get('alt') ?? '';
     const darkClass  = DARK_MODE_CLASSES[attrs.get('dark-mode') ?? ''] ?? '';
-    const alignClass = ALIGN_CLASSES[attrs.get('align') ?? ''] ?? '';
+    const alignClass = ALIGN_CLASSES[attrs.get('align') ?? ''] ?? ALIGN_CLASSES.center;
     const widthRaw   = attrs.get('width');
     const width      = widthRaw && WIDTH_RE.test(widthRaw.trim()) ? widthRaw.trim() : '';
     const box        = resolveBox(attrs, 'image');
@@ -158,7 +158,7 @@ const imageFactory: NodeTypeFactory = {
     if (!url) return null;
     const alt        = node.attrs.get('alt') ?? '';
     const darkClass  = DARK_MODE_CLASSES[node.attrs.get('dark-mode') ?? ''] ?? '';
-    const alignClass = ALIGN_CLASSES[node.attrs.get('align') ?? ''] ?? '';
+    const alignClass = ALIGN_CLASSES[node.attrs.get('align') ?? ''] ?? ALIGN_CLASSES.center;
     const cls        = ['img-body', darkClass, alignClass].filter(Boolean).join(' ');
     const widthRaw   = node.attrs.get('width');
     const width      = widthRaw && WIDTH_RE.test(widthRaw.trim()) ? widthRaw.trim() : '';

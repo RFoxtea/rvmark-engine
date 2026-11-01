@@ -1658,7 +1658,7 @@ html.rvmark-sidepanel-guest footer { display: none; }
   }
 }
 
-/* align: left — explicit left-align (same as default, but useful with width to avoid stretching) */
+/* align: left */
 .img-body--left {
   display: flex;
   flex-direction: column;
@@ -1666,7 +1666,7 @@ html.rvmark-sidepanel-guest footer { display: none; }
   text-align: left;
 }
 
-/* align: center */
+/* align: center — the default */
 .img-body--center {
   display: flex;
   flex-direction: column;
