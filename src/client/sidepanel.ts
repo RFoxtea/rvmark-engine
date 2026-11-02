@@ -180,7 +180,7 @@ function _buildIframe(result: SidepanelResult, relay: StateRelay | null, passEnt
   // is the same trade origin-host.ts makes for an envoy, and it is what an
   // opaque origin costs: relative subresources become cross-origin requests the
   // peer's own server never agreed to serve.
-  iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+  iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-downloads');
   iframe.src = result.url;
   new MutationObserver((_, obs) => {
     if (!iframe.isConnected) {
