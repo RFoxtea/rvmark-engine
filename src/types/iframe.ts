@@ -18,8 +18,11 @@
  * staticRenderBody: inline block only (URL fetch not available at build time).
  *
  * Focus model: sandboxed iframes cannot receive programmatic focus. Enter/Space
- * on the node row activates "relay mode" — keystrokes are forwarded to the iframe
- * via postMessage. Escape exits relay mode.
+ * on the node row does what the guest declared with 'rvmark-activation':
+ *   relay    — "relay mode": keystrokes are forwarded to the iframe via
+ *              postMessage until Escape.
+ *   activate — a single 'rvmark-activate' message, e.g. to toggle playback.
+ * A guest that declares nothing gets neither.
  *
  * postMessage API (child pages implement this with the rvmark iframe API block):
  *   parent → child: { type: 'rvmark-theme', vars: { '--bg': '…', … } }
@@ -28,6 +31,8 @@
  *   parent → child: { type: 'rvmark-focus' }
  *   parent → child: { type: 'rvmark-blur' }
  *   parent → child: { type: 'rvmark-relay-activated' }
+ *   parent → child: { type: 'rvmark-activate' }
+ *   child → parent: { type: 'rvmark-activation', mode: 'relay' | 'activate' }
  *   child → parent: { type: 'rvmark-iframe-resize', height: number }
  *   child → parent: { type: 'rvmark-request-theme' }
  *   child → parent: { type: 'rvmark-escape' }
@@ -63,7 +68,8 @@ function isSaneHeight(h: unknown): h is number {
 
 // `authorSized` suppresses the guest's self-reported height: an explicit height
 // or ratio is the author overriding the content, so auto-resize must not undo it.
-function setupIframe(iframe: HTMLIFrameElement, content: HTMLElement, authorSized = false): { activateRelay: () => void } {
+function setupIframe(iframe: HTMLIFrameElement, content: HTMLElement, authorSized = false): { activate: () => void } {
+  let activation: 'relay' | 'activate' | null = null;
   let relayActive = false;
   let hasSecondTabStop = false;
 
@@ -154,6 +160,8 @@ function setupIframe(iframe: HTMLIFrameElement, content: HTMLElement, authorSize
       content.focus();
       if (!wasRelay) iframe.contentWindow?.postMessage({ type: 'rvmark-blur' }, '*');
     }
+    if (e.data?.type === 'rvmark-activation' && (e.data.mode === 'relay' || e.data.mode === 'activate'))
+      activation = e.data.mode;
     if (e.data?.type === 'rvmark-has-second-tab-stop') {
       hasSecondTabStop = e.data.value;
       if (relayActive) iframe.tabIndex = hasSecondTabStop ? 0 : -1;
@@ -178,13 +186,18 @@ function setupIframe(iframe: HTMLIFrameElement, content: HTMLElement, authorSize
     }).observe(document.body, { childList: true, subtree: true });
   });
 
-  return { activateRelay };
+  function activate(): void {
+    if (activation === 'relay') activateRelay();
+    else if (activation === 'activate') iframe.contentWindow?.postMessage({ type: 'rvmark-activate' }, '*');
+  }
+
+  return { activate };
 }
 
 // ── Type handler ───────────────────────────────────────────────────────────────
 
 class IframeTypeHandler extends BaseTypeHandler {
-  private _activateRelay: (() => void) | null = null;
+  private _activate: (() => void) | null = null;
 
   constructor(renderNode: RenderNode) {
     super(renderNode, '*');
@@ -217,7 +230,9 @@ class IframeTypeHandler extends BaseTypeHandler {
         iframe.className = 'html-body html-body-iframe';
 
         // A url-backed frame keeps its own origin; a srcdoc one would be handed ours.
-        iframe.setAttribute('sandbox', url ? 'allow-scripts allow-same-origin' : 'allow-scripts');
+        iframe.setAttribute('sandbox', (url ? 'allow-scripts allow-same-origin' : 'allow-scripts') + ' allow-popups allow-popups-to-escape-sandbox');
+        // lets a host-page gesture start the guest's sound, also across origins
+        iframe.allow = 'autoplay';
         applyBox(iframe, box);
 
         const iframePassRaw = attrs.get('iframe-pass') ?? null;
@@ -226,8 +241,8 @@ class IframeTypeHandler extends BaseTypeHandler {
           ? new StateRelay(buildStatePass(renderNode.state, iframePassEntries))
           : null;
 
-        const { activateRelay } = setupIframe(iframe, content, !!(box.height || box.ratio));
-        this._activateRelay = activateRelay;
+        const { activate } = setupIframe(iframe, content, !!(box.height || box.ratio));
+        this._activate = activate;
 
         if (relay) {
           let relayCleanup: (() => void) | null = null;
@@ -258,7 +273,7 @@ class IframeTypeHandler extends BaseTypeHandler {
       switch (e.key) {
         case 'Enter':
         case ' ':
-          this._activateRelay?.();
+          this._activate?.();
           e.preventDefault();
           return;
         case 'c':

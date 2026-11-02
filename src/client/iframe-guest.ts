@@ -114,6 +114,8 @@ export function initPrerootListeners(preroot: {
 }
 
 function _initIframeGuestMode(): void {
+  parent.postMessage({ type: 'rvmark-activation', mode: 'relay' }, '*');
+
   // Focus signalling
   window.addEventListener('focus', () => parent.postMessage({ type: 'rvmark-iframe-focused' }, '*'));
   window.addEventListener('blur',  () => parent.postMessage({ type: 'rvmark-iframe-blurred' }, '*'));
