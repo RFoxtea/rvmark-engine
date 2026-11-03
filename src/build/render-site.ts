@@ -544,8 +544,7 @@ function renderStaticNode(node: RvNode, rvFile: RvFile, depth = 0) {
   const sidepanelVal = attrs.get('sidepanel') ?? null;
   let sidepanelLinkHtml = '';
   if (sidepanelVal) {
-    const mediaAddr = resolveMediaAddress(sidepanelVal, rvFile.pageAddress);
-    const href = mediaAddr ? addressToHref(mediaAddr) : null;
+    const href = resolveMediaAddress(sidepanelVal, rvFile.pageAddress);
     if (href) {
       sidepanelLinkHtml = ` <a class="static-sidepanel-link" href="${escHtml(href)}" title="Open sidepanel (requires JavaScript for interactive view)">◧</a>`;
     }

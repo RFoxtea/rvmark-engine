@@ -10,9 +10,8 @@
  * state, no event bubbling across boundaries. The only communication channel
  * is postMessage (used for Escape-to-close).
  *
- * Strategies determine how the iframe content is built:
- *   - rvmark: a full rvmark page with its own parser/renderer/tree
- *   - html: an HTML file, loaded at its own origin
+ * The sidepanel address is a URL, resolved against the declaring file, and
+ * loaded at its own origin.
  *
  * Nodes with {action: sidepanel} open the sidepanel on select-then-reclick; that
  * wiring is done by the type handlers via wireSelectThenAction, which calls
@@ -26,8 +25,7 @@
  * notifySelection(content) must be called whenever selection changes.
  */
 
-import { addressToHref, isRvFile } from '../shared/shared.js';
-import { originFor, addressOf, resolveRefAt } from './origin-host.js';
+import { originFor, addressOf } from './origin-host.js';
 import { parsePass } from './handler-utils.js';
 import { prerootFrame, StateRelay, buildStatePass } from './state.js';
 import { postGuestMode, broadcastPreroot, prerootDeclareMsg, prerootSetMsg, prerootDeleteMsg, wireRelay, registerThemeIframe, unregisterThemeIframe } from './iframe-host.js';
@@ -40,13 +38,6 @@ export interface SidepanelConfig {
   sourceFileAddress: string;
   attrs:             NodeAttrs;
 }
-
-interface SidepanelResult {
-  title: string;
-  url:   string;
-}
-
-const _sidepanelStrategies = new Map<string, SidepanelStrategy>();
 
 // State: one persistent panel, one trigger .node-content, one content cleanup.
 // The panel is created on first open and destroyed only when the user explicitly
@@ -63,24 +54,9 @@ let _currentCleanup:     (() => void) | null = null;
 // sidepanel target stays the same.
 let _relayCleanup:       (() => void) | null = null;
 
-export class SidepanelStrategy {
-  async build(_rawRef: string, _sourceFileAddress: string, _attrs?: NodeAttrs): Promise<SidepanelResult | null> {
-    return null;
-  }
-}
-
-export function sidepanelRegister(name: string, strategy: SidepanelStrategy): void {
-  _sidepanelStrategies.set(name, strategy);
-}
-
-function strategyFor(refString: string | null): string {
-  if (!refString) return 'rvmark';
-  const hashIdx = refString.indexOf('#');
-  const pathPart = hashIdx !== -1 ? refString.slice(0, hashIdx) : refString;
-  if (isRvFile(pathPart)) return 'rvmark';
-  if (pathPart.endsWith('.md')) return 'markdown';
-  if (pathPart.endsWith('.html')) return 'html';
-  return 'rvmark';
+async function sidepanelUrl(rawRef: string, sourceFileAddress: string): Promise<string> {
+  const from = addressOf(sourceFileAddress);
+  return (await originFor(from.baseUrl).resolveResources(from.key, [rawRef]))[0] ?? rawRef;
 }
 
 function _ensurePanel(): void {
@@ -161,7 +137,7 @@ function _sidepanelIframes(): HTMLIFrameElement[] {
   return _panel ? [..._panel.querySelectorAll<HTMLIFrameElement>('.sidepanel-iframe')] : [];
 }
 
-function _buildIframe(result: SidepanelResult, relay: StateRelay | null, passEntries: ReturnType<typeof parsePass>): HTMLIFrameElement {
+function _buildIframe(url: string, relay: StateRelay | null, passEntries: ReturnType<typeof parsePass>): HTMLIFrameElement {
   const iframe = document.createElement('iframe');
   iframe.className = 'sidepanel-iframe';
   _panel!.appendChild(iframe);
@@ -181,7 +157,7 @@ function _buildIframe(result: SidepanelResult, relay: StateRelay | null, passEnt
   // opaque origin costs: relative subresources become cross-origin requests the
   // peer's own server never agreed to serve.
   iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-downloads');
-  iframe.src = result.url;
+  iframe.src = url;
   new MutationObserver((_, obs) => {
     if (!iframe.isConnected) {
       if (iframe.contentWindow) unregisterThemeIframe(iframe.contentWindow);
@@ -264,24 +240,11 @@ export async function sidepanelOpen(
   _ensurePanel();
   _blankPanel({ showHint: false }); // clear previous content before loading new
 
-  const name = strategyFor(rawRef);
-  const strategy = _sidepanelStrategies.get(name);
-  if (!strategy) {
-    _showError(`No sidepanel strategy for '${name}'.`);
-    _currentTriggerRn = triggerRn;
-    return;
-  }
-
-  let result: SidepanelResult | null;
+  let url: string;
   try {
-    result = await strategy.build(rawRef, sourceFileAddress, attrs);
+    url = await sidepanelUrl(rawRef, sourceFileAddress);
   } catch (err) {
     _showError(`Sidepanel failed to load: ${(err as Error).message}`);
-    _currentTriggerRn = triggerRn;
-    return;
-  }
-  if (!result) {
-    _showError(`Sidepanel not found: ${rawRef}`);
     _currentTriggerRn = triggerRn;
     return;
   }
@@ -292,7 +255,7 @@ export async function sidepanelOpen(
     ? new StateRelay(buildStatePass(triggerRn.state, passEntries))
     : null;
 
-  const iframe = _buildIframe(result, relay, passEntries);
+  const iframe = _buildIframe(url, relay, passEntries);
 
   const onMessage = (e: MessageEvent) => {
     if (e.source !== iframe.contentWindow) return;
@@ -370,49 +333,3 @@ export function sidepanelOpenFromNode(rn: RenderNode): void {
   if (!config) { _ensurePanel(); _blankPanel(); return; }
   void sidepanelOpen(config.rawRef, config.sourceFileAddress, rn, config.attrs);
 }
-
-// ── Strategy: rvmark tree ─────────────────────────────────────────────────────
-
-class RvmarkSidepanelStrategy extends SidepanelStrategy {
-  async build(rawRef: string, sourceFileAddress: string): Promise<SidepanelResult | null> {
-    const node = await resolveRefAt(addressOf(sourceFileAddress), rawRef);
-    if (!node) return null;
-
-    // Build the address from the resolved node's own source file rather than
-    // re-resolving rawRef — this is the path that handles sigil refs (which
-    // resolveAddress doesn't understand) and cross-origin federation.
-    const fileAddress = node.pageAddress;
-    if (!fileAddress) return null;
-    const address = node.permalinkId ? `${fileAddress}#${node.permalinkId}` : fileAddress;
-
-    return { title: node.label || '', url: addressToHref(address) };
-  }
-}
-sidepanelRegister('rvmark', new RvmarkSidepanelStrategy());
-
-
-// ── Strategy: html ────────────────────────────────────────────────────────────
-
-class HtmlSidepanelStrategy extends SidepanelStrategy {
-  async build(rawRef: string, sourceFileAddress: string): Promise<SidepanelResult | null> {
-    const from = addressOf(sourceFileAddress);
-    const fullPath = (await originFor(from.baseUrl).resolveResources(from.key, [rawRef]))[0] ?? rawRef;
-    const displayName = fullPath.split('/').pop()!.replace(/\.html$/, '');
-
-    // Always a URL, whatever origin it is on. An HTML sidepanel is a PAGE — its
-    // scripts, styles and assets are named relative to where it lives, and the
-    // only place they resolve is there. Fetching the markup and re-hosting it
-    // in a srcdoc, which is what this did for a foreign origin, put the document
-    // at an opaque origin where every one of those relative loads became a
-    // cross-origin request its own server had no reason to permit: the page
-    // arrived and then rendered as a shell of itself.
-    //
-    // Cross-origin is not the same as untrusted, and `src` is what says so
-    // precisely. The document runs at ITS origin, with its own cookies, storage
-    // and assets, and reaches nothing of ours — the same boundary an envoy runs
-    // behind (origin-host.ts), for the same reason. What it cannot do is
-    // anything to this page, and that was never what the srcdoc bought.
-    return { title: displayName, url: addressToHref(fullPath) };
-  }
-}
-sidepanelRegister('html', new HtmlSidepanelStrategy());
