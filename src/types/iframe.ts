@@ -230,7 +230,7 @@ class IframeTypeHandler extends BaseTypeHandler {
         iframe.className = 'html-body html-body-iframe';
 
         // A url-backed frame keeps its own origin; a srcdoc one would be handed ours.
-        iframe.setAttribute('sandbox', (url ? 'allow-scripts allow-same-origin' : 'allow-scripts') + ' allow-popups allow-popups-to-escape-sandbox');
+        iframe.setAttribute('sandbox', (url ? 'allow-scripts allow-same-origin' : 'allow-scripts') + ' allow-popups allow-popups-to-escape-sandbox allow-forms allow-pointer-lock allow-downloads');
         // lets a host-page gesture start the guest's sound, also across origins
         iframe.allow = 'autoplay';
         applyBox(iframe, box);
