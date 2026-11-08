@@ -71,7 +71,7 @@ const MATH_TAGS = [
 const SANITIZE_TAGS = [...BLOCK_TAGS, ...INLINE_TAGS, ...MATH_TAGS];
 
 const SANITIZE_ATTRS = [
-  'href', 'src', 'alt', 'title', 'class', 'id', 'draggable', 'loading',
+  'href', 'src', 'alt', 'title', 'class', 'id', 'draggable', 'loading', 'referrerpolicy',
   'colspan', 'rowspan', 'align',
   'target', 'rel',
   // MathML
@@ -416,7 +416,7 @@ function renderInlineSpan(token: any, label: string): string {
   // as before it resolved at all.
   const imgSrc = img ? (_urlResolver?.(img) ?? img) : null;
   let content = imgSrc
-    ? `<img src="${mdEscHtml(imgSrc)}" alt="${mdEscHtml(label)}" loading="lazy" draggable="false">`
+    ? `<img src="${mdEscHtml(imgSrc)}" alt="${mdEscHtml(label)}" loading="lazy" draggable="false" referrerpolicy="no-referrer">`
     : label;
   const ruby = attrs.get('ruby');
   if (ruby) {

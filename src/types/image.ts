@@ -70,6 +70,7 @@ class ImageTypeHandler extends BaseTypeHandler {
       figure.className = ['img-body', darkClass, alignClass].filter(Boolean).join(' ');
 
       const img = document.createElement('img');
+      img.referrerPolicy = 'no-referrer';
       img.src     = resolved;
       img.alt     = alt;
       img.loading = 'lazy';
@@ -171,7 +172,7 @@ const imageFactory: NodeTypeFactory = {
       box.ratio      ? `aspect-ratio:${box.ratio}`    : '',
     ].filter(Boolean).join(';');
     const styleAttr  = decls ? ` style="${esc(decls)}"` : '';
-    return `<figure class="${esc(cls)}"><img src="${esc(url)}" alt="${esc(alt)}" loading="lazy"${styleAttr}></figure>`;
+    return `<figure class="${esc(cls)}"><img src="${esc(url)}" alt="${esc(alt)}" loading="lazy" referrerpolicy="no-referrer"${styleAttr}></figure>`;
   },
 };
 
