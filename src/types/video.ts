@@ -108,6 +108,20 @@ window.addEventListener('message', (e) => {
   }
 });
 
+/** An iframe embed waiting for the reader to load it. */
+interface PendingEmbed {
+  src:      string;
+  api:      PlayerApi | null;
+  provider: string;
+  autoplay: [string, string] | null;
+}
+
+function withParam(src: string, key: string, value: string): string {
+  const url = new URL(src);
+  url.searchParams.set(key, value);
+  return url.toString();
+}
+
 // Extensions we treat as direct video files (native <video>).
 const FILE_EXT_RE = /\.(mp4|webm|ogv|ogg|mov|m4v)(?:[?#]|$)/i;
 
@@ -118,6 +132,8 @@ class VideoTypeHandler extends BaseTypeHandler {
   // Odysee and Instagram iframes have no player API, so their toggle is a no-op.
   private _api:                     PlayerApi | null = null;
   private _video:                   HTMLVideoElement | null = null;
+  private _wrap:                    HTMLElement | null = null;
+  private _pending:                 PendingEmbed | null = null;
 
   constructor(renderNode: RenderNode) {
     super(renderNode, 'iframe, video');
@@ -174,70 +190,33 @@ class VideoTypeHandler extends BaseTypeHandler {
         const vimeo = !yt && !odysee && rawUrl ? vimeoEmbed(rawUrl, clip) : null;
         const insta = !yt && !odysee && !vimeo && rawUrl ? instagramEmbed(rawUrl) : null;
         this._canonicalHref = yt?.href ?? odysee?.href ?? vimeo?.href ?? insta?.href ?? null;
-        if (yt) {
+        const embed: PendingEmbed | null =
+          yt     ? { src: withParam(yt.src, 'enablejsapi', '1'), api: 'yt',    provider: 'YouTube',   autoplay: ['autoplay', '1'] } :
+          odysee ? { src: odysee.src,                         api: null,    provider: 'Odysee',    autoplay: ['autoplay', 'true'] } :
+          vimeo  ? { src: vimeo.src,                          api: 'vimeo', provider: 'Vimeo',     autoplay: ['autoplay', '1'] } :
+          insta  ? { src: insta.src,                          api: null,    provider: 'Instagram', autoplay: null } :
+          null;
+        if (embed) {
           const wrap = document.createElement('div');
-          wrap.className = 'video-wrap';
+          wrap.className = insta ? 'video-wrap video-wrap--portrait' : 'video-wrap';
           applyBox(wrap, box);
-          wrap.innerHTML = `<iframe
-            src="${yt.src}&enablejsapi=1"
-            allowfullscreen
-            loading="lazy"
-          ></iframe>`;
+          // Nothing reaches the provider until the reader asks for the video.
+          const placeholder = document.createElement('button');
+          placeholder.type = 'button';
+          placeholder.className = 'video-placeholder';
+          placeholder.tabIndex = -1;
+          const play = document.createElement('span');
+          play.className = 'video-placeholder-play';
+          play.setAttribute('aria-hidden', 'true');
+          const label = document.createElement('span');
+          label.className = 'video-placeholder-label';
+          label.append(play, embed.provider);
+          placeholder.append(label);
+          placeholder.addEventListener('click', () => this._loadEmbed());
+          wrap.appendChild(placeholder);
           content.appendChild(wrap);
-
-          this._iframe = wrap.querySelector('iframe')!;
-          this._api = 'yt';
-          this._iframe.addEventListener('load', () => {
-            this._iframe!.contentWindow!.postMessage(
-              JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
-              YT_ORIGIN
-            );
-          });
-        } else if (odysee) {
-          const wrap = document.createElement('div');
-          wrap.className = 'video-wrap';
-          applyBox(wrap, box);
-          wrap.innerHTML = `<iframe
-            src="${odysee.src}"
-            allowfullscreen
-            loading="lazy"
-          ></iframe>`;
-          content.appendChild(wrap);
-          this._iframe = wrap.querySelector('iframe')!;
-        } else if (vimeo) {
-          const wrap = document.createElement('div');
-          wrap.className = 'video-wrap';
-          applyBox(wrap, box);
-          wrap.innerHTML = `<iframe
-            src="${vimeo.src}"
-            allowfullscreen
-            loading="lazy"
-          ></iframe>`;
-          content.appendChild(wrap);
-
-          this._iframe = wrap.querySelector('iframe')!;
-          this._api = 'vimeo';
-          // Unlike YouTube, Vimeo sends nothing until each event is subscribed to
-          // by name, so the toggle needs all three transitions requested here.
-          this._iframe.addEventListener('load', () => {
-            for (const value of ['play', 'pause', 'ended']) {
-              this._iframe!.contentWindow!.postMessage(
-                JSON.stringify({ method: 'addEventListener', value }),
-                VIMEO_ORIGIN
-              );
-            }
-          });
-        } else if (insta) {
-          const wrap = document.createElement('div');
-          wrap.className = 'video-wrap video-wrap--portrait';
-          applyBox(wrap, box);
-          wrap.innerHTML = `<iframe
-            src="${insta.src}"
-            allowfullscreen
-            loading="lazy"
-          ></iframe>`;
-          content.appendChild(wrap);
-          this._iframe = wrap.querySelector('iframe')!;
+          this._wrap = wrap;
+          this._pending = embed;
         }
       }
     })();
@@ -269,7 +248,42 @@ class VideoTypeHandler extends BaseTypeHandler {
     new ToggleSet(renderNode, attrs, { alwaysOpen: true }).mountOnce();
   }
 
+  private _loadEmbed(): void {
+    const embed = this._pending;
+    if (!embed || !this._wrap) return;
+    this._pending = null;
+    const iframe = document.createElement('iframe');
+    iframe.src = embed.autoplay ? withParam(embed.src, ...embed.autoplay) : embed.src;
+    iframe.allow = 'autoplay; fullscreen';
+    // Players refuse to load without a referrer; the page sends none cross-origin.
+    iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+    iframe.allowFullscreen = true;
+    this._wrap.replaceChildren(iframe);
+    this._iframe = iframe;
+    this._api = embed.api;
+    if (embed.api === 'yt') {
+      iframe.addEventListener('load', () => {
+        iframe.contentWindow!.postMessage(
+          JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
+          YT_ORIGIN
+        );
+      });
+    } else if (embed.api === 'vimeo') {
+      // Unlike YouTube, Vimeo sends nothing until each event is subscribed to
+      // by name, so the toggle needs all three transitions requested here.
+      iframe.addEventListener('load', () => {
+        for (const value of ['play', 'pause', 'ended']) {
+          iframe.contentWindow!.postMessage(
+            JSON.stringify({ method: 'addEventListener', value }),
+            VIMEO_ORIGIN
+          );
+        }
+      });
+    }
+  }
+
   private _togglePlayback(): void {
+    if (this._pending) { this._loadEmbed(); return; }
     if (this._video) {
       if (this._video.paused) void this._video.play();
       else this._video.pause();
