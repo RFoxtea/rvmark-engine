@@ -34,9 +34,9 @@
 import { Multimap } from './multimap.js';
 import { seedBag, deriveBag, type InheritedBag } from './inherited.js';
 import { splitFrontmatter, readFrontmatter } from './frontmatter.js';
-import { parseAttrBlock } from './attr-parser.js';
+import { parseAttrBlock, findBlockEnd } from './attr-parser.js';
 
-export { splitSegments, parseShowWhen, evalShowWhen, parseStateEntries, parseAttrBlock } from './attr-parser.js';
+export { splitSegments, parseShowWhen, evalShowWhen, parseStateEntries, parseAttrBlock, findBlockEnd, unquoteValue, quoteValue } from './attr-parser.js';
 export type { StateEntry, StateCondition } from './attr-parser.js';
 
 export type TagProps = Multimap;
@@ -226,10 +226,17 @@ export function joinBraced(lines: string[], i: number): { text: string; next: nu
   if (!lines[i].trimStart().startsWith('{') && !/^\s*(?:\[|@)/.test(lines[i])) return null;
   let depth = 0;
   let seen = false;
+  let inStr = false;
   const parts: string[] = [];
   for (let j = i; j < lines.length; j++) {
-    for (const ch of lines[j]) {
-      if (ch === '{') { depth++; seen = true; }
+    const line = lines[j];
+    for (let k = 0; k < line.length; k++) {
+      const ch = line[k];
+      if (inStr) {
+        if (ch === '\\' && (line[k + 1] === '"' || line[k + 1] === '\\')) k++;
+        else if (ch === '"') inStr = false;
+      } else if (ch === '"' && depth > 0) inStr = true;
+      else if (ch === '{') { depth++; seen = true; }
       else if (ch === '}') depth--;
     }
     parts.push(lines[j].trim());
@@ -561,18 +568,22 @@ function extractAttrs(str: string): { attrs: NodeAttrs; tags: Tag[]; label: stri
   let attrs: NodeAttrs = new Multimap();
   let rest = str.trimStart();
 
-  const braceM = rest.match(/^\{([^}]*)\}\s*(.*)/s);
-  if (braceM) {
-    attrs = parseAttrBlock(braceM[1]);
-    rest = braceM[2];
+  if (rest.startsWith('{')) {
+    const end = findBlockEnd(rest, 1);
+    if (end !== -1) {
+      attrs = parseAttrBlock(rest.slice(1, end));
+      rest = rest.slice(end + 1).trimStart();
+    }
   }
 
   const tags: Tag[] = [];
   while (true) {
-    const tagPropsM = rest.match(/^\[([^\]\[{]*)\{([^}]*)\}\s*\]\s*(.*)/s);
-    if (tagPropsM) {
-      tags.push({ name: tagPropsM[1].trim(), props: parseAttrBlock(tagPropsM[2]) });
-      rest = tagPropsM[3];
+    const tagOpenM = rest.match(/^\[([^\]\[{]*)\{/);
+    const tagEnd = tagOpenM ? findBlockEnd(rest, tagOpenM[0].length) : -1;
+    const tagCloseM = tagEnd !== -1 ? rest.slice(tagEnd + 1).match(/^\s*\]\s*(.*)/s) : null;
+    if (tagOpenM && tagCloseM) {
+      tags.push({ name: tagOpenM[1].trim(), props: parseAttrBlock(rest.slice(tagOpenM[0].length, tagEnd)) });
+      rest = tagCloseM[1];
       continue;
     }
     // [Tag] — bare tag (must not be followed by '(' or '{' to avoid markdown link/span syntax)

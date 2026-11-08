@@ -24,8 +24,8 @@
  * }
  */
 
-import { readFileSync, writeFileSync, readdirSync, mkdirSync, cpSync, rmSync, existsSync, statSync } from 'fs';
-import { join, dirname } from 'path';
+import { readFileSync, writeFileSync, readdirSync, mkdirSync, cpSync, rmSync, existsSync, statSync, lstatSync, copyFileSync, renameSync, utimesSync, rmdirSync } from 'fs';
+import { join, dirname, basename, resolve, relative, isAbsolute } from 'path';
 import { createRequire } from 'module';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { isRvFile } from '../shared/shared.js';
@@ -126,6 +126,85 @@ async function emitEnvoy(customTypesDir: string | null, DIST_DIR: string) {
   writeFileSync(join(DIST_DIR, 'envoy.html'), html);
 }
 
+// ── Incremental output ────────────────────────────────────────────────────────
+// Pages and the content mirror (_rvmark/, which carries every media file) are
+// kept between builds: a page is written only when its bytes changed, a mirrored
+// file is copied only when its source changed, and whatever the build no longer
+// produces is pruned. The engine's own outputs are regenerated every build.
+const REGENERATED = new Set(['_engine', '_vendor', '_assets', '_custom-types', 'styles.css', 'envoy.html']);
+
+// Filesystems with 2 s timestamp resolution (FAT/exFAT) round the mtime we stamp.
+const MTIME_SLACK_MS = 2000;
+
+function isWithin(dir: string, path: string): boolean {
+  const r = relative(resolve(dir), resolve(path));
+  return r === '' || (!r.startsWith('..') && !isAbsolute(r));
+}
+
+function existing(path: string) {
+  try { return lstatSync(path); } catch { return null; }
+}
+
+/**
+ * Put a new `dst` in place: `fill` writes it under a temporary name, which is then
+ * renamed over `dst`. An interrupted build leaves a stray temp file (pruned next
+ * build), never a truncated file that looks current.
+ */
+function replaceFile(dst: string, fill: (tmp: string) => void) {
+  const d = existing(dst);
+  if (d && !d.isFile()) rmSync(dst, { recursive: true, force: true });
+  mkdirSync(dirname(dst), { recursive: true });
+  const tmp = join(dirname(dst), `.${basename(dst)}.rvmark-${process.pid}.tmp`);
+  try {
+    fill(tmp);
+    renameSync(tmp, dst);
+  } catch (err) {
+    rmSync(tmp, { force: true });
+    throw err;
+  }
+}
+
+function writeIfChanged(dst: string, text: string) {
+  const data = Buffer.from(text);
+  const d = existing(dst);
+  if (d?.isFile() && d.size === data.length && readFileSync(dst).equals(data)) return;
+  replaceFile(dst, tmp => writeFileSync(tmp, data));
+}
+
+/**
+ * Copy `src` to `dst` unless `dst` already is this version of it. A copy carries
+ * the source's mtime, so "same size, same mtime" means "copied from this source".
+ */
+function syncFile(src: string, dst: string) {
+  const s = statSync(src);
+  const d = existing(dst);
+  if (d?.isFile() && d.size === s.size && Math.abs(d.mtimeMs - s.mtimeMs) < MTIME_SLACK_MS) return;
+  replaceFile(dst, tmp => {
+    copyFileSync(src, tmp);
+    utimesSync(tmp, s.atime, s.mtime);
+  });
+}
+
+/**
+ * Delete everything under `dir` whose dist-relative path is not in `keep` (or,
+ * at the top level, is regenerated), and the directories that leaves empty.
+ * Names are compared exactly, so on a case-insensitive filesystem a file whose
+ * name only changed case is removed here and written again under its new name.
+ */
+function prune(dir: string, rel: string, keep: Set<string>): boolean {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, e.name);
+    const r = rel ? `${rel}/${e.name}` : e.name;
+    if (!rel && REGENERATED.has(e.name)) rmSync(full, { recursive: true, force: true });
+    else if (e.isDirectory()) {
+      if (prune(full, r, keep)) rmdirSync(full);
+    } else if (!keep.has(r)) {
+      rmSync(full, { force: true });
+    }
+  }
+  return readdirSync(dir).length === 0;
+}
+
 /**
  * Build a site from rvmark content into a static HTML site.
  * See the config shape documented at the top of this file.
@@ -162,6 +241,9 @@ export async function buildSite(config: BuildSiteConfig) {
 
   const RVMARK_DIR = contentDir;
   const DIST_DIR   = outDir;
+  if (isWithin(RVMARK_DIR, DIST_DIR) || isWithin(DIST_DIR, RVMARK_DIR)) {
+    throw new Error(`buildSite: content dir and out dir must not contain each other: ${RVMARK_DIR}, ${DIST_DIR}`);
+  }
 
   // `templateHtml` (raw contents) wins over `template` (path); both default to
   // the engine's template. Lets callers patch the template in-memory (e.g. the
@@ -207,12 +289,17 @@ export async function buildSite(config: BuildSiteConfig) {
     mountPath,
   });
 
-  if (existsSync(DIST_DIR)) rmSync(DIST_DIR, { recursive: true });
-  for (const [rel, text] of rendered) {
-    const outPath = join(DIST_DIR, rel);
-    mkdirSync(dirname(outPath), { recursive: true });
-    writeFileSync(outPath, text);
-  }
+  // The output is pruned to what this build produces before anything is written.
+  const MIRROR = contentOutDir(mountPath);
+  const mirrored = (rel: string) => !isRvFile(rel) && !rel.endsWith('.mjs');
+  const produced = new Set<string>([
+    ...rendered.keys(),
+    ...paths.filter(mirrored).map(rel => `${MIRROR}/${rel}`),
+  ]);
+  const dist = existing(DIST_DIR);
+  if (dist && !dist.isDirectory()) rmSync(DIST_DIR, { force: true });
+  if (dist?.isDirectory()) prune(DIST_DIR, '', produced);
+  for (const [rel, text] of rendered) writeIfChanged(join(DIST_DIR, rel), text);
 
   // ── Copy static assets ──────────────────────────────────────────────────────
 
@@ -308,10 +395,7 @@ export async function buildSite(config: BuildSiteConfig) {
 
   // Non-rvmark files in the rvmark dir (e.g. docs.md, images).
   for (const rel of paths) {
-    if (isRvFile(rel) || rel.endsWith('.mjs')) continue;
-    const outPath = join(DIST_DIR, contentOutDir(mountPath), rel);
-    mkdirSync(dirname(outPath), { recursive: true });
-    cpSync(join(RVMARK_DIR, rel), outPath);
+    if (mirrored(rel)) syncFile(join(RVMARK_DIR, rel), join(DIST_DIR, MIRROR, rel));
   }
 
   console.log('\nBuild complete.');

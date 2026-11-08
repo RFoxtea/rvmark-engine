@@ -61,6 +61,32 @@ function readValue(s: string, i: number, ctx: string): { val: string; end: numbe
   );
 }
 
+/** Index of the first `}` at or after `from` that is not inside a quoted string, or -1. */
+export function findBlockEnd(s: string, from: number): number {
+  let inStr = false;
+  for (let i = from; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (c === '\\' && (s[i + 1] === '"' || s[i + 1] === '\\')) { i++; continue; }
+      if (c === '"') inStr = false;
+    } else if (c === '"') inStr = true;
+    else if (c === '}') return i;
+  }
+  return -1;
+}
+
+const QUOTED_VALUE_RE = /^"(?:[^"\\]|\\.)*"$/s;
+
+/** A plain attribute value written as one quoted string stands for that string. */
+export function unquoteValue(v: string): string {
+  return QUOTED_VALUE_RE.test(v) ? v.slice(1, -1).replace(/\\(["\\])/g, '$1') : v;
+}
+
+/** The inverse of `unquoteValue`: quoted only when it would not otherwise read back as itself. */
+export function quoteValue(v: string): string {
+  return /[;}]|^\s|\s$/.test(v) || QUOTED_VALUE_RE.test(v) ? `"${v.replace(/["\\]/g, '\\$&')}"` : v;
+}
+
 // Split on ';', but never inside a double-quoted string, so that a value may
 // contain the separator: `let &msg = "a; b"` is one entry, not two.
 export function splitSegments(raw: string): string[] {
@@ -247,7 +273,7 @@ export function parseAttrBlock(raw: string): Multimap {
     }
     const eq = p.indexOf(':');
     if (eq === -1) out.append(p, "");
-    else out.append(p.slice(0, eq).trim(), p.slice(eq + 1).trim());
+    else out.append(p.slice(0, eq).trim(), unquoteValue(p.slice(eq + 1).trim()));
   }
   return out;
 }

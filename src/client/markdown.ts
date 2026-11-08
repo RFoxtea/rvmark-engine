@@ -15,7 +15,7 @@
  *   staticMdInline(text)  — build-time inline markdown → HTML string
  */
 
-import { splitSegments, STATE_EVENT_ATTRS } from '../shared/parser.js';
+import { splitSegments, findBlockEnd, unquoteValue, STATE_EVENT_ATTRS } from '../shared/parser.js';
 import { Multimap } from '../shared/multimap.js';
 import { KATEX_DEADLINE_MS } from './constants.js';
 
@@ -185,6 +185,14 @@ let _spanOrdinalWalk = 0;
  */
 let _urlResolver: ((url: string) => string | null) | null = null;
 
+/** Link and image destinations a parse found that are resource refs. */
+let _currentLinkRefs: Set<string> | null = null;
+
+/** A path for the origin to resolve, as opposed to a URL, a fragment, or a protocol-relative address. */
+function isResourceRef(ref: string | null | undefined): ref is string {
+  return !!ref && !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(ref) && !ref.startsWith('#') && !ref.startsWith('//');
+}
+
 // ── Factory: build a configured Marked instance ────────────────────────────────
 
 interface MarkedOpts {
@@ -212,6 +220,11 @@ function makeMarked(opts: MarkedOpts) {
       rvmarkSpanExtension,
     ],
     walkTokens(token: any) {
+      if ((token.type === 'link' || token.type === 'image') && isResourceRef(token.href)) {
+        _currentLinkRefs?.add(token.href);
+        if (_urlResolver) token.href = _urlResolver(token.href) ?? token.href;
+        return;
+      }
       if (token.type !== 'rvmarkSpan' || !_currentSpanMap) return;
       const attrs = parseInlineSpanParams(token.rawParams);
       const rawIndex = attrs.get('index');
@@ -301,7 +314,7 @@ export function parseInlineSpanParams(raw: string): ParsedSpanAttrs {
     }
     const colon = trimmed.indexOf(':');
     if (colon === -1) out.append(trimmed, '');
-    else out.append(trimmed.slice(0, colon).trim(), trimmed.slice(colon + 1).trim());
+    else out.append(trimmed.slice(0, colon).trim(), unquoteValue(trimmed.slice(colon + 1).trim()));
   }
   return out;
 }
@@ -411,7 +424,7 @@ function renderInlineSpan(token: any, label: string): string {
 
   const href = attrs.get('href');
   if (href) {
-    const hrefAt = ` href="${mdEscHtml(href)}"`;
+    const hrefAt = ` href="${mdEscHtml(_urlResolver?.(href) ?? href)}"`;
     return `<a${hrefAt} target="_blank" rel="noopener noreferrer"${roleAt}${cls}${styleAt}${dataStr}>${content}</a>`;
   }
   return `<span${roleAt}${cls}${styleAt}${dataStr}>${content}</span>`;
@@ -438,7 +451,7 @@ function matchSpan(src: string): { label: string; params: string; len: number } 
     else if (c === ']') { depth--; if (depth === 0) break; }
   }
   if (depth !== 0 || src[i] !== ']' || src[i + 1] !== '{') return null;
-  const close = src.indexOf('}', i + 2);
+  const close = findBlockEnd(src, i + 2);
   if (close === -1) return null;
   return {
     label:  src.slice(1, i),
@@ -602,17 +615,21 @@ function withSpanMap<T>(
   fn: () => T,
   startOrdinal = 0,
   resolveUrl: ((url: string) => string | null) | null = null,
-): { result: T; spanMap: Map<number, ParsedSpanAttrs>; endOrdinal: number } {
+): { result: T; spanMap: Map<number, ParsedSpanAttrs>; endOrdinal: number; refs: string[] } {
   const spanMap = new Map<number, ParsedSpanAttrs>();
+  const linkRefs = new Set<string>();
   _currentSpanMap  = spanMap;
+  _currentLinkRefs = linkRefs;
   _spanOrdinalWalk = startOrdinal;
   _urlResolver     = resolveUrl;
   try {
     const result = fn();
-    return { result, spanMap, endOrdinal: _spanOrdinalWalk };
+    const refs = [...new Set([...collectSpanResourceRefs(spanMap), ...linkRefs])];
+    return { result, spanMap, endOrdinal: _spanOrdinalWalk, refs };
   } finally {
-    _currentSpanMap = null;
-    _urlResolver    = null;
+    _currentSpanMap  = null;
+    _currentLinkRefs = null;
+    _urlResolver     = null;
   }
 }
 
@@ -638,7 +655,7 @@ export async function mdToHtmlWithSpansResolved(
   text: string,
   resolveRefs: (refs: string[]) => Promise<(string | null)[]>,
 ): Promise<{ html: string; spanMap: Map<number, ParsedSpanAttrs> }> {
-  const refs = collectSpanResourceRefs(mdToHtmlWithSpans(text).spanMap);
+  const { refs } = withSpanMap(() => sanitizeMd(getRuntimeMarked().parse(text)));
   let answers: (string | null)[];
   try { answers = await resolveRefs(refs); }
   catch { answers = refs.map(() => null); }
@@ -656,9 +673,7 @@ export function staticMdToHtmlResolved(
   text: string,
   resolveRefs: (refs: string[]) => (string | null)[],
 ): string {
-  const refs = collectSpanResourceRefs(
-    withSpanMap(() => getStaticMarked().parse(text)).spanMap,
-  );
+  const { refs } = withSpanMap(() => getStaticMarked().parse(text));
   const answers = resolveRefs(refs);
   const resolved = new Map(refs.map((ref, i) => [ref, answers[i] ?? null] as const));
   return withSpanMap(
@@ -692,14 +707,14 @@ export function mdInlineWithSpans(
  * a caller that collects them must agree on what a ref is; adding a kind is
  * adding a line here.
  */
-export const SPAN_RESOURCE_KEYS = ['img'] as const;
+export const SPAN_RESOURCE_KEYS = ['img', 'href'] as const;
 
 /** Every resource ref the spans of one parse carry, deduplicated. */
 export function collectSpanResourceRefs(spanMap: Map<number, ParsedSpanAttrs>): string[] {
   const refs = new Set<string>();
   for (const attrs of spanMap.values()) {
     for (const key of SPAN_RESOURCE_KEYS) {
-      for (const v of attrs.getAll(key)) if (v) refs.add(v);
+      for (const v of attrs.getAll(key)) if (isResourceRef(v)) refs.add(v);
     }
   }
   return [...refs];
@@ -725,7 +740,7 @@ export async function mdInlineWithSpansResolved(
   text: string,
   resolveRefs: (refs: string[]) => Promise<(string | null)[]>,
 ): Promise<{ html: string; spanMap: Map<number, ParsedSpanAttrs> }> {
-  const refs = collectSpanResourceRefs(mdInlineWithSpans(text).spanMap);
+  const { refs } = withSpanMap(() => sanitizeMdInline(getRuntimeMarked().parseInline(text) as string));
   let answers: (string | null)[];
   try { answers = await resolveRefs(refs); }
   catch { answers = refs.map(() => null); }
@@ -785,14 +800,13 @@ export function mdInlineWithSpansContinuedUsing(
   return { html: result, nextOrdinal: endOrdinal };
 }
 
-/** The `img:` refs a set of inline sources carries, in first-seen order. */
+/** The resource refs a set of inline sources carries, in first-seen order. */
 export function collectInlineRefs(texts: string[]): string[] {
-  const spanMap = new Map<number, ParsedSpanAttrs>();
-  let ordinal = 0;
+  const refs = new Set<string>();
   for (const t of texts) {
-    ordinal = mdInlineWithSpansContinued(t, spanMap, ordinal).nextOrdinal;
+    for (const r of withSpanMap(() => getRuntimeMarked().parseInline(t)).refs) refs.add(r);
   }
-  return collectSpanResourceRefs(spanMap);
+  return [...refs];
 }
 
 /**
@@ -804,7 +818,7 @@ export function staticMdInlineResolved(
   text: string,
   resolveRefs: (refs: string[]) => (string | null)[],
 ): string {
-  const refs = collectSpanResourceRefs(staticMdInlineWithSpans(text).spanMap);
+  const { refs } = withSpanMap(() => getStaticMarked().parseInline(text));
   const answers = resolveRefs(refs);
   const resolved = new Map(refs.map((ref, i) => [ref, answers[i] ?? null] as const));
   return withSpanMap(
@@ -812,10 +826,6 @@ export function staticMdInlineResolved(
     0,
     (url) => resolved.get(url) ?? null,
   ).result;
-}
-
-function staticMdInlineWithSpans(text: string): { spanMap: Map<number, ParsedSpanAttrs> } {
-  return withSpanMap(() => getStaticMarked().parseInline(text));
 }
 
 export function staticMdInline(text: string): string {

@@ -29,11 +29,47 @@ import { buildSite } from '../out/build/site.js';
 import { watchPaths, serializeBuilds } from '../scripts/watch.mjs';
 import { startServer } from '../scripts/static-server.mjs';
 import { execSync } from 'child_process';
-import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from 'fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync, statSync, mkdirSync } from 'fs';
 import { join, dirname, resolve, isAbsolute, relative } from 'path';
 import { fileURLToPath } from 'url';
 
 const ENGINE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+// ── Dev-mode engine compile ───────────────────────────────────────────────────
+// `serve --dev` compiles the engine before a build only when its inputs differ
+// from those of the last successful compile. The inputs are fingerprinted by
+// path, size and mtime and compared for equality, so a deleted, renamed or
+// older-dated file counts as a change too. The fingerprint lives in out/ and is
+// written only after both compiles succeed: a failed compile retries next build,
+// and a deleted out/ forces one.
+const COMPILE_STAMP = join(ENGINE_ROOT, 'out', '.dev-compile-inputs');
+const COMPILE_INPUTS = ['src', 'tsconfig.json', 'tsconfig.build.json', 'node_modules/typescript/package.json'];
+
+function compileFingerprint() {
+  const lines = [];
+  const visit = (rel) => {
+    let st;
+    try { st = statSync(join(ENGINE_ROOT, rel)); } catch { lines.push(`${rel} missing`); return; }
+    if (st.isDirectory()) {
+      for (const e of readdirSync(join(ENGINE_ROOT, rel)).sort()) visit(`${rel}/${e}`);
+    } else {
+      lines.push(`${rel} ${st.size} ${st.mtimeMs}`);
+    }
+  };
+  COMPILE_INPUTS.forEach(visit);
+  return lines.join('\n');
+}
+
+function compileEngineIfChanged() {
+  const fingerprint = compileFingerprint();
+  let last = null;
+  try { last = readFileSync(COMPILE_STAMP, 'utf8'); } catch { /* never compiled */ }
+  if (last === fingerprint) return;
+  execSync('npx tsc --incremental', { stdio: 'inherit', cwd: ENGINE_ROOT });
+  execSync('npx tsc --incremental -p tsconfig.build.json', { stdio: 'inherit', cwd: ENGINE_ROOT });
+  mkdirSync(dirname(COMPILE_STAMP), { recursive: true });
+  writeFileSync(COMPILE_STAMP, fingerprint);
+}
 
 // The federation specs fetch from an http peer on localhost:8003, but the
 // production CSP allows only 'self' + https:. Derive a test-only template from
@@ -234,7 +270,7 @@ if (subcommand === 'serve') {
     const start = Date.now();
     if (dev) {
       try {
-        execSync('npx tsc --incremental', { stdio: 'inherit', cwd: ENGINE_ROOT });
+        compileEngineIfChanged();
         execSync(`node ${JSON.stringify(fileURLToPath(import.meta.url))} ${buildArgv().map(s => JSON.stringify(s)).join(' ')}`,
                  { stdio: 'inherit' });
         console.log(`  rebuilt in ${Date.now() - start}ms\n`);
@@ -249,9 +285,9 @@ if (subcommand === 'serve') {
   }
 
   // ONE queue for every build, the initial one included — a second
-  // serializeBuilds instance would serialize against nothing. buildSite() wipes
+  // serializeBuilds instance would serialize against nothing. buildSite() prunes
   // outDir before repopulating it, so two overlapping builds leave one deleting
-  // the directory the other is writing into (ENOENT on lstat). Each run resolves
+  // files the other is writing (ENOENT on lstat). Each run resolves
   // the waiters registered when it began, so the initial build can be awaited
   // without giving it a private queue.
   let waiters = [];

@@ -24,6 +24,7 @@
 import type { SourceFile, SourceNode, Head, TagDef } from '../shared/parser.js';
 import type { Multimap } from '../shared/multimap.js';
 import { writeFrontmatter } from '../shared/frontmatter.js';
+import { quoteValue } from '../shared/attr-parser.js';
 
 const INDENT = 2;
 
@@ -43,7 +44,7 @@ function stringifyAttrEntry(key: string, val: string): string {
     // silently change which event it fires on.
     case 'on-spawn':    return /^(let|remove)\b/.test(val)    ? val : `${key}: ${val}`;
     case 'on-action':   return /^set\b/.test(val)             ? val : `${key}: ${val}`;
-    default:            return val === '' ? key : `${key}: ${val}`;
+    default:            return val === '' ? key : `${key}: ${quoteValue(val)}`;
   }
 }
 
