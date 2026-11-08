@@ -365,6 +365,17 @@ export async function buildSite(config: BuildSiteConfig) {
   // Third-party vendored libs → _vendor/
   cpSync(requireFromEngine.resolve('marked/marked.min.js'), join(VENDOR_DIR, 'marked.min.js'));
   cpSync(requireFromEngine.resolve('dompurify/dist/purify.min.js'), join(VENDOR_DIR, 'purify.min.js'));
+  {
+    // Only woff2: katex.min.css lists woff2 first, and every supported browser takes it.
+    const katexDist = dirname(requireFromEngine.resolve('katex/dist/katex.min.js'));
+    const katexOut  = join(VENDOR_DIR, 'katex');
+    mkdirSync(join(katexOut, 'fonts'), { recursive: true });
+    for (const f of ['katex.min.js', 'katex.min.css']) cpSync(join(katexDist, f), join(katexOut, f));
+    cpSync(join(katexDist, '..', 'LICENSE'), join(katexOut, 'LICENSE'));
+    for (const f of readdirSync(join(katexDist, 'fonts'))) {
+      if (f.endsWith('.woff2')) cpSync(join(katexDist, 'fonts', f), join(katexOut, 'fonts', f));
+    }
+  }
 
   // Default favicons → _assets/. Written before the user assets copy below, so
   // a site shipping its own _assets/favicon.svg (or -expanded) simply

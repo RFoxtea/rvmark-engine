@@ -18,6 +18,7 @@
 import { splitSegments, findBlockEnd, unquoteValue, STATE_EVENT_ATTRS } from '../shared/parser.js';
 import { Multimap } from '../shared/multimap.js';
 import { KATEX_DEADLINE_MS } from './constants.js';
+import { getPageContext } from './page-context.js';
 
 // marked is loaded as a classic <script> before this module at runtime, and
 // provided as a CJS import in the build. Access via globalThis so this file
@@ -498,14 +499,11 @@ function mathInlineFallback(src: string, display: boolean): string {
 // script must be present BEFORE the markdown that needs it renders. Callers
 // therefore await ensureKatex() first. Block nodes declare `managesReady`, so
 // the node simply does not mount until this resolves — and the MOUNT_SETTLE_MS
-// race means a fast CDN response never shows a placeholder at all. Nothing ever
+// race means a fast response never shows a placeholder at all. Nothing ever
 // paints in fallback form and then upgrades, so there is no flash.
 //
 // The fallbacks above remain the path for the build (no DOM, no network) and for
 // a failed load.
-
-const KATEX_VERSION = '0.16.11';
-const KATEX_BASE    = `https://cdn.jsdelivr.net/npm/katex@${KATEX_VERSION}/dist/katex.min`;
 
 let _katexPromise: Promise<void> | null = null;
 
@@ -542,7 +540,7 @@ export function clipboardHtml(el: HTMLElement): string {
  * and math then renders through the fallbacks above.
  *
  * The deadline is load-bearing. Callers defer mounting a node until this settles,
- * so a request that neither loads nor errors — an offline reader, a blocked CDN
+ * so a request that neither loads nor errors — an offline reader, a server
  * that black-holes rather than refusing — would otherwise leave that content
  * permanently invisible. Bounding the wait means the worst case is unstyled math,
  * never missing content. Same reasoning as TRANSCLUDE_DEADLINE_MS.
@@ -561,13 +559,14 @@ export function ensureKatex(): Promise<void> {
       resolve();
     };
 
+    const base = `${getPageContext().basePath}_vendor/katex/katex.min`;
     const css = document.createElement('link');
     css.rel  = 'stylesheet';
-    css.href = `${KATEX_BASE}.css`;
+    css.href = `${base}.css`;
     document.head.appendChild(css);
 
     const js = document.createElement('script');
-    js.src = `${KATEX_BASE}.js`;
+    js.src = `${base}.js`;
     js.onload  = () => done();
     js.onerror = () => done('KaTeX failed to load');
     document.head.appendChild(js);
