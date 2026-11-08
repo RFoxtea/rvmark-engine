@@ -152,8 +152,8 @@ async function init(page: RvmarkPageContext): Promise<void> {
   // suppresses the row must not still answer the key.
   if (!meta.has('no-keymap')) keymapInstallShortcut();
 
-  const hash  = page.anchor ?? (location.hash ? location.hash.slice(1) : null);
-  const focus = page.focus  ?? new URLSearchParams(location.search).get('focus');
+  const hash  = location.hash ? location.hash.slice(1) : null;
+  const focus = new URLSearchParams(location.search).get('focus');
   await renderRoot(pageAddress, hash, focus);
   if (treeEl) treeEl.style.display = '';
 

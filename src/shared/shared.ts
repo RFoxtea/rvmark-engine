@@ -42,15 +42,10 @@ export function toRvFile(path: string): string {
  *   file - the page's source, relative to the content root ('docs/writing.rv.md')
  *   base - the prefix from this output page up to the site root ('../../'),
  *          relative rather than root-absolute so links also work over file://
- *
- * anchor and focus are optional: a directly-loaded page reads its fragment from
- * location instead.
  */
 export interface RvmarkPageContext {
   file:    string;
   base:    string;
-  anchor?: string | null;
-  focus?:  string | null;
 }
 
 // ── Address resolution ─────────────────────────────────────────────────────────
