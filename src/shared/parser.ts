@@ -85,8 +85,8 @@ export interface Tag {
 }
 
 export interface OriginDef {
-  url:       string;
-  fallback?: string;
+  /** The site, then its mirrors, in the order they are tried. */
+  urls: string[];
 }
 
 export interface Head {
@@ -222,6 +222,32 @@ export { STATE_EVENT_ATTRS } from './node-types.js';
  * unnoticed — the lines simply fell through to the node collector, which did not
  * match them either.
  */
+/**
+ * Split `{a} {b}` into the contents of each top-level block. Braces inside
+ * double-quoted values do not count. Null if anything but whitespace sits
+ * between or around the blocks, or a brace is unbalanced.
+ */
+function braceBlocks(str: string): string[] | null {
+  const out: string[] = [];
+  let depth = 0, start = -1, quoted = false;
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i];
+    if (quoted) {
+      if (c === '\\') i++;
+      else if (c === '"') quoted = false;
+      continue;
+    }
+    if (c === '"' && depth > 0) quoted = true;
+    else if (c === '{') { if (depth++ === 0) start = i + 1; }
+    else if (c === '}') {
+      if (depth === 0) return null;
+      if (--depth === 0) out.push(str.slice(start, i));
+    }
+    else if (depth === 0 && !/\s/.test(c)) return null;
+  }
+  return depth === 0 && out.length ? out : null;
+}
+
 export function joinBraced(lines: string[], i: number): { text: string; next: number } | null {
   if (!lines[i].trimStart().startsWith('{') && !/^\s*(?:\[|@)/.test(lines[i])) return null;
   let depth = 0;
@@ -288,17 +314,20 @@ export function parse(src: string): SourceFile {
       i = joined.next;
       continue;
     }
-    const originM = tl.match(/^(@[^\s{]+)\s*\{(.*)\}\s*$/s);
-    if (originM) {
+    const originM = tl.match(/^(@[^\s{]+)\s*(\{.*\})\s*$/s);
+    const blocks  = originM ? braceBlocks(originM[2]) : null;
+    if (originM && blocks) {
       const name = originM[1];
       if (!SIGIL_NAME_RE.test(name)) {
         throw new Error(`rvmark: invalid origin sigil name '${name}' — must match ${SIGIL_NAME_RE}`);
       }
-      const attrs = parseAttrBlock(originM[2]);
-      const url = attrs.get('url');
-      if (!url) throw new Error(`rvmark: origin '${name}' is missing required 'url' field`);
-      const fallback = attrs.get('fallback') ?? undefined;
-      origins[name] = { url, ...(fallback ? { fallback } : {}) };
+      const attrBlocks = blocks.map(parseAttrBlock);
+      if (attrBlocks.some(a => a.has('fallback'))) {
+        throw new Error(`rvmark: origin '${name}' uses 'fallback', which is not supported; list mirrors as further {url: …} blocks`);
+      }
+      const urls = attrBlocks.map(a => a.get('url'));
+      if (urls.some(u => !u)) throw new Error(`rvmark: origin '${name}' has a block without a 'url' field`);
+      origins[name] = { urls: urls as string[] };
       i = joined.next;
       continue;
     }

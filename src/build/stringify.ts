@@ -95,9 +95,7 @@ function stringifyHead(head: Head): string {
     defLines.push(stringifyTagDef(name, def));
   }
   for (const [name, origin] of Object.entries(head.origins)) {
-    const parts = [`url: ${origin.url}`];
-    if (origin.fallback) parts.push(`fallback: ${origin.fallback}`);
-    defLines.push(`${name} {${parts.join('; ')}}`);
+    defLines.push(`${name} ${origin.urls.map(u => `{url: ${u}}`).join(' ')}`);
   }
 
   // The frontmatter and the def block are separated by a blank line when both

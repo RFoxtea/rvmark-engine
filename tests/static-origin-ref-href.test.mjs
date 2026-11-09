@@ -7,7 +7,7 @@ import { join } from 'path';
 import { buildSite } from '../out/build/site.js';
 
 const FILES = {
-  'index.rvmark': `{title: Root}\n\n@peer {url: https://peer.test}\n@sub {url: https://sub.test/_rvmark/notes}\n\n- Root node\n`,
+  'index.rvmark': `{title: Root}\n\n@peer {url: https://peer.test}\n@sub {url: https://sub.test}\n\n- Root node\n`,
   'deep/page.rvmark': [
     '- Page',
     '  - {=> @peer/dir/target#deep} Anchor',
@@ -34,7 +34,7 @@ test('origin ref transclusions link to the foreign origin', async () => {
     assert.equal(href('Anchor'), 'https://peer.test/dir/target/#deep');
     assert.equal(href('Page'),   'https://peer.test/dir/target/');
     assert.equal(href('Root'),   'https://peer.test/');
-    assert.equal(href('Sub'),    'https://sub.test/notes/a/#b');
+    assert.equal(href('Sub'),    'https://sub.test/a/#b');
     assert.equal(href('Undeclared'), undefined);
     assert.doesNotMatch(html, /href="[^"]*@/);
   } finally {

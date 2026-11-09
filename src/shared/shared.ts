@@ -141,8 +141,6 @@ export interface Referral {
 
 // ── Origin refs ───────────────────────────────────────────────────────────────
 
-const FALLBACK_DEPTH_CAP = 8;
-
 /** Split '@name/path#slug', '@name#slug', or '@name'. Null if not an origin ref. */
 function parseOriginRef(ref: string): { name: string; path: string; slug: string | null } | null {
   if (!ref.startsWith('@')) return null;
@@ -155,59 +153,21 @@ function parseOriginRef(ref: string): { name: string; path: string; slug: string
   return { name, path, slug };
 }
 
-// Resolve a `fallback:` value to an origin root URL. Accepts another origin name
-// ('@name', '@name/subpath/'), or a local path ('/abs/path/', './rel/path/')
-// resolved against sourceFileAddress. Cycles caught by `visited`.
-function resolveFallbackRoot(
-  fallback: string,
-  origins: Record<string, OriginDef>,
-  sourceFileAddress: string,
-  visited: Set<string>,
-): string | null {
-  if (fallback.startsWith('@')) {
-    const slashIdx = fallback.indexOf('/');
-    const name = slashIdx === -1 ? fallback : fallback.slice(0, slashIdx);
-    const subpath = slashIdx === -1 ? '' : fallback.slice(slashIdx + 1);
-    if (visited.has(name)) return null;
-    const def = origins[name];
-    if (!def) return null;
-    const base = def.url.endsWith('/') ? def.url : def.url + '/';
-    return subpath ? base + subpath : base;
-  }
-  const origin = addressOrigin(sourceFileAddress);
-  if (fallback.startsWith('/')) return origin + fallback;
-  if (fallback.startsWith('./') || fallback.startsWith('../')) {
-    const localPart = sourceFileAddress.slice(origin.length);
-    const dir = localPart.replace(/[^/]*$/, '');
-    const parts = (dir + fallback).split('/');
-    const out: string[] = [];
-    for (const p of parts) {
-      if (p === '..') out.pop();
-      else if (p !== '.') out.push(p);
-    }
-    return origin + out.join('/');
-  }
-  return null;
-}
-
-// `<origin-root>/<path>#<slug>` as a '/'-rooted ref on that origin. A path in
-// the root is a directory of the origin's content: one envoy answers for all of
-// an origin, so there is no second content root beneath it.
-function originReferral(originRoot: string, path: string, slug: string | null): Referral {
-  const baseUrl = addressOrigin(originRoot);
-  let dir = originRoot.slice(baseUrl.length);
-  if (dir.startsWith(RVMARK_SEGMENT)) dir = dir.slice(RVMARK_SEGMENT.length - 1);
-  if (!dir.startsWith('/')) dir = '/' + dir;
-  if (!dir.endsWith('/')) dir += '/';
-  return { baseUrl, ref: dir + path.replace(/^\/+/, '') + (slug ? '#' + slug : '') };
+// `<site>/<path>#<slug>` as a '/'-rooted ref on that site.
+function originReferral(url: string, path: string, slug: string | null): Referral {
+  return {
+    baseUrl: url.replace(/\/+$/, ''),
+    ref:     '/' + path.replace(/^\/+/, '') + (slug ? '#' + slug : ''),
+  };
 }
 
 /**
- * The origins to ask for an origin ref, in the order they should be tried.
+ * The sites to ask for an origin ref, in the order they should be tried: the
+ * declared site, then its mirrors.
  *
- * Referrals, not nodes or keys: a fallback chain falls through only when a load
- * *fails*, and only the named origin knows which of its files a path means.
- * So the chain leaves here as data and the caller walks it.
+ * Referrals, not nodes or keys: the next site is tried only when a load *fails*,
+ * and only the named site knows which of its files a path means. So the list
+ * leaves here as data and the caller walks it.
  */
 function originCandidates(
   name:              string,
@@ -215,43 +175,20 @@ function originCandidates(
   slug:              string | null,
   origins:           Record<string, OriginDef>,
   sourceFileAddress: string,
-  visited:           Set<string>,
 ): Referral[] {
-  if (visited.has(name) || visited.size >= FALLBACK_DEPTH_CAP) return [];
   const def = origins[name];
   if (!def) {
-    if (visited.size === 0) console.warn(`rvmark: undeclared origin '${name}' in ${sourceFileAddress}`);
+    console.warn(`rvmark: undeclared origin '${name}' in ${sourceFileAddress}`);
     return [];
   }
-  const next = new Set(visited);
-  next.add(name);
-
-  const out = [originReferral(def.url, path, slug)];
-  if (!def.fallback) return out;
-
-  if (def.fallback.startsWith('@')) {
-    const slashIdx = def.fallback.indexOf('/');
-    const fbName    = slashIdx === -1 ? def.fallback : def.fallback.slice(0, slashIdx);
-    const fbSubpath = slashIdx === -1 ? '' : def.fallback.slice(slashIdx + 1);
-    if (fbSubpath) {
-      const fbRoot = resolveFallbackRoot(def.fallback, origins, sourceFileAddress, next);
-      if (fbRoot) out.push(originReferral(fbRoot, path, slug));
-    } else {
-      out.push(...originCandidates(fbName, path, slug, origins, sourceFileAddress, next));
-    }
-    return out;
-  }
-
-  const fbRoot = resolveFallbackRoot(def.fallback, origins, sourceFileAddress, next);
-  if (fbRoot) out.push(originReferral(fbRoot, path, slug));
-  return out;
+  return def.urls.map(url => originReferral(url, path, slug));
 }
 
 /**
  * A transclusion ref's targets, in the order they should be tried.
  *
  * A path ref has one: its canonical address. An origin ref ('@name/path#slug')
- * has one referral per origin in its fallback chain, looked up in `origins` —
+ * has one referral per declared site and mirror, looked up in `origins` —
  * the declarations in the head of the file that wrote the ref.
  */
 export function resolveRef(
@@ -260,7 +197,7 @@ export function resolveRef(
   origins:           Record<string, OriginDef>,
 ): Array<string | Referral> {
   const originRef = parseOriginRef(ref);
-  if (originRef) return originCandidates(originRef.name, originRef.path, originRef.slug, origins, sourceFileAddress, new Set());
+  if (originRef) return originCandidates(originRef.name, originRef.path, originRef.slug, origins, sourceFileAddress);
   const address = resolveAddress(ref, sourceFileAddress);
   return address ? [address] : [];
 }

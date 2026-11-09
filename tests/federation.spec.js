@@ -80,3 +80,25 @@ test.describe('cross-origin transclusion via origin sigils', () => {
     expect(peerRequests.some(u => u.includes('federation-target.rv.md'))).toBe(true);
   });
 });
+
+test.describe('mirrors', () => {
+  // mirror-test.rvmark declares @mirrored {url: http://localhost:8009} {url: http://localhost:8003};
+  // nothing listens on 8009.
+  test('a sigil never holds more than one envoy iframe', async ({ page }) => {
+    test.setTimeout(20000);
+    await page.addInitScript(() => {
+      const foreign = () => [...document.querySelectorAll('iframe')]
+        .filter(f => f.src.endsWith('/envoy.html') && !f.src.startsWith(location.origin)).length;
+      window.__envoyMax = 0;
+      new MutationObserver(() => { window.__envoyMax = Math.max(window.__envoyMax, foreign()); })
+        .observe(document, { childList: true, subtree: true });
+    });
+    await page.goto('/mirror-test/');
+    await waitForTree(page);
+    await waitForNode(page, 'deep-child', 15000);
+    const srcs = await page.evaluate(() => [...document.querySelectorAll('iframe')].map(f => f.src));
+    expect(srcs.filter(s => s.startsWith('http://localhost:8009'))).toHaveLength(0);
+    expect(srcs.filter(s => s.startsWith('http://localhost:8003'))).toHaveLength(1);
+    expect(await page.evaluate(() => window.__envoyMax)).toBe(1);
+  });
+});

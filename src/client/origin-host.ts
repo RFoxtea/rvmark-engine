@@ -46,6 +46,14 @@ const ENVOY_PATH = '/envoy.html';
 /** How long to wait for any one reply before failing it. */
 const QUERY_TIMEOUT_MS = 10_000;
 
+// An envoy announces itself as soon as its script has run, so a page that has
+// loaded and stays silent this long has none.
+const ENVOY_READY_GRACE_MS = 100;
+
+// How long a site with a mirror after it may stay silent before the mirror is
+// asked instead. Well inside TRANSCLUDE_DEADLINE_MS, so the mirror has time.
+const MIRROR_PATIENCE_MS = 2_000;
+
 // Cap on sends queued while the iframe has not yet fired `load`. An origin that
 // is up but ships no envoy is the ordinary failure, not an exotic one — a 404
 // body is still a document, so `load` fires and the queue drains. The queue only
@@ -197,6 +205,8 @@ class OriginEnvoy {
   private readonly iframe: HTMLIFrameElement;
   private loaded = false;
   private everAnswered = false;
+  private dead = false;
+  private readonly contactTimers: ReturnType<typeof setTimeout>[] = [];
   private readonly preload: Array<() => void> = [];
   private readonly pending = new Map<number, Pending>();
   private nextId = 1;
@@ -227,6 +237,7 @@ class OriginEnvoy {
     iframe.src = baseUrl + ENVOY_PATH;
 
     iframe.addEventListener('load', () => {
+      this.contactTimers.push(setTimeout(() => this.abandonIfSilent(), ENVOY_READY_GRACE_MS));
       this.loaded = true;
       for (const fn of this.preload) fn();
       this.preload.length = 0;
@@ -255,8 +266,31 @@ class OriginEnvoy {
     else p.resolve(d.result);
   };
 
+  // No envoy here: the iframe and everything waiting on it go. The register
+  // keeps later queries from building another.
+  /** Give up on a site that has never answered. One that has keeps its say. */
+  abandonIfSilent(): void {
+    if (!this.everAnswered) this.die();
+  }
+
+  private die(): void {
+    if (this.dead) return;
+    this.dead = true;
+    for (const t of this.contactTimers) clearTimeout(t);
+    notFound.mark(this.baseUrl);
+    window.removeEventListener('message', this.onMessage);
+    this.iframe.remove();
+    this.preload.length = 0;
+    for (const p of this.pending.values()) {
+      clearTimeout(p.timer);
+      p.reject(new Error(`no envoy at ${this.baseUrl}`));
+    }
+    this.pending.clear();
+  }
+
   // Anything at all from this envoy settles the only question the register asks.
   private alive(): void {
+    for (const t of this.contactTimers) clearTimeout(t);
     this.everAnswered = true;
     notFound.clear(this.baseUrl);
   }
@@ -279,8 +313,8 @@ class OriginEnvoy {
         // Only an origin that has never answered is evidence of a missing
         // envoy. One that has answered before is slow, which is a different
         // question and not this register's.
-        if (!this.everAnswered) notFound.mark(this.baseUrl);
         reject(new Error(`origin query '${query}' timed out (${this.baseUrl})`));
+        if (!this.everAnswered) this.die();
       }, QUERY_TIMEOUT_MS);
 
       this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
@@ -441,15 +475,23 @@ export async function resolveRefAt(from: Address, rawRef: string | null | undefi
   if (!rawRef) return null;
   try {
     const candidates = (await originFor(from.baseUrl).resolve(from.key, [rawRef]))[0] ?? [];
-    for (const candidate of candidates) {
-      // A referral's ref is '/'-rooted, so the key it is resolved from is moot.
-      const addresses = 'ref' in candidate
-        ? ((await originFor(candidate.baseUrl).resolve('/', [candidate.ref]))[0] ?? [])
-        : [candidate];
-      for (const address of addresses) {
-        if (!('key' in address)) continue;
-        const node = await originFor(address.baseUrl).node(address.key).catch(() => null);
-        if (node) return node;
+    // A mirror is asked only when the site before it has no envoy. A site that
+    // answers has the final word, including that the node no longer exists.
+    for (const [i, candidate] of candidates.entries()) {
+      const patience = i < candidates.length - 1
+        ? setTimeout(() => _envoys.get(candidate.baseUrl)?.abandonIfSilent(), MIRROR_PATIENCE_MS)
+        : undefined;
+      try {
+        // A referral's ref is '/'-rooted, so the key it is resolved from is moot.
+        const addresses = 'ref' in candidate
+          ? ((await originFor(candidate.baseUrl).resolve('/', [candidate.ref]))[0] ?? [])
+          : [candidate];
+        const address = addresses.find(a => 'key' in a);
+        return address ? await originFor(address.baseUrl).node(address.key) : null;
+      } catch (err) {
+        if (!notFound.has(candidate.baseUrl)) throw err;
+      } finally {
+        clearTimeout(patience);
       }
     }
     return null;

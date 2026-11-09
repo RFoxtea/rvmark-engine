@@ -35,8 +35,12 @@ test('a tag def may wrap across lines', () => {
 });
 
 test('an origin def may wrap across lines', () => {
-  const f = parse('@other {\n  url: https://example.com;\n  fallback: /f\n}\n\n- A\n');
-  assert.deepEqual(f.head.origins['@other'], { url: 'https://example.com', fallback: '/f' });
+  const f = parse('@other {\n  url: https://example.com\n} {url: https://mirror.example.net}\n\n- A\n');
+  assert.deepEqual(f.head.origins['@other'], { urls: ['https://example.com', 'https://mirror.example.net'] });
+});
+
+test('an origin def with fallback is rejected', () => {
+  assert.throws(() => parse('@other {url: https://example.com; fallback: @b}\n\n- A\n'), /fallback/);
 });
 
 test('meta, tag defs and origins may all wrap, in sequence', () => {
@@ -49,7 +53,7 @@ test('meta, tag defs and origins may all wrap, in sequence', () => {
   assert.equal(f.head.meta.get('title'), 'T');
   assert.equal(f.head.tagDefs['One'].get('node.bullet'), '/a.svg');
   assert.equal(f.head.tagDefs['Two'].get('node.bullet'), '/b.svg');
-  assert.equal(f.head.origins['@o'].url, 'https://e.com');
+  assert.deepEqual(f.head.origins['@o'].urls, ['https://e.com']);
   assert.equal(f.roots.length, 1);
 });
 

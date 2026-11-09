@@ -1,0 +1,6 @@
+{title: mirror test}
+
+@mirrored {url: http://localhost:8009} {url: http://localhost:8003}
+
+- {#main; open} Mirror test page.
+  - {#child-mirror-embed; open; => @mirrored/federation-target#deep} Mirror embed
